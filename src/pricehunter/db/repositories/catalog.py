@@ -1,0 +1,120 @@
+from uuid import UUID, uuid4
+
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from pricehunter.db.base import utcnow
+from pricehunter.db.models import PriceObservation, Product, Store, StoreOffer
+from pricehunter.domain.errors import ProductNotFoundError, UnsupportedStoreError
+from pricehunter.domain.products import ProductOfferData, identity_key, trade_id
+
+
+class CatalogRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def get_offer(self, offer_id: UUID) -> StoreOffer:
+        offer = await self.session.get(StoreOffer, offer_id)
+        if offer is None:
+            raise ProductNotFoundError()
+        return offer
+
+    async def save_resolved(self, data: ProductOfferData) -> StoreOffer:
+        await self.session.execute(
+            insert(Store)
+            .values(
+                id=uuid4(),
+                slug=data.store_slug,
+                name=data.store_name,
+                domain=data.store_domain,
+                provider_type=data.provider,
+                country=data.country,
+            )
+            .on_conflict_do_nothing(index_elements=[Store.slug])
+        )
+        store = (
+            await self.session.scalars(select(Store).where(Store.slug == data.store_slug))
+        ).one()
+        if not store.active or not store.supported:
+            raise UnsupportedStoreError()
+        existing = await self.session.scalar(
+            select(StoreOffer).where(
+                StoreOffer.store_id == store.id,
+                StoreOffer.external_id == data.external_id,
+            )
+        )
+        if existing:
+            return existing
+        # Serialize one listing's initial insertion and observation without global locks.
+        # ON CONFLICT also handles concurrent canonical products in different stores.
+        identity = identity_key(data)
+        await self.session.execute(
+            insert(Product)
+            .values(
+                id=uuid4(),
+                identity_key=identity,
+                canonical_name=data.title,
+                brand=data.brand,
+                gtin=trade_id(data),
+                ean=data.ean,
+                upc=data.upc,
+                asin=data.asin,
+                model=data.model,
+                variant=data.variant,
+            )
+            .on_conflict_do_nothing(index_elements=[Product.identity_key])
+        )
+        product_id = (
+            await self.session.scalars(select(Product.id).where(Product.identity_key == identity))
+        ).one()
+        offer_id = uuid4()
+        now = utcnow()
+        inserted = await self.session.scalar(
+            insert(StoreOffer)
+            .values(
+                id=offer_id,
+                product_id=product_id,
+                store_id=store.id,
+                external_id=data.external_id,
+                url=data.url,
+                direct_url=data.url,
+                title=data.title,
+                image_url=data.image_url,
+                price=data.price,
+                original_price=data.original_price,
+                currency=data.currency,
+                availability=data.availability,
+                seller=data.seller,
+                sku=data.sku,
+                metadata_json=data.metadata,
+                minimum_price=data.price,
+                maximum_price=data.price,
+                total_price=data.price,
+                observation_count=1,
+                last_checked_at=now,
+                next_check_at=now,
+            )
+            .on_conflict_do_nothing(index_elements=[StoreOffer.store_id, StoreOffer.external_id])
+            .returning(StoreOffer.id)
+        )
+        if inserted:
+            self.session.add(
+                PriceObservation(
+                    store_offer_id=offer_id,
+                    refresh_key=f"initial:{offer_id}",
+                    price=data.price,
+                    currency=data.currency,
+                    availability=data.availability,
+                    checked_at=now,
+                )
+            )
+        # Resolution never resets a tracked offer to stale provider/cache data.
+        return (
+            await self.session.scalars(
+                select(StoreOffer).where(
+                    StoreOffer.store_id == store.id,
+                    StoreOffer.external_id == data.external_id,
+                )
+            )
+        ).one()

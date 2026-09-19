@@ -1,0 +1,24 @@
+{
+  "asin": "B012345678",
+  "detailPageURL": "https://www.amazon.com.be/dp/B012345678?tag=test-be-21&th=1&psc=1",
+  "itemInfo": {
+    "title": {"displayValue": "Test cotton shirt"},
+    "byLineInfo": {"brand": {"displayValue": "Fixture brand"}},
+    "productInfo": {"size": {"displayValue": "M"}, "color": {"displayValue": "Blue"}}
+  },
+  "images": {"primary": {"medium": {"url": "https://m.media-amazon.com/images/I/fixture.jpg"}}},
+  "offersV2": {
+    "listings": [{
+      "isBuyBoxWinner": true,
+      "violatesMAP": false,
+      "type": null,
+      "condition": {"value": "New"},
+      "availability": {"type": "IN_STOCK"},
+      "merchantInfo": {"id": "fixture-seller", "name": "Fixture seller"},
+      "price": {
+        "money": {"amount": 29.99, "currency": "EUR"},
+        "savingBasis": {"money": {"amount": 39.99, "currency": "EUR"}}
+      }
+    }]
+  }
+}

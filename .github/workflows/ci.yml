@@ -1,0 +1,40 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: pricehunter
+          POSTGRES_PASSWORD: pricehunter
+          POSTGRES_DB: pricehunter_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pricehunter -d pricehunter_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://pricehunter:pricehunter@localhost:5432/pricehunter_test
+      TEST_DATABASE_URL: postgresql+asyncpg://pricehunter:pricehunter@localhost:5432/pricehunter_test
+      TEST_REDIS_URL: redis://localhost:6379/15
+      ENVIRONMENT: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.16"
+          enable-cache: true
+      - run: uv sync --frozen --python 3.12
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run alembic upgrade head
+      - run: uv run alembic check
+      - run: uv run pytest --cov=pricehunter --cov-report=term-missing

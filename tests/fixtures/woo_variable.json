@@ -1,0 +1,78 @@
+{
+  "id": 348678,
+  "name": "Raspberry Pi Flash Drive",
+  "slug": "raspberry-pi-flash-drive",
+  "parent": 0,
+  "type": "variable",
+  "variation": "",
+  "permalink": "https://raspberrypi.dk/produkt/raspberry-pi-flash-drive/",
+  "sku": "",
+  "prices": {
+    "price": "29900",
+    "regular_price": "29900",
+    "sale_price": "29900",
+    "price_range": {
+      "min_amount": "29900",
+      "max_amount": "49900"
+    },
+    "currency_code": "DKK",
+    "currency_symbol": "kr.",
+    "currency_minor_unit": 2,
+    "currency_decimal_separator": ",",
+    "currency_thousand_separator": ".",
+    "currency_prefix": "",
+    "currency_suffix": " kr."
+  },
+  "images": [
+    {
+      "src": "https://raspberrypi.dk/wp-content/uploads/2026/01/Flash-drive-hero-1.jpg"
+    }
+  ],
+  "brands": [],
+  "attributes": [
+    {
+      "id": 0,
+      "name": "Capacity",
+      "taxonomy": null,
+      "has_variations": true,
+      "terms": [
+        {
+          "id": 0,
+          "name": "128GB",
+          "slug": "128GB",
+          "default": true
+        },
+        {
+          "id": 0,
+          "name": "256GB",
+          "slug": "256GB",
+          "default": false
+        }
+      ]
+    }
+  ],
+  "variations": [
+    {
+      "id": 348691,
+      "attributes": [
+        {
+          "name": "Capacity",
+          "value": "128GB"
+        }
+      ]
+    },
+    {
+      "id": 348692,
+      "attributes": [
+        {
+          "name": "Capacity",
+          "value": "256GB"
+        }
+      ]
+    }
+  ],
+  "has_options": true,
+  "is_in_stock": true,
+  "is_on_backorder": false,
+  "is_password_protected": false
+}

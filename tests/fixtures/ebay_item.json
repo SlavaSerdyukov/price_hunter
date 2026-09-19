@@ -1,0 +1,13 @@
+{
+  "itemId": "v1|123456789012|0",
+  "title": "Studio Headphones",
+  "itemWebUrl": "https://www.ebay.de/itm/123456789012",
+  "price": {"value": "89.99", "currency": "EUR"},
+  "image": {"imageUrl": "https://i.ebayimg.com/images/g/example/s-l1600.jpg"},
+  "brand": "Example",
+  "gtin": "4006381333931",
+  "conditionId": "1000",
+  "localizedAspects": [{"name": "MPN", "value": "STUDIO-1"}],
+  "estimatedAvailabilities": [{"estimatedAvailabilityStatus": "IN_STOCK"}],
+  "seller": {"username": "example-store"}
+}

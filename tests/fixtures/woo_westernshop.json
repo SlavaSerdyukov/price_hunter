@@ -1,0 +1,61 @@
+{
+  "id": 14662,
+  "name": "Speed Shop",
+  "type": "simple",
+  "permalink": "https://westernshop.be/produit/speed-shop/",
+  "parent": 0,
+  "variation": "",
+  "prices": {
+    "price": "4900",
+    "regular_price": "4900",
+    "sale_price": "4900",
+    "price_range": null,
+    "currency_code": "EUR",
+    "currency_symbol": "€",
+    "currency_minor_unit": 2,
+    "currency_decimal_separator": ",",
+    "currency_thousand_separator": ".",
+    "currency_prefix": "",
+    "currency_suffix": "€"
+  },
+  "is_in_stock": true,
+  "is_on_backorder": false,
+  "has_options": false,
+  "is_password_protected": false,
+  "attributes": [
+    {
+      "id": 2,
+      "name": "Availability",
+      "taxonomy": "pa_disponibilite",
+      "has_variations": false,
+      "terms": [
+        {
+          "id": 93,
+          "name": "Online",
+          "slug": "webshop"
+        },
+        {
+          "id": 94,
+          "name": "Store",
+          "slug": "pos"
+        }
+      ]
+    }
+  ],
+  "variations": [],
+  "sku": "",
+  "images": [
+    {
+      "id": 14663,
+      "src": "https://westernshop.be/wp-content/uploads/2026/08/7741135-39.jpg",
+      "thumbnail": "https://westernshop.be/wp-content/uploads/2026/08/7741135-39-500x500.jpg",
+      "srcset": "https://westernshop.be/wp-content/uploads/2026/08/7741135-39.jpg 2500w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-300x300.jpg 300w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-1024x1024.jpg 1024w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-150x150.jpg 150w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-768x768.jpg 768w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-1536x1536.jpg 1536w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-2048x2048.jpg 2048w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-500x500.jpg 500w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-700x700.jpg 700w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-100x100.jpg 100w",
+      "sizes": "(max-width: 2500px) 100vw, 2500px",
+      "thumbnail_srcset": "https://westernshop.be/wp-content/uploads/2026/08/7741135-39-500x500.jpg 500w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-300x300.jpg 300w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-1024x1024.jpg 1024w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-150x150.jpg 150w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-768x768.jpg 768w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-1536x1536.jpg 1536w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-2048x2048.jpg 2048w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-700x700.jpg 700w, https://westernshop.be/wp-content/uploads/2026/08/7741135-39-100x100.jpg 100w",
+      "thumbnail_sizes": "(max-width: 500px) 100vw, 500px",
+      "name": "7741135-39",
+      "alt": ""
+    }
+  ],
+  "brands": []
+}

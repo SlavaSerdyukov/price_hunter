@@ -1,0 +1,584 @@
+{
+  "id": 5506,
+  "name": "Short Sleeve Tee Max",
+  "type": "variable",
+  "permalink": "https://hemptees.be/product/short-sleeve-tee-max/",
+  "parent": 0,
+  "variation": "",
+  "prices": {
+    "price": "40",
+    "regular_price": "40",
+    "sale_price": "40",
+    "price_range": null,
+    "currency_code": "EUR",
+    "currency_symbol": "€",
+    "currency_minor_unit": 0,
+    "currency_decimal_separator": ",",
+    "currency_thousand_separator": ".",
+    "currency_prefix": "€",
+    "currency_suffix": ""
+  },
+  "is_in_stock": true,
+  "is_on_backorder": false,
+  "has_options": true,
+  "attributes": [
+    {
+      "id": 1,
+      "name": "Size",
+      "taxonomy": "pa_size",
+      "has_variations": true,
+      "terms": [
+        {
+          "id": 24,
+          "name": "L",
+          "slug": "large",
+          "default": false
+        },
+        {
+          "id": 22,
+          "name": "M",
+          "slug": "medium",
+          "default": true
+        },
+        {
+          "id": 21,
+          "name": "S",
+          "slug": "small",
+          "default": false
+        },
+        {
+          "id": 25,
+          "name": "XL",
+          "slug": "extralarge",
+          "default": false
+        },
+        {
+          "id": 23,
+          "name": "XS",
+          "slug": "extrasmall",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Color",
+      "taxonomy": "pa_color",
+      "has_variations": true,
+      "terms": [
+        {
+          "id": 71,
+          "name": "Charcoal Black",
+          "slug": "black",
+          "default": false
+        },
+        {
+          "id": 72,
+          "name": "Dusty Rose",
+          "slug": "rose",
+          "default": false
+        },
+        {
+          "id": 78,
+          "name": "Indigo Blue",
+          "slug": "blue",
+          "default": false
+        },
+        {
+          "id": 73,
+          "name": "Mossy Green",
+          "slug": "green",
+          "default": false
+        },
+        {
+          "id": 83,
+          "name": "Pomelo Red",
+          "slug": "pomelored123",
+          "default": true
+        },
+        {
+          "id": 70,
+          "name": "Pure White",
+          "slug": "white",
+          "default": false
+        },
+        {
+          "id": 74,
+          "name": "Sunny Yellow",
+          "slug": "yellow",
+          "default": false
+        }
+      ]
+    }
+  ],
+  "variations": [
+    {
+      "id": 6259,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extralarge"
+        },
+        {
+          "name": "Color",
+          "value": "pomelored123"
+        }
+      ]
+    },
+    {
+      "id": 6260,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "large"
+        },
+        {
+          "name": "Color",
+          "value": "pomelored123"
+        }
+      ]
+    },
+    {
+      "id": 6261,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "medium"
+        },
+        {
+          "name": "Color",
+          "value": "pomelored123"
+        }
+      ]
+    },
+    {
+      "id": 6262,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "small"
+        },
+        {
+          "name": "Color",
+          "value": "pomelored123"
+        }
+      ]
+    },
+    {
+      "id": 6263,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extrasmall"
+        },
+        {
+          "name": "Color",
+          "value": "pomelored123"
+        }
+      ]
+    },
+    {
+      "id": 5857,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extrasmall"
+        },
+        {
+          "name": "Color",
+          "value": "blue"
+        }
+      ]
+    },
+    {
+      "id": 5858,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "small"
+        },
+        {
+          "name": "Color",
+          "value": "blue"
+        }
+      ]
+    },
+    {
+      "id": 5859,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "medium"
+        },
+        {
+          "name": "Color",
+          "value": "blue"
+        }
+      ]
+    },
+    {
+      "id": 5860,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "large"
+        },
+        {
+          "name": "Color",
+          "value": "blue"
+        }
+      ]
+    },
+    {
+      "id": 5861,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extralarge"
+        },
+        {
+          "name": "Color",
+          "value": "blue"
+        }
+      ]
+    },
+    {
+      "id": 5537,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extrasmall"
+        },
+        {
+          "name": "Color",
+          "value": "white"
+        }
+      ]
+    },
+    {
+      "id": 5527,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "small"
+        },
+        {
+          "name": "Color",
+          "value": "white"
+        }
+      ]
+    },
+    {
+      "id": 5522,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "medium"
+        },
+        {
+          "name": "Color",
+          "value": "white"
+        }
+      ]
+    },
+    {
+      "id": 5517,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "large"
+        },
+        {
+          "name": "Color",
+          "value": "white"
+        }
+      ]
+    },
+    {
+      "id": 5532,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extralarge"
+        },
+        {
+          "name": "Color",
+          "value": "white"
+        }
+      ]
+    },
+    {
+      "id": 5534,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extrasmall"
+        },
+        {
+          "name": "Color",
+          "value": "black"
+        }
+      ]
+    },
+    {
+      "id": 5524,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "small"
+        },
+        {
+          "name": "Color",
+          "value": "black"
+        }
+      ]
+    },
+    {
+      "id": 5519,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "medium"
+        },
+        {
+          "name": "Color",
+          "value": "black"
+        }
+      ]
+    },
+    {
+      "id": 5514,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "large"
+        },
+        {
+          "name": "Color",
+          "value": "black"
+        }
+      ]
+    },
+    {
+      "id": 5529,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extralarge"
+        },
+        {
+          "name": "Color",
+          "value": "black"
+        }
+      ]
+    },
+    {
+      "id": 5536,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extrasmall"
+        },
+        {
+          "name": "Color",
+          "value": "rose"
+        }
+      ]
+    },
+    {
+      "id": 5526,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "small"
+        },
+        {
+          "name": "Color",
+          "value": "rose"
+        }
+      ]
+    },
+    {
+      "id": 5521,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "medium"
+        },
+        {
+          "name": "Color",
+          "value": "rose"
+        }
+      ]
+    },
+    {
+      "id": 5516,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "large"
+        },
+        {
+          "name": "Color",
+          "value": "rose"
+        }
+      ]
+    },
+    {
+      "id": 5531,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extralarge"
+        },
+        {
+          "name": "Color",
+          "value": "rose"
+        }
+      ]
+    },
+    {
+      "id": 5535,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extrasmall"
+        },
+        {
+          "name": "Color",
+          "value": "green"
+        }
+      ]
+    },
+    {
+      "id": 5525,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "small"
+        },
+        {
+          "name": "Color",
+          "value": "green"
+        }
+      ]
+    },
+    {
+      "id": 5520,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "medium"
+        },
+        {
+          "name": "Color",
+          "value": "green"
+        }
+      ]
+    },
+    {
+      "id": 5515,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "large"
+        },
+        {
+          "name": "Color",
+          "value": "green"
+        }
+      ]
+    },
+    {
+      "id": 5530,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extralarge"
+        },
+        {
+          "name": "Color",
+          "value": "green"
+        }
+      ]
+    },
+    {
+      "id": 5538,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extrasmall"
+        },
+        {
+          "name": "Color",
+          "value": "yellow"
+        }
+      ]
+    },
+    {
+      "id": 5528,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "small"
+        },
+        {
+          "name": "Color",
+          "value": "yellow"
+        }
+      ]
+    },
+    {
+      "id": 5523,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "medium"
+        },
+        {
+          "name": "Color",
+          "value": "yellow"
+        }
+      ]
+    },
+    {
+      "id": 5518,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "large"
+        },
+        {
+          "name": "Color",
+          "value": "yellow"
+        }
+      ]
+    },
+    {
+      "id": 5533,
+      "attributes": [
+        {
+          "name": "Size",
+          "value": "extralarge"
+        },
+        {
+          "name": "Color",
+          "value": "yellow"
+        }
+      ]
+    }
+  ],
+  "sku": "",
+  "images": [
+    {
+      "id": 6344,
+      "src": "https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red.jpg",
+      "thumbnail": "https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-300x300.jpg",
+      "srcset": "https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red.jpg 1860w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-240x300.jpg 240w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-819x1024.jpg 819w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-768x960.jpg 768w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-1229x1536.jpg 1229w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-1638x2048.jpg 1638w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-350x438.jpg 350w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-600x750.jpg 600w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-uai-1032x1290.jpg 1032w",
+      "sizes": "(max-width: 1860px) 100vw, 1860px",
+      "name": "Short Sleeve Tee Max Pomelo Red",
+      "alt": ""
+    }
+  ],
+  "brands": []
+}

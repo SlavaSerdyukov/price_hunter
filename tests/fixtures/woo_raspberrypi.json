@@ -1,0 +1,35 @@
+{
+  "id": 374564,
+  "name": "Officiel Raspberry Pi 10&#8243; Touch Display 2",
+  "slug": "officiel-raspberry-pi-10-touch-display-2",
+  "parent": 0,
+  "type": "simple",
+  "variation": "",
+  "permalink": "https://raspberrypi.dk/produkt/officiel-raspberry-pi-10-touch-display-2/",
+  "sku": "9012",
+  "prices": {
+    "price": "69900",
+    "regular_price": "69900",
+    "sale_price": "69900",
+    "price_range": null,
+    "currency_code": "DKK",
+    "currency_symbol": "kr.",
+    "currency_minor_unit": 2,
+    "currency_decimal_separator": ",",
+    "currency_thousand_separator": ".",
+    "currency_prefix": "",
+    "currency_suffix": " kr."
+  },
+  "images": [
+    {
+      "src": "https://raspberrypi.dk/wp-content/uploads/2026/07/Hero-portrait-scaled.jpg"
+    }
+  ],
+  "brands": [],
+  "attributes": [],
+  "variations": [],
+  "has_options": false,
+  "is_in_stock": true,
+  "is_on_backorder": false,
+  "is_password_protected": false
+}

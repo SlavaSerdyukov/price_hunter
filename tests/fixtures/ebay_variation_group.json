@@ -1,0 +1,554 @@
+{
+  "items": [
+    {
+      "itemId": "v1|167526377039|467150657985",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467150657985",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "OUT_OF_STOCK",
+          "estimatedAvailableQuantity": 0,
+          "estimatedSoldQuantity": 1,
+          "estimatedRemainingQuantity": 0
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "5,5"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    },
+    {
+      "itemId": "v1|167526377039|467150657986",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467150657986",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "IN_STOCK",
+          "estimatedAvailableQuantity": 1,
+          "estimatedSoldQuantity": 0,
+          "estimatedRemainingQuantity": 1
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "6"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    },
+    {
+      "itemId": "v1|167526377039|467150657988",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467150657988",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "OUT_OF_STOCK",
+          "estimatedAvailableQuantity": 0,
+          "estimatedSoldQuantity": 1,
+          "estimatedRemainingQuantity": 0
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "7"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    },
+    {
+      "itemId": "v1|167526377039|467150657989",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467150657989",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "IN_STOCK",
+          "estimatedAvailableQuantity": 1,
+          "estimatedSoldQuantity": 0,
+          "estimatedRemainingQuantity": 1
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "7,5"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    },
+    {
+      "itemId": "v1|167526377039|467150657991",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467150657991",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "OUT_OF_STOCK",
+          "estimatedAvailableQuantity": 0,
+          "estimatedSoldQuantity": 3,
+          "estimatedRemainingQuantity": 0
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "8,5"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    },
+    {
+      "itemId": "v1|167526377039|467150657993",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467150657993",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "OUT_OF_STOCK",
+          "estimatedAvailableQuantity": 0,
+          "estimatedSoldQuantity": 3,
+          "estimatedRemainingQuantity": 0
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "9,5"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    },
+    {
+      "itemId": "v1|167526377039|467150657994",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467150657994",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "OUT_OF_STOCK",
+          "estimatedAvailableQuantity": 0,
+          "estimatedSoldQuantity": 2,
+          "estimatedRemainingQuantity": 0
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "10"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    },
+    {
+      "itemId": "v1|167526377039|467150657996",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467150657996",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "OUT_OF_STOCK",
+          "estimatedAvailableQuantity": 0,
+          "estimatedSoldQuantity": 1,
+          "estimatedRemainingQuantity": 0
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "11"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    },
+    {
+      "itemId": "v1|167526377039|467150657997",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467150657997",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "OUT_OF_STOCK",
+          "estimatedAvailableQuantity": 0,
+          "estimatedSoldQuantity": 1,
+          "estimatedRemainingQuantity": 0
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "11,5"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    },
+    {
+      "itemId": "v1|167526377039|467150657998",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467150657998",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "OUT_OF_STOCK",
+          "estimatedAvailableQuantity": 0,
+          "estimatedSoldQuantity": 2,
+          "estimatedRemainingQuantity": 0
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "12"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    },
+    {
+      "itemId": "v1|167526377039|467924889453",
+      "legacyItemId": "167526377039",
+      "title": "BRÜTTING LYDIARD HANDMADE Sneaker Halbschuh Sneaker rot",
+      "price": {
+        "value": "239.95",
+        "currency": "EUR"
+      },
+      "itemWebUrl": "https://www.ebay.de/itm/167526377039?var=467924889453",
+      "conditionId": "1000",
+      "estimatedAvailabilities": [
+        {
+          "deliveryOptions": [
+            "SHIP_TO_HOME"
+          ],
+          "estimatedAvailabilityStatus": "OUT_OF_STOCK",
+          "estimatedAvailableQuantity": 0,
+          "estimatedSoldQuantity": 1,
+          "estimatedRemainingQuantity": 0
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "localizedAspects": [
+        {
+          "type": "STRING",
+          "name": "Uk Schuhgröße",
+          "value": "5"
+        },
+        {
+          "type": "STRING",
+          "name": "UK-Schuhgröße",
+          "value": "5-12"
+        },
+        {
+          "type": "STRING",
+          "name": "Farbe",
+          "value": "Rot"
+        },
+        {
+          "type": "STRING",
+          "name": "EU-Schuhgröße",
+          "value": "38-47"
+        }
+      ],
+      "primaryItemGroup": {
+        "itemGroupId": "167526377039"
+      }
+    }
+  ]
+}

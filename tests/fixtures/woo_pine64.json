@@ -1,0 +1,33 @@
+{
+  "id": 7719,
+  "name": "PINEPOWER Destkop v2",
+  "slug": "pinepower-desktop-v2",
+  "parent": 0,
+  "type": "simple",
+  "variation": "",
+  "permalink": "https://pine64eu.com/product/pinepower-desktop-v2/",
+  "sku": "PPOWER-DESKv2-EU",
+  "prices": {
+    "price": "7675",
+    "regular_price": "7675",
+    "sale_price": "7675",
+    "price_range": null,
+    "currency_code": "EUR",
+    "currency_symbol": "€",
+    "currency_minor_unit": 2,
+    "currency_decimal_separator": ".",
+    "currency_thousand_separator": ",",
+    "currency_prefix": "",
+    "currency_suffix": " €"
+  },
+  "images": [
+    {
+      "src": "https://pine64eu.com/wp-content/uploads/2025/10/PinePower-DesktopV2-1.jpg"
+    }
+  ],
+  "attributes": [],
+  "variations": [],
+  "has_options": false,
+  "is_in_stock": false,
+  "is_on_backorder": false
+}

@@ -1,0 +1,79 @@
+import secrets
+from uuid import UUID, uuid4
+
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+
+from pricehunter.db.base import utcnow
+from pricehunter.db.models import APIKey, User
+from pricehunter.db.session import SessionFactory
+from pricehunter.domain.errors import ProductNotFoundError
+from pricehunter.schemas.api import UserSettingsPatch
+
+
+class UserService:
+    def __init__(self, sessions: SessionFactory) -> None:
+        self.sessions = sessions
+
+    async def telegram(
+        self,
+        telegram_id: int,
+        *,
+        username: str | None = None,
+        first_name: str | None = None,
+        language: str | None = None,
+        referral: str | None = None,
+    ) -> User:
+        async with self.sessions.begin() as session:
+            referrer = None
+            if referral:
+                referrer = await session.scalar(
+                    select(User.id).where(
+                        User.referral_code == referral,
+                        User.telegram_user_id != telegram_id,
+                    )
+                )
+            statement = (
+                insert(User)
+                .values(
+                    id=uuid4(),
+                    telegram_user_id=telegram_id,
+                    username=username,
+                    first_name=first_name,
+                    language_code="ru" if (language or "").startswith("ru") else "en",
+                    referred_by=referrer,
+                    referral_code=secrets.token_urlsafe(12),
+                )
+                .on_conflict_do_update(
+                    index_elements=[User.telegram_user_id],
+                    set_={
+                        "username": username,
+                        "first_name": first_name,
+                        "last_active_at": utcnow(),
+                    },
+                )
+                .returning(User)
+            )
+            return (await session.scalars(statement)).one()
+
+    async def authenticate(self, digest: str) -> User | None:
+        async with self.sessions() as session:
+            return (
+                await session.scalars(
+                    select(User)
+                    .join(APIKey)
+                    .where(
+                        APIKey.digest == digest,
+                        APIKey.revoked_at.is_(None),
+                    )
+                )
+            ).one_or_none()
+
+    async def settings(self, user_id: UUID, patch: UserSettingsPatch) -> User:
+        async with self.sessions.begin() as session:
+            user = await session.get(User, user_id)
+            if user is None:
+                raise ProductNotFoundError()
+            for field, value in patch.model_dump(exclude_unset=True).items():
+                setattr(user, field, value)
+            return user

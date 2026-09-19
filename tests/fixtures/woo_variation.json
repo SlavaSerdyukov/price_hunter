@@ -1,0 +1,35 @@
+{
+  "id": 348692,
+  "name": "Raspberry Pi Flash Drive",
+  "slug": "auto-draft-256gb",
+  "parent": 348678,
+  "type": "variation",
+  "variation": "Capacity: 256GB",
+  "permalink": "https://raspberrypi.dk/produkt/raspberry-pi-flash-drive/?attribute_capacity=256GB",
+  "sku": "6948",
+  "prices": {
+    "price": "49900",
+    "regular_price": "49900",
+    "sale_price": "49900",
+    "price_range": null,
+    "currency_code": "DKK",
+    "currency_symbol": "kr.",
+    "currency_minor_unit": 2,
+    "currency_decimal_separator": ",",
+    "currency_thousand_separator": ".",
+    "currency_prefix": "",
+    "currency_suffix": " kr."
+  },
+  "images": [
+    {
+      "src": "https://raspberrypi.dk/wp-content/uploads/2026/01/Flash-drive-hero-1.jpg"
+    }
+  ],
+  "brands": [],
+  "attributes": [],
+  "variations": [],
+  "has_options": false,
+  "is_in_stock": true,
+  "is_on_backorder": false,
+  "is_password_protected": false
+}

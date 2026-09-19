@@ -1,0 +1,39 @@
+{
+  "id": 6263,
+  "name": "Short Sleeve Tee Max",
+  "type": "variation",
+  "permalink": "https://hemptees.be/product/short-sleeve-tee-max/?attribute_pa_size=extrasmall&attribute_pa_color=pomelored123",
+  "parent": 5506,
+  "variation": "Size: XS, Color: Pomelo Red",
+  "prices": {
+    "price": "40",
+    "regular_price": "40",
+    "sale_price": "40",
+    "price_range": null,
+    "currency_code": "EUR",
+    "currency_symbol": "€",
+    "currency_minor_unit": 0,
+    "currency_decimal_separator": ",",
+    "currency_thousand_separator": ".",
+    "currency_prefix": "€",
+    "currency_suffix": ""
+  },
+  "is_in_stock": true,
+  "is_on_backorder": false,
+  "has_options": false,
+  "attributes": [],
+  "variations": [],
+  "sku": "",
+  "images": [
+    {
+      "id": 6335,
+      "src": "https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M.jpg",
+      "thumbnail": "https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M-300x300.jpg",
+      "srcset": "https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M.jpg 1860w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M-240x300.jpg 240w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M-819x1024.jpg 819w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M-768x960.jpg 768w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M-1229x1536.jpg 1229w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M-1638x2048.jpg 1638w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M-350x438.jpg 350w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M-600x750.jpg 600w, https://hemptees.be/wp-content/uploads/2024/05/Short-Sleeve-Tee-Max-Pomelo-Red-Front-M-uai-1032x1290.jpg 1032w",
+      "sizes": "(max-width: 1860px) 100vw, 1860px",
+      "name": "Short Sleeve Tee Max Pomelo Red Front M",
+      "alt": ""
+    }
+  ],
+  "brands": []
+}

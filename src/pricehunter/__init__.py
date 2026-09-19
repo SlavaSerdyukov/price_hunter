@@ -1,0 +1,1 @@
+"""PriceHunter platform."""

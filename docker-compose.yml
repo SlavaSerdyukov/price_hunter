@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: pricehunter
+      POSTGRES_PASSWORD: pricehunter
+      POSTGRES_DB: pricehunter
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pricehunter -d pricehunter"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  api:
+    profiles: ["app"]
+    build: .
+    env_file: .env
+    environment: &app_environment
+      DATABASE_URL: postgresql+asyncpg://pricehunter:pricehunter@postgres:5432/pricehunter
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on: &dependencies
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+  bot:
+    profiles: ["app"]
+    build: .
+    env_file: .env
+    environment: *app_environment
+    command: ["python", "-m", "pricehunter.apps.bot"]
+    depends_on: *dependencies
+    restart: unless-stopped
+  worker:
+    profiles: ["app"]
+    build: .
+    env_file: .env
+    environment: *app_environment
+    command: ["arq", "pricehunter.jobs.worker.WorkerSettings"]
+    depends_on: *dependencies
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  redis_data:
