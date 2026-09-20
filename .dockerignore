@@ -1,0 +1,10 @@
+*
+!pyproject.toml
+!uv.lock
+!src/
+!src/**
+!alembic/
+!alembic/**
+!alembic.ini
+**/__pycache__
+**/*.pyc
