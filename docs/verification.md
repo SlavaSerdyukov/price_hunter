@@ -312,3 +312,38 @@ checks described in [billing operations](billing.md), not claimed by mock transp
 - API, bot and worker were restarted with the update. The installed package includes
   Telegram-language initialization; `/health/live` and `/health/ready` both returned 200.
 - No database migration or dependency change was required.
+
+## M3A comparison core — 2026-09-20
+
+- Full suite: **337 passed**, no skips, **88.51% total coverage** (baseline: 282 tests).
+  PostgreSQL 17 `pricehunter_test` and real Redis DB 15 were isolated from the live bot.
+- `uv run ruff check .`, `uv run ruff format --check .`, strict mypy (83 source files)
+  and `uv lock --check --offline` passed. All 127 Python files passed formatting.
+- `alembic upgrade head` and `alembic check` passed at revision `124441561d5e`.
+  A separately created disposable database was migrated through M2, seeded with an
+  existing user/store/product/offer/tracker/history, upgraded and backfilled twice.
+  IDs and pre-existing data were preserved; backfill was idempotent. Downgrade rejected
+  existing watches, then succeeded after their explicit removal; re-upgrade/check passed.
+- Acceptance covers concurrent strong-identity persistence; conservative conflicts,
+  size/capacity variants and weak bridges; persisted REST comparisons; currency/stock
+  policy; partial providers and deterministic ranking; merchant switching, replay,
+  targets, restock, cooldown, discovery, shared quota races and expiry; faster scheduling;
+  seven-language Telegram comparison/watch/exact-tracker flows and bounded escaped cards.
+- Existing eBay, Amazon and WooCommerce fixtures go through real adapter normalization
+  and the resolver. eBay marketplaces and compatible Amazon ASINs unify; WooCommerce
+  SKU/title-only evidence stays separate. These are offline fixtures, not live prices.
+- CI now requires `--cov-fail-under=85`, with no new coverage exclusions. This record is
+  a local CI-equivalent run; no hosted GitHub Actions execution is claimed.
+- The sole test warning remains ARQ's upstream use of deprecated Redis `close()`.
+  No billing service refactor or real Stars transaction was performed.
+- A clean archive of the committed branch installed successfully with frozen/offline
+  dependencies and `--no-editable`, using only `.env.example`; all **218 unit tests**
+  passed there. Packaged seven-language catalogs and API imports passed independently
+  of the working tree. README local links resolve in that archive.
+- Local Docker API/bot/worker images were rebuilt and restarted after a restricted
+  `.local/backups/before-m3a-20260920T151416Z.dump` backup. Migration preserved 2 users,
+  2 exact trackers, 19 offers and 194 observations at the upgrade boundary. Legacy
+  backfill indexed 19 products, then zero on repeat. Runtime Alembic check passed.
+- Updated HTTP `/health/live` and `/health/ready` returned 200; ARQ health passed with
+  no failed jobs. No manual Telegram message, real payment or Amazon activation was
+  performed by these checks. Existing configured tracking resumes normally.

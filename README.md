@@ -2,7 +2,7 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0 foundation, M1 tracker and M2 Telegram Stars subscriptions**. Billing is tested with
+**M0 foundation, M1 tracker, M2 Telegram Stars subscriptions and M3A comparison core**. Billing is tested with
 a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
@@ -27,6 +27,19 @@ a simulated Telegram transport; real Stars purchases/renewals/refunds remain man
 - Durable PostgreSQL state, migrations, Docker, CI, health checks and operator commands.
 - Free/Pro/Power entitlements; recurring Stars checkout, expiry, upgrades, cancellation,
   refunds, durable payment intake and operator reconciliation. `/plans` and `/subscription`.
+
+## Compare a product across stores
+
+Send `/search Sony WH-1000XM6` with the mock provider enabled. One comparison card
+shows matching stores, the best confirmed in-stock offer and spread **per currency**.
+**All offers** opens paginated exact-offer tracking; **Track best** creates a canonical
+product watch that can follow a different merchant when it becomes cheapest.
+Manage watches in `/watches`; existing exact trackers remain in `/my`.
+
+Watches and trackers share the plan quota. Unknown shipping/tax stay unknown; no FX
+conversion is implied. See [comparison semantics and upgrade steps](docs/comparison.md).
+For an existing database, stop application services, back up, migrate and run
+`uv run python -m pricehunter.apps.admin catalog-backfill` until zero before restarting.
 
 ## Quick start
 
@@ -145,7 +158,8 @@ Telegram/database/HTTP libraries. `services` own transactions and business workf
 SQLAlchemy rather than generic CRUD abstractions. REST DTOs live under `schemas`.
 
 A canonical `Product` identifies a real product/variant. A `StoreOffer` identifies a
-listing within a marketplace. Many `Tracker` rows share that offer. Schedulers claim
+listing within a marketplace. Many `Tracker` rows share that offer; `ProductWatch`
+tracks all known eligible offers of a Product in one currency. Schedulers claim
 due offers with `SKIP LOCKED`; short database leases and fencing tokens recover stale
 workers and lost enqueue operations. A Redis lease prevents concurrent duplicate
 fetches of the same claim. External I/O happens outside database transactions.
@@ -180,7 +194,12 @@ uv run python -m pricehunter.apps.admin revoke-api-key KEY_UUID
 | `POST /api/v1/products/resolve` | Resolve `{ "url": "https://…" }` to an offer |
 | `GET /api/v1/products/{product_id}` | Canonical product and native-currency offers |
 | `GET /api/v1/products/{product_id}/history?offer_id=…` | Offer history; explicit offer prevents mixing stores/currencies |
-| `GET /api/v1/search?q=…&country=BE` | Grouped search; partial provider failures reported |
+| `GET /api/v1/search?q=…&country=BE` | Persisted comparison `products`; partial provider failures reported |
+| `GET /api/v1/products/{product_id}/offers?page=0&size=10` | Offer pages with full per-currency summaries |
+| `GET /api/v1/product-watches?page=0&size=10` | Current user's best-price watches |
+| `POST /api/v1/product-watches` | `{ "product_id": "…", "currency": "EUR", "target_price": "310.00" }`; target optional |
+| `PATCH /api/v1/product-watches/{id}` | Target, notification flags or enabled state |
+| `DELETE /api/v1/product-watches/{id}` | Idempotent stop watching |
 | `GET /api/v1/trackers?page=0&size=10` | Current user's trackers |
 | `POST /api/v1/trackers` | `{ "store_offer_id": "…", "target_price": "90.00" }` |
 | `PATCH /api/v1/trackers/{id}` | Target/rules/enabled; `target_price: null` clears target |
@@ -268,7 +287,7 @@ Integration tests require a **dedicated disposable database whose name ends in
 docker compose exec postgres createdb -U pricehunter pricehunter_test
 export TEST_DATABASE_URL=postgresql+asyncpg://pricehunter:pricehunter@localhost:5432/pricehunter_test
 DATABASE_URL="$TEST_DATABASE_URL" uv run alembic upgrade head
-TEST_REDIS_URL=redis://localhost:6379/15 uv run pytest --cov=pricehunter
+TEST_REDIS_URL=redis://localhost:6379/15 uv run pytest --cov=pricehunter --cov-report=term-missing --cov-fail-under=85
 ```
 
 The optional `TEST_REDIS_URL` must use disposable Redis database **15**; the ARQ test
@@ -313,7 +332,7 @@ history, display and affiliate conditions must be implemented before enabling ac
 
 ## Telegram Stars subscriptions
 
-| Plan | Stars / 30 days | Trackers | Real-store checks | Search / day | History |
+| Plan | Stars / 30 days | Trackers + watches | Real-store checks | Search / day | History |
 | --- | --- | --- | --- | --- | --- |
 | Free | 0 | 2 | 12 h | 3 | 7 days |
 | Pro | 250 | 50 | 2 h | 30 | 90 days |
@@ -321,7 +340,7 @@ history, display and affiliate conditions must be implemented before enabling ac
 
 All plans include ordinary price-drop alerts. Pro/Power add targets, historical lows
 and restock alerts. Limits and capabilities are configurable. On expiry, data remains
-stored; only the oldest enabled trackers within the current quota are scheduled.
+stored; only the oldest enabled trackers and watches within the shared current quota are scheduled.
 
 `/plans` generates recurring XTR invoice links; `/subscription` shows access and lets
 users cancel renewal. Upgrading requires cancelling the old renewal first, then buying
@@ -356,7 +375,7 @@ codes and one-time referrer attribution; reward/conversion workflows remain late
   Amazon is implemented but disabled and unverified live; Best Buy/feeds remain contracts.
 - Free has limited search/history and basic drop alerts. Existing paid-only preferences
   remain stored after downgrade and resume when the user has the required entitlement.
-- Shared offers use the fastest interested tracker's interval. Future commercial
+- Shared offers use the fastest eligible tracker/watch interval. Future commercial
   policies can additionally govern per-tracker alert cadence.
 - No production load test, Amazon live access validation, production deployment,
   automated backups, live Stars lifecycle verification or public account signup is claimed here.

@@ -13,9 +13,13 @@
    IP while preserving the original TLS hostname. Redirects are rejected; response
    size and duration are bounded. No HTML scraper is enabled. A future scraper must
    reuse these restrictions and verify retailer permissions before it can be enabled.
-4. **Conservative identity.** Strong global identifiers plus variant attributes form
-   a canonical identity. Without identifiers, identity is store/listing scoped.
-   Titles alone never merge persisted products. Currency groups sort separately.
+4. **Conservative identity.** `CatalogResolver` indexes ProductIdentifier evidence and
+   checks saved listing evidence with the deterministic matcher. Compatible GTIN or
+   brand/manufacturer model can unify stores; ASIN remains Amazon scoped. Conflicts,
+   variant differences and ambiguity keep products separate. Title similarity never
+   authorizes a merge. Search persists through the same resolver as URL lookup.
+   Sorted transaction advisory locks and unique listing keys protect concurrent discovery.
+   See [comparison policy](comparison.md).
 5. **Money and time.** Decimal throughout, numeric database columns, JSON strings for
    amounts, ISO currencies and UTC aware timestamps. Locale-aware display is a client
    concern. No implicit currency conversion. Tracker baseline is stored at creation.
@@ -65,6 +69,16 @@
     refunds/cancellations from uncertainty. Reconciliation reports ambiguous purchases
     without granting access and can explicitly apply fully matched remote refunds.
 15. **Downgrade behavior.** Never delete trackers/history on subscription expiration.
-    Oldest enabled trackers within the effective quota remain eligible; others are
+    Oldest enabled trackers and ProductWatches within the shared quota remain eligible; others are
     visibly quota-paused. Shared offers use the fastest eligible plan interval. Paid
     notification rules are checked at configuration, event generation and delivery.
+
+16. **Canonical watches.** ProductWatch owns best-offer state in one currency. Product
+    row locking serializes accepted observations and newly discovered offers before
+    comparing all active/supported stores. State, observation and immutable outbox snapshot
+    commit together. A unique watch/sequence key deduplicates logical events; delivery
+    reuses the existing pipeline and entitlement checks. No duplicate price history stream.
+17. **Comparison meaning.** Best means confirmed in-stock item price, separately per
+    currency; unavailable/unknown offers have a separately labelled cheapest-known value.
+    Spread uses available offers only. Shipping/tax/total stay null when unknown. Summary
+    values cover all known eligible offers, even when offer previews are paginated.
