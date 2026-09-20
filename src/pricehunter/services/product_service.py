@@ -1,17 +1,21 @@
+from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from pricehunter.core.config import Settings
 from pricehunter.core.limits import RateLimiter
+from pricehunter.db.base import utcnow
 from pricehunter.db.models import PriceObservation, Product, StoreOffer, Tracker
 from pricehunter.db.repositories.catalog import CatalogRepository
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.errors import ProductNotFoundError
 from pricehunter.domain.pricing import percentage_change
 from pricehunter.domain.products import ProductOfferData
+from pricehunter.domain.subscriptions import Feature
 from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.schemas.api import HistoryView, ObservationView, OfferView
+from pricehunter.services.entitlement_service import EntitlementService
 
 
 class ProductService:
@@ -21,9 +25,10 @@ class ProductService:
         registry: ProviderRegistry,
         limiter: RateLimiter,
         settings: Settings,
+        entitlements: EntitlementService,
     ) -> None:
         self.sessions, self.registry = sessions, registry
-        self.limiter, self.settings = limiter, settings
+        self.limiter, self.settings, self.entitlements = limiter, settings, entitlements
 
     async def resolve(self, url: str, user_id: UUID) -> OfferView:
         await self.limiter.user(user_id)
@@ -42,7 +47,9 @@ class ProductService:
         async with self.sessions() as session:
             return OfferView.model_validate(await CatalogRepository(session).get_offer(offer_id))
 
-    async def product(self, product_id: UUID) -> tuple[str, list[OfferView]]:
+    async def product(self, product_id: UUID, user_id: UUID) -> tuple[str, list[OfferView]]:
+        limits = (await self.entitlements.for_user(user_id)).entitlements
+        limits.require(Feature.COMPARISON_SEARCH)
         async with self.sessions() as session:
             product = await session.get(Product, product_id)
             if product is None:
@@ -53,11 +60,17 @@ class ProductService:
                     StoreOffer.product_id == product_id,
                 )
                 .order_by(StoreOffer.currency, StoreOffer.price)
-                .limit(100)
+                .limit(limits.search_result_limit)
             )
             return product.canonical_name, [OfferView.model_validate(offer) for offer in offers]
 
     async def history(self, offer_id: UUID, user_id: UUID, limit: int = 100) -> HistoryView:
+        limits = (await self.entitlements.for_user(user_id)).entitlements
+        limits.require(Feature.HISTORY)
+        days = limits.history_days
+        if self.settings.history_retention_days:
+            days = min(days, self.settings.history_retention_days)
+        cutoff = utcnow() - timedelta(days=days)
         async with self.sessions() as session:
             offer = await CatalogRepository(session).get_offer(offer_id)
             tracker = await session.scalar(
@@ -71,23 +84,37 @@ class ProductService:
                     select(PriceObservation)
                     .where(
                         PriceObservation.store_offer_id == offer_id,
+                        PriceObservation.checked_at >= cutoff,
                     )
                     .order_by(PriceObservation.checked_at.desc())
                     .limit(min(max(limit, 1), 500))
                 )
             )
+            stats = (
+                await session.execute(
+                    select(
+                        func.min(PriceObservation.price),
+                        func.max(PriceObservation.price),
+                        func.avg(PriceObservation.price),
+                        func.count(),
+                    ).where(
+                        PriceObservation.store_offer_id == offer_id,
+                        PriceObservation.checked_at >= cutoff,
+                    )
+                )
+            ).one()
             return HistoryView(
                 current=offer.price,
-                minimum=offer.minimum_price,
-                maximum=offer.maximum_price,
-                average=offer.total_price / offer.observation_count,
+                minimum=stats[0] or offer.price,
+                maximum=stats[1] or offer.price,
+                average=stats[2] or offer.price,
                 currency=offer.currency,
-                count=offer.observation_count,
+                count=stats[3],
                 change_since_tracking=percentage_change(tracker.baseline_price, offer.price)
                 if tracker
                 else None,
                 observations=[
                     ObservationView.model_validate(row) for row in reversed(observations)
                 ],
-                retention_days=self.settings.history_retention_days,
+                retention_days=days,
             )

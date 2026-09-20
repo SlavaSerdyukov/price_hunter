@@ -18,6 +18,7 @@ from pricehunter.payments.base import VerifiedPayment
 from pricehunter.schemas.api import TrackerCreate, TrackerPatch
 from pricehunter.services.notification_service import NotificationService, RetryDelivery
 from pricehunter.services.payment_service import PaymentService
+from tests.support import grant_plan
 
 pytestmark = pytest.mark.integration
 URL = "https://mock.pricehunter.test/products/headphones"
@@ -44,13 +45,14 @@ async def test_complete_tracking_flow_and_restart(container):
     assert offer.price == Decimal(100)
     again = await container.trackers.create(user.id, TrackerCreate(store_offer_id=offer.id))
     assert tracker.id == again.id
+    await grant_plan(container, user.id)
     await container.trackers.update(user.id, tracker.id, TrackerPatch(target_price=Decimal(96)))
     claims = await container.price_checks.claim_due()
     assert len(claims) == 1
     assert await container.price_checks.refresh(claims[0])
     assert not await container.price_checks.refresh(claims[0])
     sender = FakeSender()
-    notifier = NotificationService(container.sessions, sender)
+    notifier = NotificationService(container.sessions, sender, container.entitlements)
     assert await notifier.send_pending() == 1
     assert await notifier.send_pending() == 0
     assert sender.deliveries[0].event_type == "target_reached"
@@ -59,7 +61,11 @@ async def test_complete_tracking_flow_and_restart(container):
     from pricehunter.services.product_service import ProductService
 
     fresh = ProductService(
-        container.sessions, container.registry, container.limiter, container.settings
+        container.sessions,
+        container.registry,
+        container.limiter,
+        container.settings,
+        container.entitlements,
     )
     assert (await fresh.offer(offer.id)).price == Decimal(95)
     assert (await fresh.resolve(URL, user.id)).price == Decimal(95)
@@ -112,6 +118,7 @@ async def test_many_trackers_one_refresh_concurrent_claims(
 async def test_repeated_target_crossings_obey_cooldown(container):
     container.settings.notification_cooldown_seconds = 3600
     user, offer, tracker = await setup_tracker(container)
+    await grant_plan(container, user.id)
     await container.trackers.update(user.id, tracker.id, TrackerPatch(target_price=Decimal(96)))
     data = await container.registry.get("mock").resolve_url(URL)
     for price in ("95", "100", "90"):
@@ -128,7 +135,7 @@ async def test_repeated_target_crossings_obey_cooldown(container):
 async def test_crashed_delivery_is_recovered_as_uncertain(container):
     await setup_tracker(container)
     await container.price_checks.refresh((await container.price_checks.claim_due())[0])
-    service = NotificationService(container.sessions, FakeSender())
+    service = NotificationService(container.sessions, FakeSender(), container.entitlements)
     assert await service.claim() is not None
     async with container.sessions.begin() as session:
         await session.execute(
@@ -157,8 +164,8 @@ async def test_concurrent_resolve_and_quota(container):
         *(container.trackers.create(user.id, TrackerCreate(store_offer_id=o.id)) for o in offers),
         return_exceptions=True,
     )
-    assert sum(isinstance(r, SubscriptionLimitReachedError) for r in results) == 1
-    assert len(await container.trackers.list(user.id)) == 5
+    assert sum(isinstance(r, SubscriptionLimitReachedError) for r in results) == 4
+    assert len(await container.trackers.list(user.id)) == 2
 
 
 async def test_ownership_pause_resume_and_cancel_pending(container):
@@ -173,7 +180,12 @@ async def test_ownership_pause_resume_and_cancel_pending(container):
     claim = (await container.price_checks.claim_due())[0]
     await container.price_checks.refresh(claim)
     await container.trackers.update(user.id, tracker.id, TrackerPatch(enabled=False))
-    assert await NotificationService(container.sessions, FakeSender()).send_pending() == 0
+    assert (
+        await NotificationService(
+            container.sessions, FakeSender(), container.entitlements
+        ).send_pending()
+        == 0
+    )
 
 
 async def make_due(container, offer_id):
@@ -183,6 +195,7 @@ async def make_due(container, offer_id):
             .where(StoreOffer.id == offer_id)
             .values(
                 next_check_at=utcnow() - timedelta(seconds=1),
+                last_checked_at=utcnow() - timedelta(days=1),
             )
         )
 
@@ -238,9 +251,14 @@ async def test_notification_ambiguous_failure_is_not_resent(container):
         async def send(self, delivery):
             raise TimeoutError("Outcome is unknown")
 
-    service = NotificationService(container.sessions, TimeoutSender())
+    service = NotificationService(container.sessions, TimeoutSender(), container.entitlements)
     assert await service.send_pending() == 0
-    assert await NotificationService(container.sessions, FakeSender()).send_pending() == 0
+    assert (
+        await NotificationService(
+            container.sessions, FakeSender(), container.entitlements
+        ).send_pending()
+        == 0
+    )
     async with container.sessions() as session:
         assert (await session.scalars(select(NotificationEvent))).one().status == "uncertain"
 
@@ -253,13 +271,18 @@ async def test_known_telegram_retry_and_delivery_claim_concurrency(container):
         async def send(self, delivery):
             raise RetryDelivery(30)
 
-    assert await NotificationService(container.sessions, FloodSender()).send_pending() == 0
+    assert (
+        await NotificationService(
+            container.sessions, FloodSender(), container.entitlements
+        ).send_pending()
+        == 0
+    )
     async with container.sessions.begin() as session:
         event = (await session.scalars(select(NotificationEvent))).one()
         assert event.status == "pending" and event.attempts == 1
         event.available_at = utcnow() - timedelta(seconds=1)
     sender = FakeSender()
-    service = NotificationService(container.sessions, sender)
+    service = NotificationService(container.sessions, sender, container.entitlements)
     results = await asyncio.gather(service.send_pending(), service.send_pending())
     assert sum(results) == 1 and len(sender.deliveries) == 1
 

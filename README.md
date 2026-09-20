@@ -2,16 +2,17 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0 foundation and M1 tracker**. Commercial billing and additional retail integrations
-are explicit later milestones, not working features disguised by placeholders.
+**M0 foundation, M1 tracker and M2 Telegram Stars subscriptions**. Billing is tested with
+a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
 
-- Send a URL, inspect a product card, track it and set an absolute/percentage target.
+- Send a URL, inspect a product card and track it; paid plans add absolute/percentage targets.
 - Paginated `/my`, pause/resume/delete, price history and changes since tracking began.
 - Price-drop, target, restock and historical-low rules, with one prioritized alert per
   observation and a configurable cooldown.
-- English/Russian/EU onboarding and messages; country, preferred currency and IANA timezone.
+- Onboarding in the user's Telegram language; English, French, German, Spanish, Italian,
+  Polish and Russian messages; country, preferred currency and IANA timezone.
 - Deterministic mock catalog and an eBay Browse adapter with fixture-based tests.
 - eBay Belgium/EU marketplaces and a read-only production access diagnostic; live
   Production OAuth and Belgian search/lookup/refresh verified on 2026-09-19.
@@ -24,6 +25,8 @@ are explicit later milestones, not working features disguised by placeholders.
 - Versioned authenticated REST endpoints using the same services as the bot.
 - Shared offer refreshes, persisted scheduling, retries, anomaly quarantine and outbox.
 - Durable PostgreSQL state, migrations, Docker, CI, health checks and operator commands.
+- Free/Pro/Power entitlements; recurring Stars checkout, expiry, upgrades, cancellation,
+  refunds, durable payment intake and operator reconciliation. `/plans` and `/subscription`.
 
 ## Quick start
 
@@ -75,7 +78,7 @@ using the internal service ports and do not need changes.
 1. Open the bot and send `/start`.
 2. Send `https://mock.pricehunter.test/products/headphones`.
 3. The card shows **EUR 100**. Tap **Track price**.
-4. Optionally set a target such as `96` or `10%`.
+4. On Pro/Power, optionally set a target such as `96` or `10%`; Free uses basic drop alerts.
 5. With the worker running, the first scheduler pass occurs within 30 seconds. The
    mock sequence is **100 → 95 → 90 → 85**, then stays at 85. Subsequent mock checks
    use `MOCK_CHECK_INTERVAL_SECONDS` (default 60). No mock URL is fetched over HTTP.
@@ -91,6 +94,22 @@ Other mock products: `coffee-machine`, `sneakers-42`, `sneakers-44`, `camera` (U
 `keyboard` (GBP). `/search Headphones` also finds the mock item. Re-resolving a known
 item reuses its stored price; it does not reset the mock sequence. The mock sequence
 is deliberately finite, not an endlessly oscillating source of demo alerts.
+
+## Languages
+
+New users start in their **Telegram app language** when supported; otherwise, English
+is used. Regional codes such as `fr-BE` use the matching base language. Tap
+**🌐 Language** in the main menu or open `/settings` to choose **English, Français,
+Deutsch, Español, Italiano, Polski or Русский**. The selected language is saved in
+PostgreSQL and applies to menus, errors, notifications, subscriptions and payment messages.
+Existing language preferences survive updates and restarts; `/start` does not reset them.
+The Telegram language initializes a new account only; later Telegram language changes
+do not overwrite the saved choice. Use `/settings` to change an existing account's language.
+
+English is also the fallback for unsupported locales or missing translations. Prices
+use the selected language's number format and retain the retailer's original currency.
+The API accepts `en`, `fr`, `de`, `es`, `it`, `pl` and `ru` in
+`PATCH /api/v1/users/me/settings` (`language_code`).
 
 ## Real stores without keys
 
@@ -166,7 +185,7 @@ uv run python -m pricehunter.apps.admin revoke-api-key KEY_UUID
 | `POST /api/v1/trackers` | `{ "store_offer_id": "…", "target_price": "90.00" }` |
 | `PATCH /api/v1/trackers/{id}` | Target/rules/enabled; `target_price: null` clears target |
 | `DELETE /api/v1/trackers/{id}` | Idempotent stop tracking |
-| `GET /api/v1/subscriptions/me` | Current policy and checkout availability |
+| `GET /api/v1/subscriptions/me` | Effective plan, expiry, renewal state, quotas, counts and features |
 | `PATCH /api/v1/users/me/settings` | Language, country, currency, timezone |
 | `GET /health/live`, `GET /health/ready` | Process and PostgreSQL/migrations/Redis readiness |
 
@@ -190,7 +209,9 @@ token the worker refreshes prices but leaves pending Telegram deliveries untouch
 | `EBAY_ENABLED`, `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_MARKETPLACES` | Credential-gated Browse integration |
 | `EBAY_BELGIUM_LOCALE` | Belgian search locale: `nl-BE` or `fr-BE` |
 | `WOOCOMMERCE_STORES`, `PROVIDER_RATE_LIMITS` | Reviewed public catalogs and per-provider operation limits |
-| `FREE_*`, `PRO_*`, `POWER_*` | Central tracker quotas and refresh intervals |
+| `FREE_*`, `PRO_*`, `POWER_*`, `PLAN_FEATURES` | Tracker quotas, intervals, search/history limits and feature gates |
+| `STARS_BILLING_ENABLED`, `BILLING_PRICE_VERSION`, `CHECKOUT_TTL_SECONDS` | Versioned Stars checkout; disabled by default |
+| `PRO_PRICE_STARS`, `POWER_PRICE_STARS`, `SUPPORT_CONTACT` | Prices per 30 days and payment/refund support |
 | `USER_REQUESTS_PER_MINUTE`, `PROVIDER_*` | Shared limits, concurrency and total timeout |
 | `MAX_RESPONSE_BYTES`, `REFRESH_LEASE_SECONDS`, `BATCH_SIZE` | Request/worker bounds |
 | `NOTIFICATION_COOLDOWN_SECONDS`, `HISTORY_RETENTION_DAYS` | Alert suppression and optional retention |
@@ -201,8 +222,8 @@ least 32 characters and the bot token. Configure Telegram's `setWebhook` for
 `https://YOUR_HOST/telegram/webhook`, passing that same `secret_token`. Use a trusted
 TLS reverse proxy and explicit `ALLOWED_HOSTS`. Do not run polling simultaneously.
 Webhook registration is an operator step; startup never silently changes production
-Telegram webhook settings. Webhook mode is prepared for M1 updates; billing still
-requires the M2 durable payment intake and verification workflow.
+Telegram webhook settings. Financial updates use durable PostgreSQL intake in both webhook and polling modes;
+webhook persistence failures return an error for Telegram to retry.
 
 ## Migrations and retention
 
@@ -290,17 +311,32 @@ Amazon approval for tracking are obtained. Live access remains unverified. Best 
 and authorized Rakuten/CJ/Awin feeds remain future contracts. Retailer-specific storage,
 history, display and affiliate conditions must be implemented before enabling access.
 
-## Payments and future integrations
+## Telegram Stars subscriptions
 
-`PaymentProvider`, disabled Stars/Stripe/Wallet Pay adapters, a verified-event DTO and
-idempotent PostgreSQL ledger provide M2 extension points. **No checkout, renewal,
-entitlement activation or refund flow is enabled in this iteration.** `/plans` states
-this explicitly and `/paysupport` uses configurable support contact text.
+| Plan | Stars / 30 days | Trackers | Real-store checks | Search / day | History |
+| --- | --- | --- | --- | --- | --- |
+| Free | 0 | 2 | 12 h | 3 | 7 days |
+| Pro | 250 | 50 | 2 h | 30 | 90 days |
+| Power | 750 | 250 | 1 h | 100 | 365 days |
 
-Stars (`XTR`) is the only eligible provider for Telegram digital-service checkout.
-The scaffold records a 30-day period; M2 must verify current rules, successful payments,
-amounts/intent, renewals, expiration, refund handling and reconciliation before enabling
-sales. External payment providers cannot bypass Stars eligibility.
+All plans include ordinary price-drop alerts. Pro/Power add targets, historical lows
+and restock alerts. Limits and capabilities are configurable. On expiry, data remains
+stored; only the oldest enabled trackers within the current quota are scheduled.
+
+`/plans` generates recurring XTR invoice links; `/subscription` shows access and lets
+users cancel renewal. Upgrading requires cancelling the old renewal first, then buying
+the new plan at full price without proration. Paid access is retained until its expiry.
+`/paysupport` uses `SUPPORT_CONTACT` (configured contact: @slavasham).
+
+Enable `STARS_BILLING_ENABLED` after migration to accept checkout. Payment events and
+periods commit atomically, duplicate charges never extend twice, and expiry is checked
+on every authorization. Refunds append ledger events. Stripe and Wallet Pay remain disabled.
+
+Read [billing operations](docs/billing.md) for configuration, lifecycle, price versions,
+refund/reconciliation CLI commands, safe migration order and manual Telegram checks.
+Automated payment tests spend no Stars; no real payment verification is claimed.
+
+## Future integrations
 
 Offer columns separate direct URLs, affiliate URLs/network/click IDs. Ranking does not
 use commissions. Referral registration supports `?start=ref_CODE`, with unique user
@@ -318,11 +354,12 @@ codes and one-time referrer attribution; reward/conversion workflows remain late
 - WooCommerce and eBay variant buttons show up to 100 concrete combinations, eight per page,
   and expire after 15 minutes. Clothing search returns up to five offers per shop.
   Amazon is implemented but disabled and unverified live; Best Buy/feeds remain contracts.
-- M1 exposes target/history features to Free users; paid feature gating starts in M2.
+- Free has limited search/history and basic drop alerts. Existing paid-only preferences
+  remain stored after downgrade and resume when the user has the required entitlement.
 - Shared offers use the fastest interested tracker's interval. Future commercial
   policies can additionally govern per-tracker alert cadence.
 - No production load test, Amazon live access validation, production deployment,
-  automated backups, billing lifecycle or public account signup is claimed here.
+  automated backups, live Stars lifecycle verification or public account signup is claimed here.
   
 ## 👤 Author
 

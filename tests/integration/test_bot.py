@@ -3,61 +3,68 @@ from datetime import UTC, datetime
 import pytest
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
-from aiogram.client.session.base import BaseSession
 from aiogram.methods import (
     AnswerCallbackQuery,
     EditMessageReplyMarkup,
-    GetMe,
-    SendMessage,
-    SendPhoto,
 )
-from aiogram.types import Chat, Message, Update, User
+from aiogram.types import Update
 
 from pricehunter.bot.app import create_dispatcher
 from pricehunter.bot.keyboards import Action
 from pricehunter.bot.sender import TelegramNotificationSender
+from pricehunter.localization.languages import SUPPORTED_LANGUAGES
+from pricehunter.localization.messages import CATALOGS, tr
 from pricehunter.services.notification_service import NotificationService
+from tests.support import grant_plan
+from tests.telegram import FakeTelegramSession
 
 pytestmark = pytest.mark.integration
 
 
-class FakeTelegramSession(BaseSession):
-    def __init__(self):
-        super().__init__()
-        self.sent = []
-        self.calls = []
+@pytest.mark.parametrize(
+    "telegram_language,expected",
+    [
+        *((code, code) for code in SUPPORTED_LANGUAGES),
+        ("fr-BE", "fr"),
+        ("pt-BR", "en"),
+        ("de-DE", "de"),
+        (None, "en"),
+        ("", "en"),
+    ],
+)
+async def test_first_start_uses_telegram_language(container, telegram_language, expected):
+    session = FakeTelegramSession()
+    bot = Bot(container.settings.telegram_bot_token.get_secret_value(), session=session)
+    dispatcher = create_dispatcher(container)
+    sender = {"id": 123, "is_bot": False, "first_name": "New user"}
+    if telegram_language is not None:
+        sender["language_code"] = telegram_language
+    try:
+        await dispatcher.feed_update(
+            bot,
+            Update.model_validate(
+                {
+                    "update_id": 1,
+                    "message": {
+                        "message_id": 1,
+                        "date": int(datetime.now(UTC).timestamp()),
+                        "chat": {"id": 123, "type": "private"},
+                        "from": sender,
+                        "text": "/start",
+                    },
+                }
+            ),
+        )
+        assert tr(expected, "start") in session.sent[-1].text
+        assert (await container.users.telegram(123)).language_code == expected
+        assert session.sent[-1].reply_markup.inline_keyboard[0][0].text == tr(expected, "search")
+    finally:
+        await dispatcher.storage.close()
+        await bot.session.close()
 
-    async def close(self):
-        pass
 
-    async def make_request(self, bot, method, timeout=None):  # noqa: ASYNC109
-        self.calls.append(method)
-        if isinstance(method, GetMe):
-            return User(id=123456789, is_bot=True, first_name="PriceHunter", username="testbot")
-        if isinstance(method, (SendMessage, SendPhoto)):
-            message = Message(
-                message_id=len(self.sent) + 1,
-                date=datetime.now(UTC),
-                chat=Chat(id=int(method.chat_id), type="private"),
-                text=method.text if isinstance(method, SendMessage) else method.caption,
-                reply_markup=method.reply_markup,
-            )
-            self.sent.append(message)
-            return message
-        if isinstance(method, AnswerCallbackQuery):
-            return True
-        if isinstance(method, EditMessageReplyMarkup):
-            message = next(m for m in self.sent if m.message_id == method.message_id)
-            updated = message.model_copy(update={"reply_markup": method.reply_markup})
-            self.sent[self.sent.index(message)] = updated
-            return updated
-        raise AssertionError(f"Unexpected Telegram method {type(method).__name__}")
-
-    async def stream_content(self, *args, **kwargs):
-        yield b""
-
-
-async def test_bot_full_acceptance_scenario(container):
+@pytest.mark.parametrize("language", SUPPORTED_LANGUAGES)
+async def test_bot_full_acceptance_scenario(container, language):
     session = FakeTelegramSession()
     bot = Bot(
         container.settings.telegram_bot_token.get_secret_value(),
@@ -107,34 +114,49 @@ async def test_bot_full_acceptance_scenario(container):
         )
 
     await message("/start")
-    assert "Добро пожаловать" in session.sent[-1].text
+    assert tr("ru", "start") in session.sent[-1].text
+    assert (await container.users.telegram(123)).language_code == "ru"
+    await callback("settings")
+    await callback("lang", language)
+    assert tr(language, "settings").removeprefix("⚙️ ") in session.sent[-1].text
+    assert (await container.users.telegram(123)).language_code == language
+    await callback("menu")
+    assert tr(language, "start") == session.sent[-1].text
+    # Subsequent /start and Telegram profile updates preserve the explicit choice.
+    source["language_code"] = "fr" if language == "de" else "de"
+    await message("/start")
+    assert tr(language, "start") in session.sent[-1].text
     await message("https://mock.pricehunter.test/products/headphones")
     card = session.sent[-1]
     assert "100" in card.text
     track = Action.unpack(card.reply_markup.inline_keyboard[0][0].callback_data)
     await callback(track.action, track.value)
-    assert "Слежу" in session.sent[-1].text
+    assert tr(language, "tracked") in session.sent[-1].text
     user = await container.users.telegram(123)
     tracker = (await container.trackers.list(user.id))[0]
+    await grant_plan(container, user.id)
     await callback("target", tracker.id.hex)
     await message("10%")
     assert "90" in session.sent[-1].text
     assert (await container.trackers.get(user.id, tracker.id)).target_price == 90
     await container.price_checks.refresh((await container.price_checks.claim_due())[0])
-    notifications = NotificationService(container.sessions, TelegramNotificationSender(bot))
+    notifications = NotificationService(
+        container.sessions, TelegramNotificationSender(bot), container.entitlements
+    )
     assert await notifications.send_pending() == 1
     assert "95" in session.sent[-1].text
+    assert tr(language, "historical_low") in session.sent[-1].text
     assert await notifications.send_pending() == 0
     await message("/my")
     assert "95" in session.sent[-1].text
     await callback("history", tracker.offer.id.hex)
-    assert "История" in session.sent[-1].text
+    assert CATALOGS[language]["history_card"].split("\n", 1)[0] in session.sent[-1].text
     await callback("pause", tracker.id.hex)
     assert not (await container.trackers.get(user.id, tracker.id)).enabled
     await callback("resume", tracker.id.hex)
     assert (await container.trackers.get(user.id, tracker.id)).enabled
     await message("/settings")
-    assert "Настройки" in session.sent[-1].text
+    assert tr(language, "settings").removeprefix("⚙️ ") in session.sent[-1].text
     await callback("lang", "en")
     assert "Settings" in session.sent[-1].text
     await callback("delete", tracker.id.hex)

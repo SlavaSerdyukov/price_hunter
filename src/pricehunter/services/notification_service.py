@@ -10,6 +10,8 @@ from sqlalchemy import select, update
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import NotificationEvent, StoreOffer, Tracker, User
 from pricehunter.db.session import SessionFactory
+from pricehunter.domain.subscriptions import Feature
+from pricehunter.services.entitlement_service import EntitlementService
 
 
 @dataclass(frozen=True)
@@ -38,8 +40,10 @@ class NotificationSender(Protocol):
 
 
 class NotificationService:
-    def __init__(self, sessions: SessionFactory, sender: NotificationSender) -> None:
-        self.sessions, self.sender = sessions, sender
+    def __init__(
+        self, sessions: SessionFactory, sender: NotificationSender, entitlements: EntitlementService
+    ) -> None:
+        self.sessions, self.sender, self.entitlements = sessions, sender, entitlements
 
     async def claim(self) -> Delivery | None:
         async with self.sessions.begin() as session:
@@ -70,7 +74,23 @@ class NotificationService:
             if row is None:
                 return None
             event, tracker, user, offer = row
-            if not tracker.enabled or user.telegram_user_id is None:
+            eligible = await session.scalar(
+                select(Tracker.id).where(
+                    Tracker.id == tracker.id,
+                    Tracker.id.in_(self.entitlements.scheduled_tracker_ids(utcnow())),
+                )
+            )
+            rights = (await self.entitlements.for_user(user.id, session=session)).entitlements
+            feature = {
+                "target_reached": Feature.TARGET_ALERTS,
+                "historical_low": Feature.HISTORICAL_LOW,
+                "back_in_stock": Feature.BACK_IN_STOCK,
+            }.get(event.event_type)
+            if (
+                not eligible
+                or user.telegram_user_id is None
+                or (feature is not None and not rights.allows(feature))
+            ):
                 event.status = "cancelled"
                 return None
             event.status = "sending"

@@ -6,8 +6,10 @@ from pydantic import BaseModel
 
 from pricehunter.core.limits import RateLimiter
 from pricehunter.domain.products import ProductMatcher, ProductOfferData
+from pricehunter.domain.subscriptions import Feature
 from pricehunter.providers.base import StoreProvider
 from pricehunter.providers.registry import ProviderRegistry
+from pricehunter.services.entitlement_service import EntitlementService
 
 
 class SearchResult(BaseModel):
@@ -16,8 +18,10 @@ class SearchResult(BaseModel):
 
 
 class SearchService:
-    def __init__(self, registry: ProviderRegistry, limiter: RateLimiter) -> None:
-        self.registry, self.limiter = registry, limiter
+    def __init__(
+        self, registry: ProviderRegistry, limiter: RateLimiter, entitlements: EntitlementService
+    ) -> None:
+        self.registry, self.limiter, self.entitlements = registry, limiter, entitlements
 
     async def search(
         self,
@@ -28,6 +32,9 @@ class SearchService:
         currency: str | None = None,
     ) -> SearchResult:
         await self.limiter.user(user_id)
+        limits = (await self.entitlements.for_user(user_id)).entitlements
+        limits.require(Feature.COMPARISON_SEARCH)
+        await self.limiter.check(f"search:{user_id}", limit=limits.search_limit, seconds=86400)
 
         async def one(provider: StoreProvider) -> tuple[list[ProductOfferData], str | None]:
             try:
@@ -50,4 +57,11 @@ class SearchService:
                     groups.append([offer])
         for group in groups:
             group.sort(key=lambda x: (x.currency, x.price))
-        return SearchResult(groups=groups, unavailable_providers=[p for _, p in responses if p])
+        bounded: list[list[ProductOfferData]] = []
+        remaining = limits.search_result_limit
+        for group in groups:
+            if remaining <= 0:
+                break
+            bounded.append(group[:remaining])
+            remaining -= len(bounded[-1])
+        return SearchResult(groups=bounded, unavailable_providers=[p for _, p in responses if p])

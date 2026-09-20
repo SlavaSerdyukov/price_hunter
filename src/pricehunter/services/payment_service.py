@@ -6,7 +6,7 @@ from pricehunter.payments.base import VerifiedPayment
 
 
 class PaymentService:
-    """Durable idempotent ledger primitive. Checkout/entitlement activation is M2."""
+    """Generic ledger primitive; Stars lifecycle and entitlements belong to BillingService."""
 
     def __init__(self, sessions: SessionFactory) -> None:
         self.sessions = sessions

@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
+from pricehunter.domain.billing import BillingProduct
 from pricehunter.domain.errors import FeatureUnavailableError
 
 
@@ -14,6 +15,10 @@ class CheckoutContext:
     country: str | None
     plan: str
     product_type: Literal["digital"] = "digital"
+    payload: str = ""
+    product: BillingProduct | None = None
+    title: str = ""
+    description: str = ""
 
 
 @dataclass(frozen=True)
@@ -39,12 +44,6 @@ class PaymentProvider(ABC):
 class DisabledPaymentProvider(PaymentProvider):
     async def create_checkout(self, context: CheckoutContext) -> str:
         raise FeatureUnavailableError()
-
-
-class TelegramStarsPaymentProvider(DisabledPaymentProvider):
-    name = "telegram_stars"
-    currency = "XTR"
-    subscription_period = 30 * 24 * 60 * 60
 
 
 class StripePaymentProvider(DisabledPaymentProvider):

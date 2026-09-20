@@ -69,3 +69,36 @@ class InvalidTargetPriceError(PriceHunterError):
 class FeatureUnavailableError(PriceHunterError):
     code = "feature_unavailable"
     status_code = 503
+
+
+class FeatureRequiresUpgradeError(PriceHunterError):
+    code = "feature_requires_upgrade"
+    status_code = 403
+
+    def __init__(self, feature: str = "") -> None:
+        self.feature = feature
+        super().__init__(self.code)
+
+
+class PaymentRejectedError(PriceHunterError):
+    code = "payment_rejected"
+
+
+class BillingUnavailableError(PriceHunterError):
+    code = "billing_unavailable"
+    status_code = 503
+
+
+class SubscriptionConflictError(PriceHunterError):
+    code = "subscription_conflict"
+    status_code = 409
+
+
+class RenewalCancellationRequiredError(PriceHunterError):
+    code = "cancel_renewal_first"
+    status_code = 409
+
+
+class BillingOperationPendingError(PriceHunterError):
+    code = "billing_operation_pending"
+    status_code = 409

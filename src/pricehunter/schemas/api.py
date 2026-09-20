@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pricehunter.domain.products import Money
+from pricehunter.localization.languages import LanguageCode
 
 
 class InputModel(BaseModel):
@@ -66,6 +67,7 @@ class TrackerView(BaseModel):
     baseline_price: Decimal
     enabled: bool
     check_interval_seconds: int
+    scheduled: bool = True
 
 
 class ObservationView(BaseModel):
@@ -89,7 +91,7 @@ class HistoryView(BaseModel):
 
 
 class UserSettingsPatch(InputModel):
-    language_code: Annotated[str, Field(pattern=r"^(en|ru)$")] | None = None
+    language_code: LanguageCode | None = None
     country_code: Annotated[str, Field(pattern=r"^[A-Z]{2}$")] | None = None
     preferred_currency: Annotated[str, Field(pattern=r"^[A-Z]{3}$")] | None = None
     timezone: str | None = None

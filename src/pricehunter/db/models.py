@@ -31,7 +31,6 @@ class User(UUIDPrimaryKey, Timestamps, Base):
     country_code: Mapped[str | None] = mapped_column(String(2))
     preferred_currency: Mapped[str] = mapped_column(String(3), default="EUR")
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
-    subscription_plan: Mapped[str] = mapped_column(String(20), default="free")
     last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     referral_code: Mapped[str | None] = mapped_column(String(32), unique=True)
     referred_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
@@ -171,27 +170,134 @@ class NotificationEvent(UUIDPrimaryKey, Base):
     telegram_message_id: Mapped[int | None] = mapped_column(BigInteger)
 
 
+class BillingProductRecord(Base):
+    __tablename__ = "billing_products"
+    __table_args__ = (
+        CheckConstraint("plan IN ('pro', 'power')", name="paid_plan"),
+        CheckConstraint("stars BETWEEN 1 AND 10000", name="stars_amount"),
+        CheckConstraint("subscription_period = 2592000", name="stars_period"),
+    )
+    code: Mapped[str] = mapped_column(String(100), primary_key=True)
+    plan: Mapped[str] = mapped_column(String(20))
+    stars: Mapped[int]
+    subscription_period: Mapped[int]
+    active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CheckoutIntent(UUIDPrimaryKey, Base):
+    __tablename__ = "checkout_intents"
+    __table_args__ = (
+        CheckConstraint("status IN ('pending','paid','expired','cancelled')", name="status"),
+        CheckConstraint("expected_amount > 0 AND currency = 'XTR'", name="stars_payment"),
+        Index(
+            "ix_checkout_pending_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    billing_product_code: Mapped[str] = mapped_column(ForeignKey("billing_products.code"))
+    expected_amount: Mapped[int]
+    currency: Mapped[str] = mapped_column(String(3), default="XTR")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_query_id: Mapped[str | None] = mapped_column(String(200))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    invoice_url: Mapped[str | None] = mapped_column(String(2048))
+
+
 class Subscription(UUIDPrimaryKey, Timestamps, Base):
     __tablename__ = "subscriptions"
-    __table_args__ = (UniqueConstraint("provider", "provider_subscription_id"),)
-    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_subscription_id"),
+        CheckConstraint("plan IN ('pro','power')", name="paid_plan"),
+        CheckConstraint("status IN ('active','cancelled','expired','refunded')", name="status"),
+        Index("ix_subscription_entitlement", "user_id", "valid_until"),
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
     plan: Mapped[str] = mapped_column(String(20))
     provider: Mapped[str] = mapped_column(String(30))
+    # Local recurring identity: the checkout UUID, not an invented Telegram API field.
     provider_subscription_id: Mapped[str | None] = mapped_column(String(200))
+    checkout_intent_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("checkout_intents.id"), unique=True
+    )
+    billing_product_code: Mapped[str | None] = mapped_column(ForeignKey("billing_products.code"))
+    telegram_payment_charge_id: Mapped[str | None] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(20))
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     auto_renew: Mapped[bool] = mapped_column(default=False)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PaymentEvent(UUIDPrimaryKey, Base):
     __tablename__ = "payment_events"
-    __table_args__ = (UniqueConstraint("provider", "external_event_id"),)
+    __table_args__ = (
+        UniqueConstraint("provider", "external_event_id"),
+        UniqueConstraint(
+            "provider", "telegram_payment_charge_id", "event_type", name="uq_payment_charge_type"
+        ),
+        Index("ix_payment_subscription", "subscription_id"),
+    )
     provider: Mapped[str] = mapped_column(String(30))
     external_event_id: Mapped[str] = mapped_column(String(200))
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    telegram_payment_charge_id: Mapped[str | None] = mapped_column(String(200))
+    billing_product_code: Mapped[str | None] = mapped_column(ForeignKey("billing_products.code"))
+    subscription_id: Mapped[UUID | None] = mapped_column(ForeignKey("subscriptions.id"))
+    plan: Mapped[str | None] = mapped_column(String(20))
     event_type: Mapped[str] = mapped_column(String(40))
     amount: Mapped[Decimal] = mapped_column(MONEY)
     currency: Mapped[str] = mapped_column(String(3))
     status: Mapped[str] = mapped_column(String(20))
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SubscriptionPeriod(UUIDPrimaryKey, Base):
+    __tablename__ = "subscription_periods"
+    __table_args__ = (
+        CheckConstraint("valid_until > valid_from", name="valid_period"),
+        Index("ix_period_entitlement", "subscription_id", "valid_until"),
+    )
+    subscription_id: Mapped[UUID] = mapped_column(ForeignKey("subscriptions.id"))
+    payment_event_id: Mapped[UUID] = mapped_column(ForeignKey("payment_events.id"), unique=True)
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BillingUpdate(UUIDPrimaryKey, Base):
+    __tablename__ = "billing_updates"
+    __table_args__ = (
+        UniqueConstraint("event_type", "charge_id"),
+        CheckConstraint("status IN ('pending','processed','rejected')", name="status"),
+        Index("ix_billing_updates_due", "status", "available_at"),
+    )
+    event_type: Mapped[str] = mapped_column(String(40))
+    charge_id: Mapped[str] = mapped_column(String(200))
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    attempts: Mapped[int] = mapped_column(default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    error_code: Mapped[str | None] = mapped_column(String(80))
+
+
+class BillingOperation(UUIDPrimaryKey, Timestamps, Base):
+    __tablename__ = "billing_operations"
+    __table_args__ = (
+        UniqueConstraint("kind", "identity"),
+        CheckConstraint("status IN ('processing','completed','uncertain')", name="status"),
+    )
+    kind: Mapped[str] = mapped_column(String(20))
+    identity: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20))
+    lease_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    token: Mapped[UUID]

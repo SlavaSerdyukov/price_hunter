@@ -24,7 +24,7 @@ async def startup(ctx: dict[str, Any]) -> None:
         bot = create_bot(container)
         ctx["bot"] = bot
         ctx["notifications"] = NotificationService(
-            container.sessions, TelegramNotificationSender(bot)
+            container.sessions, TelegramNotificationSender(bot), container.entitlements
         )
 
 
@@ -63,10 +63,18 @@ async def send_notifications(ctx: dict[str, Any]) -> int:
     return await cast(NotificationService, ctx["notifications"]).send_pending(limit=100)
 
 
+async def maintain_billing(ctx: dict[str, Any]) -> int:
+    container = cast(Container, ctx["container"])
+    retried = await container.billing_intake.retry_pending()
+    await container.billing.expire()
+    return retried
+
+
 class WorkerSettings:
     timezone = UTC
-    functions = [refresh_offer, refresh_due_offers, send_notifications]
+    functions = [refresh_offer, refresh_due_offers, send_notifications, maintain_billing]
     cron_jobs = [
+        cron(maintain_billing, second=10, run_at_startup=True, unique=True),
         cron(refresh_due_offers, second={0, 30}, run_at_startup=True, unique=True),
         cron(send_notifications, second={5, 15, 25, 35, 45, 55}, run_at_startup=True, unique=True),
     ]

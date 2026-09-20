@@ -1,4 +1,5 @@
 import httpx
+from aiogram import Bot
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -6,7 +7,8 @@ from pricehunter.core.config import Settings
 from pricehunter.core.limits import RateLimiter
 from pricehunter.core.network import PublicHTTPTransport
 from pricehunter.db.session import SessionFactory, create_sessions
-from pricehunter.domain.subscriptions import Plan, PlanLimits, SubscriptionPolicy
+from pricehunter.domain.subscriptions import Plan, PlanEntitlements, SubscriptionPolicy
+from pricehunter.payments.stars import TelegramStarsPaymentProvider
 from pricehunter.providers.amazon import AmazonCreatorsProvider
 from pricehunter.providers.base import StoreProvider
 from pricehunter.providers.ebay import EbayBrowseProvider
@@ -14,9 +16,15 @@ from pricehunter.providers.http import ProviderHTTP
 from pricehunter.providers.mock import MockStoreProvider
 from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.providers.woocommerce import WooCommerceProvider
+from pricehunter.services.billing_catalog import BillingCatalog
+from pricehunter.services.billing_intake import BillingIntake
+from pricehunter.services.billing_reconciliation import BillingReconciliation
+from pricehunter.services.billing_service import BillingService
+from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.price_check_service import PriceCheckService
 from pricehunter.services.product_service import ProductService
 from pricehunter.services.search_service import SearchService
+from pricehunter.services.subscription_service import SubscriptionService
 from pricehunter.services.tracking_service import TrackingService
 from pricehunter.services.user_service import UserService
 
@@ -100,18 +108,49 @@ class Container:
         self.registry = registry or ProviderRegistry(providers)
         self.policy = SubscriptionPolicy(
             {
-                Plan.FREE: PlanLimits(settings.free_tracker_limit, settings.free_check_seconds),
-                Plan.PRO: PlanLimits(settings.pro_tracker_limit, settings.pro_check_seconds),
-                Plan.POWER: PlanLimits(settings.power_tracker_limit, settings.power_check_seconds),
+                plan: PlanEntitlements(
+                    max_trackers=getattr(settings, f"{plan}_tracker_limit"),
+                    check_interval_seconds=getattr(settings, f"{plan}_check_seconds"),
+                    target_price_alerts="target_price_alerts" in settings.plan_features[plan],
+                    historical_low_alerts="historical_low_alerts" in settings.plan_features[plan],
+                    back_in_stock_alerts="back_in_stock_alerts" in settings.plan_features[plan],
+                    comparison_search="comparison_search" in settings.plan_features[plan],
+                    history_access="history_access" in settings.plan_features[plan],
+                    search_limit=getattr(settings, f"{plan}_search_limit"),
+                    search_result_limit=getattr(settings, f"{plan}_search_results"),
+                    history_days=getattr(settings, f"{plan}_history_days"),
+                )
+                for plan in Plan
             }
         )
+        self.entitlements = EntitlementService(self.sessions, self.policy)
+        self.subscriptions = SubscriptionService(self.sessions, self.entitlements, settings)
+        self.catalog = BillingCatalog(settings)
+        self.payment_provider = TelegramStarsPaymentProvider(
+            Bot(settings.telegram_bot_token.get_secret_value())
+            if settings.telegram_bot_token.get_secret_value()
+            else None
+        )
+        self.billing = BillingService(
+            self.sessions, settings, self.catalog, self.entitlements, self.payment_provider
+        )
+        self.billing_intake = BillingIntake(self.sessions, self.billing)
+        self.reconciliation = BillingReconciliation(
+            self.sessions, self.payment_provider, self.billing
+        )
         self.users = UserService(self.sessions)
-        self.products = ProductService(self.sessions, self.registry, self.limiter, settings)
-        self.trackers = TrackingService(self.sessions, self.policy, settings)
-        self.search = SearchService(self.registry, self.limiter)
-        self.price_checks = PriceCheckService(self.sessions, self.registry, self.limiter, settings)
+        self.products = ProductService(
+            self.sessions, self.registry, self.limiter, settings, self.entitlements
+        )
+        self.trackers = TrackingService(self.sessions, self.entitlements, settings)
+        self.search = SearchService(self.registry, self.limiter, self.entitlements)
+        self.price_checks = PriceCheckService(
+            self.sessions, self.registry, self.limiter, settings, self.entitlements
+        )
 
     async def close(self) -> None:
+        if self.payment_provider.bot is not None:
+            await self.payment_provider.bot.session.close()
         await self.http.aclose()
         await self.redis.aclose()
         engine = self.sessions.kw["bind"]

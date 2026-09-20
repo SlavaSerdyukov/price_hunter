@@ -21,6 +21,8 @@ from pricehunter.core.container import Container
 from pricehunter.db.models import User
 from pricehunter.domain.errors import VariantSelectionRequiredError
 from pricehunter.domain.pricing import parse_target, percentage_change
+from pricehunter.domain.subscriptions import Feature
+from pricehunter.localization.languages import LANGUAGE_NAMES, normalize_language
 from pricehunter.localization.messages import money, tr
 from pricehunter.providers.woocommerce import WooCommerceProvider
 from pricehunter.schemas.api import OfferView, TrackerCreate, TrackerPatch, UserSettingsPatch
@@ -104,7 +106,14 @@ async def show_my(message: Message, container: Container, user: User, page: int 
                 target=money(tracker.target_price, offer.currency, language)
                 if tracker.target_price
                 else tr(language, "no_target"),
-                status=tr(language, "active" if tracker.enabled else "inactive"),
+                status=tr(
+                    language,
+                    "active"
+                    if tracker.scheduled
+                    else "quota_paused"
+                    if tracker.enabled
+                    else "inactive",
+                ),
             ),
             reply_markup=tracker_keyboard(language, tracker.id, offer.id, tracker.enabled),
         )
@@ -124,25 +133,12 @@ async def show_settings(message: Message, user: User) -> None:
         tr(
             user.language_code,
             "settings_text",
-            language=user.language_code,
+            language=LANGUAGE_NAMES[normalize_language(user.language_code)],
             country=user.country_code or "—",
             currency=user.preferred_currency,
             timezone=user.timezone,
         ),
         reply_markup=settings_keyboard(user.language_code),
-    )
-
-
-async def show_plans(message: Message, container: Container, language: str) -> None:
-    settings = container.settings
-    await message.answer(
-        tr(
-            language,
-            "plans_text",
-            free=settings.free_tracker_limit,
-            pro=settings.pro_tracker_limit,
-            power=settings.power_tracker_limit,
-        )
     )
 
 
@@ -154,14 +150,10 @@ async def run_search(message: Message, query: str, container: Container, user: U
     if not results.groups:
         await message.answer(tr(language, "search_empty"))
         return
-    shown = 0
     for group in results.groups:
         for result in group:
             offer = await container.products.persist(result)
             await show_offer(message, offer, language)
-            shown += 1
-            if shown >= 5:
-                return
 
 
 def build_router() -> Router:
@@ -244,14 +236,6 @@ def build_router() -> Router:
         await state.clear()
         await show_settings(message, user)
 
-    @router.message(Command("plans"))
-    async def plans_command(message: Message, container: Container, language: str) -> None:
-        await show_plans(message, container, language)
-
-    @router.message(Command("paysupport"))
-    async def support_command(message: Message, container: Container, language: str) -> None:
-        await message.answer(tr(language, "support", contact=container.settings.support_contact))
-
     @router.message(Command("search"))
     async def search_command(
         message: Message,
@@ -311,8 +295,9 @@ def build_router() -> Router:
         elif action == "search":
             await state.set_state(Conversation.search)
             await message.answer(tr(language, "search_prompt"))
-        elif action == "plans":
-            await show_plans(message, container, language)
+        elif action == "menu":
+            key = "start" if container.settings.mock_provider_enabled else "start_real"
+            await message.answer(tr(language, key), reply_markup=main_menu(language))
         elif action == "settings":
             await show_settings(message, user)
         elif action == "lang":
@@ -323,6 +308,10 @@ def build_router() -> Router:
             await state.update_data(setting=value)
             await message.answer(tr(language, value + "_prompt"))
         elif action in ("track", "otarget"):
+            if action == "otarget":
+                (await container.entitlements.for_user(user.id)).entitlements.require(
+                    Feature.TARGET_ALERTS
+                )
             tracker = await container.trackers.create(
                 user.id, TrackerCreate(store_offer_id=UUID(value))
             )
@@ -341,6 +330,9 @@ def build_router() -> Router:
                 await state.update_data(tracker_id=str(tracker.id))
                 await message.answer(tr(language, "target_prompt", currency=tracker.offer.currency))
         elif action == "target":
+            (await container.entitlements.for_user(user.id)).entitlements.require(
+                Feature.TARGET_ALERTS
+            )
             tracker = await container.trackers.get(user.id, UUID(value))
             await state.set_state(Conversation.target)
             await state.update_data(tracker_id=str(tracker.id))
@@ -350,7 +342,14 @@ def build_router() -> Router:
                 user.id, UUID(value), TrackerPatch(enabled=action == "resume")
             )
             await message.answer(
-                tr(language, "paused" if action == "pause" else "resumed"),
+                tr(
+                    language,
+                    "paused"
+                    if action == "pause"
+                    else "resumed"
+                    if tracker.scheduled
+                    else "quota_paused",
+                ),
                 reply_markup=tracker_keyboard(
                     language, tracker.id, tracker.offer.id, tracker.enabled
                 ),

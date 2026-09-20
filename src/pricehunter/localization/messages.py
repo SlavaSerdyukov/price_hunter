@@ -1,9 +1,15 @@
+import json
 from decimal import Decimal
 from html import escape
+from importlib.resources import files
+from typing import cast
 
 from babel.numbers import format_currency
 
+from pricehunter.localization.languages import NUMBER_LOCALES, normalize_language
+
 EN = {
+    "language": "🌐 Language",
     "stores_hint": "/stores — available stores",
     "stores_list": "<b>Available stores</b>\n{stores}\n\nSend a product link or use /search. Prices retain the store's currency. Delivery options depend on the store.",
     "stores_empty": "Real stores are not connected yet. The demo catalog may still be available.",
@@ -79,6 +85,7 @@ EN = {
 }
 
 RU = {
+    "language": "🌐 Язык",
     "stores_hint": "/stores — доступные магазины",
     "stores_list": "<b>Доступные магазины</b>\n{stores}\n\nПришлите ссылку на товар или используйте /search. Цены показываются в валюте магазина. Условия доставки зависят от магазина.",
     "stores_empty": "Реальные магазины пока не подключены. Демо-каталог может быть доступен.",
@@ -154,12 +161,112 @@ RU = {
 }
 
 
+EN.update(
+    {
+        "plans_heading": "<b>PriceHunter plans</b>\nCurrent: {plan}",
+        "plan_details": "<b>{plan} — {price} ⭐ / 30 days</b>\n{trackers} trackers · checks every {hours} h\nSearch: {search}/day, up to {results} results\nHistory: {history} days\n{features}",
+        "billing_terms": "Basic price-drop alerts are included in every plan. Paid plans renew every 30 days. For an upgrade, cancel the old renewal first; the new period starts immediately at full price, without proration. Previous paid access remains.",
+        "billing_disabled": "Checkout is currently disabled. No payment can be made here yet.",
+        "upgrade_pro": "⭐ Upgrade to Pro",
+        "upgrade_power": "🚀 Upgrade to Power",
+        "my_subscription": "📋 My subscription",
+        "pay_stars": "Pay with Telegram Stars",
+        "invoice_title": "PriceHunter {plan}",
+        "invoice_description": "{plan} subscription for 30 days. Recurring Telegram Stars payment. Cancel future renewal in /subscription. Payment support: /paysupport.",
+        "checkout_ready": "{plan}: {price} ⭐ every 30 days. Access starts after payment. This purchase does not credit unused time on an earlier plan. Open the invoice to review and pay.",
+        "subscription_details": "<b>Subscription: {plan}</b>\nStatus: {status}\nPaid access until: {until}\nRenewal: {renewal}\nTrackers stored: {count} · scheduled: {active}/{limit}\nTrackers beyond the current limit stay saved; the oldest enabled trackers are scheduled.",
+        "subscription_free": "Free",
+        "subscription_active": "Active",
+        "subscription_cancelled": "Renewal cancelled; paid access retained",
+        "subscription_expired": "Paid subscription expired",
+        "subscription_refunded": "Refunded",
+        "renewal_unknown": "Not established",
+        "renewal_last_enabled": "Enabled at last payment; check Telegram for changes made there",
+        "renewal_cancelled": "Cancelled by the bot",
+        "cancel_plan_renewal": "Cancel {plan} renewal",
+        "cancel_renewal_confirm": "Stop future automatic charges? Your already-paid access will remain until its expiration date.",
+        "confirm_cancel_renewal": "Confirm cancellation",
+        "renewal_cancelled_confirmation": "Future renewal cancelled. Already-paid access is unchanged.",
+        "payment_successful": "Payment received. {plan} is active until {until}. See /subscription for current access.",
+        "payment_processing": "The payment update has been saved for processing. Check /subscription shortly; contact /paysupport if access is missing. Do not pay again.",
+        "payment_rejected": "This invoice cannot be accepted. Check your subscription and open a new invoice from /plans. Payment support: /paysupport.",
+        "billing_unavailable": "Checkout is temporarily unavailable. Please try again later or contact /paysupport.",
+        "subscription_conflict": "You already have this plan or a higher one, or a payment is still being processed. Check /subscription.",
+        "cancel_renewal_first": "Cancel the existing subscription’s renewal in /subscription before purchasing another plan. Your paid access will remain.",
+        "billing_operation_pending": "The operation needs confirmation from Telegram. Contact /paysupport; do not repeat the payment.",
+        "feature_requires_upgrade": "This feature requires a paid plan. See /plans.",
+        "quota_paused": "Saved; outside the current plan’s active quota",
+        "feature_target_price_alerts": "target alerts",
+        "feature_historical_low_alerts": "historical-low alerts",
+        "feature_back_in_stock_alerts": "restock alerts",
+        "feature_comparison_search": "comparison search",
+        "feature_history_access": "price history",
+        "support": "<b>Payment and refund support</b>\n{contact}\nInclude the payment date, plan and Telegram receipt. Never send passwords or bot tokens. /subscription shows current access. Renewal can be cancelled there; refunds are handled by support.",
+        "subscription_limit": "Your plan’s tracker limit is reached. Remove a saved tracker or choose a larger plan in /plans.",
+    }
+)
+RU.update(
+    {
+        "plans_heading": "<b>Тарифы PriceHunter</b>\nТекущий: {plan}",
+        "plan_details": "<b>{plan} — {price} ⭐ / 30 дней</b>\nТрекеров: {trackers} · проверка каждые {hours} ч\nПоиск: {search}/день, до {results} результатов\nИстория: {history} дней\n{features}",
+        "billing_terms": "Уведомления о снижении цены есть во всех тарифах. Платные тарифы продлеваются каждые 30 дней. Для перехода отмените старое продление; новый период начнётся сразу, по полной цене, без перерасчёта. Ранее оплаченный доступ сохранится.",
+        "billing_disabled": "Приём платежей сейчас выключен. Оплатить подписку пока нельзя.",
+        "upgrade_pro": "⭐ Перейти на Pro",
+        "upgrade_power": "🚀 Перейти на Power",
+        "my_subscription": "📋 Моя подписка",
+        "pay_stars": "Оплатить Telegram Stars",
+        "invoice_title": "PriceHunter {plan}",
+        "invoice_description": "Подписка {plan} на 30 дней с автоматическим продлением за Telegram Stars. Отмена продления: /subscription. Поддержка по оплате: /paysupport.",
+        "checkout_ready": "{plan}: {price} ⭐ каждые 30 дней. Доступ включится после оплаты. Неиспользованный срок старого тарифа не вычитается из стоимости. Откройте счёт, чтобы проверить условия и оплатить.",
+        "subscription_details": "<b>Подписка: {plan}</b>\nСтатус: {status}\nДоступ оплачен до: {until}\nПродление: {renewal}\nСохранено товаров: {count} · проверяется: {active}/{limit}\nТовары сверх лимита сохраняются; проверяются старейшие включённые трекеры.",
+        "subscription_free": "Free",
+        "subscription_active": "Активна",
+        "subscription_cancelled": "Продление отменено, оплаченный доступ сохранён",
+        "subscription_expired": "Платная подписка истекла",
+        "subscription_refunded": "Оплата возвращена",
+        "renewal_unknown": "Нет подтверждённых данных",
+        "renewal_last_enabled": "Было включено при последней оплате; изменения в Telegram проверяйте там",
+        "renewal_cancelled": "Отменено через бота",
+        "cancel_plan_renewal": "Отменить продление {plan}",
+        "cancel_renewal_confirm": "Остановить будущие автоматические списания? Уже оплаченный доступ сохранится до конца срока.",
+        "confirm_cancel_renewal": "Подтвердить отмену",
+        "renewal_cancelled_confirmation": "Будущее продление отменено. Уже оплаченный доступ сохранён.",
+        "payment_successful": "Оплата получена. Тариф {plan} активен до {until}. Текущий доступ — /subscription.",
+        "payment_processing": "Событие оплаты сохранено для обработки. Проверьте /subscription чуть позже; если доступа нет, обратитесь в /paysupport. Повторно платить не нужно.",
+        "payment_rejected": "Этот счёт нельзя принять. Проверьте подписку и откройте новый счёт через /plans. Поддержка: /paysupport.",
+        "billing_unavailable": "Оплата временно недоступна. Попробуйте позже или обратитесь в /paysupport.",
+        "subscription_conflict": "У вас уже есть этот тариф или более высокий, либо платёж ещё обрабатывается. Проверьте /subscription.",
+        "cancel_renewal_first": "Перед покупкой другого тарифа отмените текущее продление в /subscription. Уже оплаченный доступ сохранится.",
+        "billing_operation_pending": "Операция требует подтверждения Telegram. Обратитесь в /paysupport; повторно оплачивать не нужно.",
+        "feature_requires_upgrade": "Эта функция доступна на платном тарифе. Подробности — /plans.",
+        "quota_paused": "Сохранён; превышен лимит активных трекеров тарифа",
+        "feature_target_price_alerts": "целевая цена",
+        "feature_historical_low_alerts": "исторический минимум",
+        "feature_back_in_stock_alerts": "возврат в продажу",
+        "feature_comparison_search": "сравнение магазинов",
+        "feature_history_access": "история цен",
+        "support": "<b>Поддержка по оплате и возвратам</b>\n{contact}\nУкажите дату оплаты, тариф и чек Telegram. Пароли и токены присылать не нужно. Текущий доступ — /subscription. Там же можно отменить продление; возврат оформляется через поддержку.",
+        "subscription_limit": "Достигнут лимит тарифа. Удалите сохранённый товар или выберите больший тариф в /plans.",
+    }
+)
+EN["help"] += "\n/subscription — subscription and renewal"
+RU["help"] += "\n/subscription — подписка и продление"
+
+CATALOGS = {"en": EN, "ru": RU}
+for _code in ("fr", "de", "es", "it", "pl"):
+    CATALOGS[_code] = cast(
+        dict[str, str],
+        json.loads(
+            files("pricehunter.localization").joinpath(f"locales/{_code}.json").read_text("utf-8")
+        ),
+    )
+
+
 def tr(locale: str, key: str, **values: object) -> str:
-    messages = RU if locale.startswith("ru") else EN
-    return messages[key].format(**{k: escape(str(v)) for k, v in values.items()})
+    messages = CATALOGS[normalize_language(locale)]
+    template = messages[key] if key in messages else EN[key]
+    return template.format(**{k: escape(str(v)) for k, v in values.items()})
 
 
 def money(amount: Decimal, currency: str, language: str) -> str:
-    return format_currency(
-        amount, currency, locale="ru_RU" if language.startswith("ru") else "en_US"
-    )
+    return format_currency(amount, currency, locale=NUMBER_LOCALES[normalize_language(language)])

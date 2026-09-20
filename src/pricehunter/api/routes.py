@@ -15,6 +15,7 @@ from pricehunter.schemas.api import (
     UserSettingsPatch,
 )
 from pricehunter.services.search_service import SearchResult
+from pricehunter.services.subscription_service import SubscriptionView
 
 router = APIRouter(prefix="/api/v1")
 
@@ -36,7 +37,7 @@ async def resolve(
 async def product(
     product_id: UUID, container: ContainerDependency, user: UserDependency
 ) -> ProductView:
-    name, offers = await container.products.product(product_id)
+    name, offers = await container.products.product(product_id, user.id)
     return ProductView(id=product_id, canonical_name=name, offers=offers)
 
 
@@ -106,21 +107,9 @@ async def delete_tracker(
     return Response(status_code=204)
 
 
-class SubscriptionView(BaseModel):
-    plan: str
-    max_trackers: int
-    check_interval_seconds: int
-    checkout_available: bool = False
-
-
 @router.get("/subscriptions/me", response_model=SubscriptionView)
 async def subscription(container: ContainerDependency, user: UserDependency) -> SubscriptionView:
-    limits = container.policy.for_plan(user.subscription_plan)
-    return SubscriptionView(
-        plan=user.subscription_plan,
-        max_trackers=limits.max_trackers,
-        check_interval_seconds=limits.check_interval_seconds,
-    )
+    return await container.subscriptions.status(user.id)
 
 
 class SettingsView(BaseModel):

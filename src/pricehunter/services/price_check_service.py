@@ -5,7 +5,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import structlog
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import case, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from pricehunter.core.config import Settings
@@ -15,8 +15,10 @@ from pricehunter.db.models import NotificationEvent, PriceObservation, Store, St
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.pricing import TrackerRules, anomaly_reason, evaluate_rules
 from pricehunter.domain.products import ProductOfferData
+from pricehunter.domain.subscriptions import Plan
 from pricehunter.providers.base import OfferReference
 from pricehunter.providers.registry import ProviderRegistry
+from pricehunter.services.entitlement_service import EntitlementService
 
 log = structlog.get_logger()
 
@@ -34,13 +36,39 @@ class PriceCheckService:
         registry: ProviderRegistry,
         limiter: RateLimiter,
         settings: Settings,
+        entitlements: EntitlementService,
     ) -> None:
         self.sessions, self.registry = sessions, registry
-        self.limiter, self.settings = limiter, settings
+        self.limiter, self.settings, self.entitlements = limiter, settings, entitlements
 
     async def claim_due(self) -> list[RefreshClaim]:
         now = utcnow()
         async with self.sessions.begin() as session:
+            eligible = self.entitlements.scheduled_tracker_ids(now)
+            plan = self.entitlements.plan_expression(now)
+            interval = (
+                select(
+                    func.min(
+                        case(
+                            *[
+                                (
+                                    plan == p,
+                                    self.entitlements.policy.for_plan(p).check_interval_seconds,
+                                )
+                                for p in Plan
+                            ],
+                            else_=self.settings.free_check_seconds,
+                        )
+                    )
+                )
+                .where(Tracker.store_offer_id == StoreOffer.id, Tracker.id.in_(eligible))
+                .correlate(StoreOffer)
+                .scalar_subquery()
+            )
+            actual_interval = case(
+                (Store.provider_type == "mock", self.settings.mock_check_interval_seconds),
+                else_=interval,
+            )
             offers = list(
                 await session.scalars(
                     select(StoreOffer)
@@ -48,9 +76,16 @@ class PriceCheckService:
                     .where(
                         StoreOffer.next_check_at <= now,
                         Store.active.is_(True),
+                        or_(
+                            StoreOffer.refresh_sequence == 0,
+                            StoreOffer.failure_count > 0,
+                            StoreOffer.suspicious_price.is_not(None),
+                            StoreOffer.last_checked_at
+                            <= now - func.make_interval(0, 0, 0, 0, 0, 0, actual_interval),
+                        ),
                         or_(StoreOffer.lease_until.is_(None), StoreOffer.lease_until < now),
                         exists().where(
-                            Tracker.store_offer_id == StoreOffer.id, Tracker.enabled.is_(True)
+                            Tracker.store_offer_id == StoreOffer.id, Tracker.id.in_(eligible)
                         ),
                     )
                     .order_by(StoreOffer.next_check_at)
@@ -150,15 +185,34 @@ class PriceCheckService:
                 store.provider_type,
             ):
                 raise ValueError("Provider changed listing identity")
-            interval = (
-                await session.scalar(
-                    select(func.min(Tracker.check_interval_seconds)).where(
+            trackers = list(
+                await session.scalars(
+                    select(Tracker)
+                    .where(
                         Tracker.store_offer_id == offer.id,
-                        Tracker.enabled.is_(True),
+                        Tracker.id.in_(self.entitlements.scheduled_tracker_ids(now)),
                     )
+                    .with_for_update()
                 )
-                or self.settings.free_check_seconds
             )
+            rights = {
+                t.user_id: (
+                    await self.entitlements.for_user(t.user_id, session=session, now=now)
+                ).entitlements
+                for t in trackers
+            }
+            interval = min(
+                (right.check_interval_seconds for right in rights.values()),
+                default=self.settings.free_check_seconds,
+            )
+            if store.provider_type == "mock":
+                interval = self.settings.mock_check_interval_seconds
+            for tracker in trackers:
+                tracker.check_interval_seconds = (
+                    interval
+                    if store.provider_type == "mock"
+                    else rights[tracker.user_id].check_interval_seconds
+                )
             offer.lease_token, offer.lease_until = None, None
             offer.next_check_at = now + timedelta(seconds=interval)
             reason = anomaly_reason(offer.price, data.price, offer.currency, data.currency)
@@ -199,16 +253,6 @@ class PriceCheckService:
             offer.refresh_sequence += 1
             offer.failure_count = 0
             offer.suspicious_price, offer.suspicious_currency = None, None
-            trackers = list(
-                await session.scalars(
-                    select(Tracker)
-                    .where(
-                        Tracker.store_offer_id == offer.id,
-                        Tracker.enabled.is_(True),
-                    )
-                    .with_for_update()
-                )
-            )
             cooldown = self.settings.notification_cooldown_seconds
             recent_priority = (
                 set(
@@ -232,9 +276,12 @@ class PriceCheckService:
                     TrackerRules(
                         target=tracker.target_price,
                         any_drop=tracker.notify_on_any_drop,
-                        on_target=tracker.notify_on_target,
-                        back_in_stock=tracker.notify_on_back_in_stock,
-                        historical_low=tracker.notify_on_historical_low,
+                        on_target=tracker.notify_on_target
+                        and rights[tracker.user_id].target_price_alerts,
+                        back_in_stock=tracker.notify_on_back_in_stock
+                        and rights[tracker.user_id].back_in_stock_alerts,
+                        historical_low=tracker.notify_on_historical_low
+                        and rights[tracker.user_id].historical_low_alerts,
                     ),
                     previous=previous,
                     current=data.price,

@@ -1,6 +1,6 @@
 # PriceHunter roadmap
 
-The first release is M0 + M1. Later milestones are extension contracts, not advertised features.
+M0, M1 and M2 are implemented and tested. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
 
 ## M0 — Foundation — implemented
 
@@ -10,18 +10,29 @@ The first release is M0 + M1. Later milestones are extension contracts, not adve
 
 ## M1 — Telegram price tracker — implemented
 
-- [x] English/Russian onboarding, URL cards, tracking, target FSM, pagination, pause/delete.
+- [x] Telegram-language onboarding with English/French/German/Spanish/Italian/Polish/Russian
+  selection, URL cards, tracking, target FSM, pagination, pause/delete.
 - [x] Shared offers, persistent history, safe mock provider and credential-gated eBay adapter.
 - [x] Batch scheduling, fenced database leases, anomaly quarantine and notification outbox.
 - [x] Restart/retry, ownership, concurrency and failure-path tests.
 
 See [verification record](docs/verification.md) for executed checks and unverified live integrations.
 
-## M2 — Monetization
+## M2 — Monetization — implemented (automated lifecycle verified)
 
-- Activate Free/Pro/Power commercial entitlements and configurable prices.
-- Telegram Stars checkout, verified successful payments, 30-day renewal lifecycle.
-- Expiration, reconciliation, refunds, support and billing operational tests.
+- [x] Authoritative subscription periods and central Free/Pro/Power entitlements.
+- [x] Versioned configurable Stars prices, persistent checkout intents and recurring invoices.
+- [x] Pre-checkout validation, durable successful-payment intake and concurrent deduplication.
+- [x] Provider-authoritative renewal deadlines and expiration independent of cleanup timing.
+- [x] Tracker/search/history limits and paid feature gates, preserving data on downgrade.
+- [x] `/plans`, `/subscription`, support, safe upgrade and cancellation of future renewal.
+- [x] Append-only purchase/refund ledger and idempotent operator refunds.
+- [x] Paginated dry-run reconciliation, explicit matched-refund application and balance diagnostic.
+- [x] PostgreSQL migration, simulated Telegram acceptance, CI-equivalent checks and operator docs.
+- [ ] Manual live/test-environment Stars purchase, genuine recurring renewal, cancellation,
+      refund and transaction-history confirmation before public commercial launch.
+
+See [billing operations](docs/billing.md). Stripe and Wallet Pay remain disabled in Telegram.
 
 ## M3 — Multi-store
 

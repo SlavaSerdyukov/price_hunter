@@ -3,6 +3,7 @@ from uuid import UUID
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from pricehunter.localization.languages import LANGUAGE_NAMES, SUPPORTED_LANGUAGES
 from pricehunter.localization.messages import tr
 
 
@@ -26,6 +27,7 @@ def main_menu(language: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [button(language, "search", "search"), button(language, "my", "my", "0")],
             [button(language, "plans", "plans"), button(language, "settings", "settings")],
+            [button(language, "language", "settings")],
         ]
     )
 
@@ -71,17 +73,18 @@ def tracker_keyboard(
 
 
 def settings_keyboard(language: str) -> InlineKeyboardMarkup:
+    languages = [
+        InlineKeyboardButton(
+            text=("✓ " if code == language else "") + LANGUAGE_NAMES[code],
+            callback_data=Action(action="lang", value=code).pack(),
+        )
+        for code in SUPPORTED_LANGUAGES
+    ]
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="English", callback_data=Action(action="lang", value="en").pack()
-                ),
-                InlineKeyboardButton(
-                    text="Русский", callback_data=Action(action="lang", value="ru").pack()
-                ),
-            ],
+            *[languages[i : i + 2] for i in range(0, len(languages), 2)],
             [button(language, key, "setting", key) for key in ("country", "currency", "timezone")],
+            [button(language, "back", "menu")],
         ]
     )
 

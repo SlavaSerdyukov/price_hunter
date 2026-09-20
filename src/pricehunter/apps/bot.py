@@ -1,6 +1,8 @@
 import asyncio
 
 from pricehunter.bot.app import create_bot, create_dispatcher
+from pricehunter.bot.payment_updates import persist_financial_update
+from pricehunter.bot.polling import durable_polling
 from pricehunter.core.config import get_settings
 from pricehunter.core.container import Container
 from pricehunter.core.logging import configure_logging
@@ -18,10 +20,11 @@ async def main() -> None:
         try:
             # Explicit local polling mode; preserve updates Telegram already queued.
             await bot.delete_webhook(drop_pending_updates=False)
-            await dispatcher.start_polling(
-                bot, allowed_updates=dispatcher.resolve_used_update_types()
+            await durable_polling(
+                bot, dispatcher, lambda update: persist_financial_update(container, update)
             )
         finally:
+            await dispatcher.storage.close()
             await bot.session.close()
     finally:
         await container.close()

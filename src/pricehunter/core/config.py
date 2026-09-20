@@ -38,14 +38,54 @@ class Settings(BaseSettings):
     bestbuy_api_key: SecretStr = SecretStr("")
     stripe_secret_key: SecretStr = SecretStr("")
     wallet_pay_api_key: SecretStr = SecretStr("")
-    free_tracker_limit: int = Field(5, ge=1)
+    free_tracker_limit: int = Field(2, ge=1)
     pro_tracker_limit: int = Field(50, ge=1)
     power_tracker_limit: int = Field(250, ge=1)
     free_check_seconds: int = Field(43200, ge=60)
     pro_check_seconds: int = Field(7200, ge=60)
     power_check_seconds: int = Field(3600, ge=60)
-    pro_price_stars: int = Field(250, ge=1)
-    power_price_stars: int = Field(750, ge=1)
+    pro_price_stars: int = Field(250, ge=1, le=10000)
+    power_price_stars: int = Field(750, ge=1, le=10000)
+    stars_billing_enabled: bool = False
+    billing_price_version: str = Field("v1", pattern=r"^[a-zA-Z0-9_-]{1,20}$")
+    checkout_ttl_seconds: int = Field(900, ge=60, le=3600)
+    free_search_limit: int = Field(3, ge=1)
+    pro_search_limit: int = Field(30, ge=1)
+    power_search_limit: int = Field(100, ge=1)
+    free_search_results: int = Field(3, ge=1, le=200)
+    pro_search_results: int = Field(15, ge=1, le=200)
+    power_search_results: int = Field(50, ge=1, le=200)
+    free_history_days: int = Field(7, ge=1)
+    pro_history_days: int = Field(90, ge=1)
+    power_history_days: int = Field(365, ge=1)
+    plan_features: dict[
+        str,
+        list[
+            Literal[
+                "target_price_alerts",
+                "historical_low_alerts",
+                "back_in_stock_alerts",
+                "comparison_search",
+                "history_access",
+            ]
+        ],
+    ] = {
+        "free": ["comparison_search", "history_access"],
+        "pro": [
+            "target_price_alerts",
+            "historical_low_alerts",
+            "back_in_stock_alerts",
+            "comparison_search",
+            "history_access",
+        ],
+        "power": [
+            "target_price_alerts",
+            "historical_low_alerts",
+            "back_in_stock_alerts",
+            "comparison_search",
+            "history_access",
+        ],
+    }
     user_requests_per_minute: int = Field(10, ge=1)
     provider_requests_per_minute: int = Field(60, ge=1)
     provider_rate_limits: dict[str, Annotated[int, Field(ge=1)]] = {
@@ -66,6 +106,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_safety(self) -> "Settings":
+        if set(self.plan_features) != {"free", "pro", "power"}:
+            raise ValueError("PLAN_FEATURES must configure free, pro and power")
+        if self.stars_billing_enabled and not self.telegram_bot_token.get_secret_value():
+            raise ValueError("Stars checkout requires TELEGRAM_BOT_TOKEN")
         if self.amazon_enabled:
             if not self.amazon_price_tracking_approved:
                 raise ValueError(

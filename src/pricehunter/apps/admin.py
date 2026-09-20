@@ -2,6 +2,8 @@
 
 import argparse
 import asyncio
+import json
+from dataclasses import asdict
 from datetime import timedelta
 from uuid import UUID
 
@@ -61,6 +63,23 @@ async def run(args: argparse.Namespace) -> None:
                 )
                 for event in rows:
                     print(f"{event.id} {event.status} {event.event_type} attempts={event.attempts}")
+        elif args.command == "subscription":
+            print((await container.subscriptions.status(args.user_id)).model_dump_json(indent=2))
+        elif args.command == "refund-stars":
+            applied = await container.billing.refund_stars(args.telegram_user_id, args.charge_id)
+            print("Refund recorded" if applied else "Refund already recorded")
+        elif args.command == "cancel-stars":
+            await container.billing.cancel_renewal(args.user_id, args.subscription_id)
+            print("Future renewal cancelled; paid access retained")
+        elif args.command == "reconcile-stars":
+            report = await container.reconciliation.scan(
+                offset=args.offset, max_pages=args.max_pages, apply_refunds=args.apply_refunds
+            )
+            print(json.dumps(asdict(report), indent=2))
+        elif args.command == "stars-balance":
+            print((await container.payment_provider.balance()).model_dump_json())
+        elif args.command == "billing-retry":
+            print(f"Processed {await container.billing_intake.retry_pending()} pending updates")
         elif args.command == "prune-history":
             days = container.settings.history_retention_days
             if days <= 0:
@@ -85,6 +104,30 @@ def main() -> None:
     revoke.add_argument("key_id", type=UUID)
     commands.add_parser("outbox", help="List failed/uncertain deliveries for reconciliation")
     commands.add_parser("prune-history", help="Delete one bounded batch under configured retention")
+    subscription = commands.add_parser(
+        "subscription", help="Show effective subscription for an internal user UUID"
+    )
+    subscription.add_argument("user_id", type=UUID)
+    refund = commands.add_parser(
+        "refund-stars", help="Refund an explicit charge and stop future renewal"
+    )
+    refund.add_argument("--telegram-user-id", type=int, required=True)
+    refund.add_argument("--charge-id", required=True)
+    cancel = commands.add_parser("cancel-stars", help="Cancel renewal while preserving paid access")
+    cancel.add_argument("--user-id", type=UUID, required=True)
+    cancel.add_argument("--subscription-id", type=UUID, required=True)
+    reconcile = commands.add_parser(
+        "reconcile-stars", help="Dry-run ledger reconciliation by default"
+    )
+    reconcile.add_argument("--offset", type=int, default=0)
+    reconcile.add_argument("--max-pages", type=int, default=10)
+    reconcile.add_argument(
+        "--apply-refunds",
+        action="store_true",
+        help="Append only fully matched remote refunds; never grant purchases",
+    )
+    commands.add_parser("stars-balance", help="Show bot Stars balance (operator only)")
+    commands.add_parser("billing-retry", help="Retry durable pending billing updates")
     asyncio.run(run(parser.parse_args()))
 
 
