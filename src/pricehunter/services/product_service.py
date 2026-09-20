@@ -6,16 +6,19 @@ from sqlalchemy import func, select
 from pricehunter.core.config import Settings
 from pricehunter.core.limits import RateLimiter
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import PriceObservation, Product, StoreOffer, Tracker
+from pricehunter.db.models import PriceObservation, Product, Tracker
 from pricehunter.db.repositories.catalog import CatalogRepository
 from pricehunter.db.session import SessionFactory
-from pricehunter.domain.errors import ProductNotFoundError
+from pricehunter.domain.comparison import ComparisonProduct
 from pricehunter.domain.pricing import percentage_change
 from pricehunter.domain.products import ProductOfferData
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.schemas.api import HistoryView, ObservationView, OfferView
+from pricehunter.services.catalog_resolver import CatalogResolver
+from pricehunter.services.comparison_service import ComparisonService
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.product_watch_service import ProductWatchService
 
 
 class ProductService:
@@ -29,6 +32,9 @@ class ProductService:
     ) -> None:
         self.sessions, self.registry = sessions, registry
         self.limiter, self.settings, self.entitlements = limiter, settings, entitlements
+        self.resolver = CatalogResolver()
+        self.watches = ProductWatchService(sessions, entitlements, settings)
+        self.comparisons = ComparisonService(sessions, entitlements)
 
     async def resolve(self, url: str, user_id: UUID) -> OfferView:
         await self.limiter.user(user_id)
@@ -39,30 +45,19 @@ class ProductService:
 
     async def persist(self, data: ProductOfferData) -> OfferView:
         async with self.sessions.begin() as session:
-            offer = await CatalogRepository(session).save_resolved(data)
+            offer = await self.resolver.resolve(session, data)
             await session.flush()
+            # Resolver locks the canonical product for new listings. Re-evaluation is idempotent.
+            await session.get(Product, offer.product_id, with_for_update=True)
+            await self.watches.evaluate(session, offer.product_id)
             return OfferView.model_validate(offer)
 
     async def offer(self, offer_id: UUID) -> OfferView:
         async with self.sessions() as session:
             return OfferView.model_validate(await CatalogRepository(session).get_offer(offer_id))
 
-    async def product(self, product_id: UUID, user_id: UUID) -> tuple[str, list[OfferView]]:
-        limits = (await self.entitlements.for_user(user_id)).entitlements
-        limits.require(Feature.COMPARISON_SEARCH)
-        async with self.sessions() as session:
-            product = await session.get(Product, product_id)
-            if product is None:
-                raise ProductNotFoundError()
-            offers = await session.scalars(
-                select(StoreOffer)
-                .where(
-                    StoreOffer.product_id == product_id,
-                )
-                .order_by(StoreOffer.currency, StoreOffer.price)
-                .limit(limits.search_result_limit)
-            )
-            return product.canonical_name, [OfferView.model_validate(offer) for offer in offers]
+    async def product(self, product_id: UUID, user_id: UUID) -> ComparisonProduct:
+        return await self.comparisons.get(product_id, user_id)
 
     async def history(self, offer_id: UUID, user_id: UUID, limit: int = 100) -> HistoryView:
         limits = (await self.entitlements.for_user(user_id)).entitlements

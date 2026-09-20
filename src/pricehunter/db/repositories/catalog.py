@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -5,9 +6,9 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import PriceObservation, Product, Store, StoreOffer
+from pricehunter.db.models import PriceObservation, Store, StoreOffer
 from pricehunter.domain.errors import ProductNotFoundError, UnsupportedStoreError
-from pricehunter.domain.products import ProductOfferData, identity_key, trade_id
+from pricehunter.domain.products import ProductOfferData
 
 
 class CatalogRepository:
@@ -20,7 +21,9 @@ class CatalogRepository:
             raise ProductNotFoundError()
         return offer
 
-    async def save_resolved(self, data: ProductOfferData) -> StoreOffer:
+    async def save_resolved(
+        self, data: ProductOfferData, product_id: UUID, confidence: Decimal
+    ) -> StoreOffer:
         await self.session.execute(
             insert(Store)
             .values(
@@ -46,28 +49,6 @@ class CatalogRepository:
         )
         if existing:
             return existing
-        # Serialize one listing's initial insertion and observation without global locks.
-        # ON CONFLICT also handles concurrent canonical products in different stores.
-        identity = identity_key(data)
-        await self.session.execute(
-            insert(Product)
-            .values(
-                id=uuid4(),
-                identity_key=identity,
-                canonical_name=data.title,
-                brand=data.brand,
-                gtin=trade_id(data),
-                ean=data.ean,
-                upc=data.upc,
-                asin=data.asin,
-                model=data.model,
-                variant=data.variant,
-            )
-            .on_conflict_do_nothing(index_elements=[Product.identity_key])
-        )
-        product_id = (
-            await self.session.scalars(select(Product.id).where(Product.identity_key == identity))
-        ).one()
         offer_id = uuid4()
         now = utcnow()
         inserted = await self.session.scalar(
@@ -88,6 +69,20 @@ class CatalogRepository:
                 seller=data.seller,
                 sku=data.sku,
                 metadata_json=data.metadata,
+                identity_data=data.model_dump(
+                    mode="json",
+                    include={
+                        "brand",
+                        "model",
+                        "mpn",
+                        "gtin",
+                        "ean",
+                        "upc",
+                        "asin",
+                        "variant",
+                    },
+                ),
+                match_confidence=confidence,
                 minimum_price=data.price,
                 maximum_price=data.price,
                 total_price=data.price,

@@ -27,7 +27,10 @@ def main_menu(language: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [button(language, "search", "search"), button(language, "my", "my", "0")],
             [button(language, "plans", "plans"), button(language, "settings", "settings")],
-            [button(language, "language", "settings")],
+            [
+                button(language, "my_watches", "watches", "0"),
+                button(language, "language", "settings"),
+            ],
         ]
     )
 

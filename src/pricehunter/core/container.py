@@ -23,6 +23,7 @@ from pricehunter.services.billing_service import BillingService
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.price_check_service import PriceCheckService
 from pricehunter.services.product_service import ProductService
+from pricehunter.services.product_watch_service import ProductWatchService
 from pricehunter.services.search_service import SearchService
 from pricehunter.services.subscription_service import SubscriptionService
 from pricehunter.services.tracking_service import TrackingService
@@ -142,8 +143,9 @@ class Container:
         self.products = ProductService(
             self.sessions, self.registry, self.limiter, settings, self.entitlements
         )
+        self.watches = ProductWatchService(self.sessions, self.entitlements, settings)
         self.trackers = TrackingService(self.sessions, self.entitlements, settings)
-        self.search = SearchService(self.registry, self.limiter, self.entitlements)
+        self.search = SearchService(self.registry, self.limiter, self.entitlements, self.products)
         self.price_checks = PriceCheckService(
             self.sessions, self.registry, self.limiter, settings, self.entitlements
         )

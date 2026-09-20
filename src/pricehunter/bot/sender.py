@@ -2,6 +2,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from pricehunter.bot.keyboards import button
 from pricehunter.localization.messages import money, tr
 from pricehunter.services.notification_service import (
     Delivery,
@@ -16,23 +17,33 @@ class TelegramNotificationSender:
 
     async def send(self, delivery: Delivery) -> int:
         language = delivery.language
+        text = tr(
+            language,
+            "notification",
+            event=tr(language, delivery.event_type),
+            title=delivery.title[:180],
+            price=money(delivery.price, delivery.currency, language),
+        )
+        rows = [[InlineKeyboardButton(text=tr(language, "open_store"), url=delivery.url)]]
+        if delivery.product_id is not None:
+            text = tr(
+                language,
+                "watch_notification",
+                event=tr(language, delivery.event_type),
+                title=delivery.title[:180],
+                store=delivery.store[:60],
+                price=money(delivery.price, delivery.currency, language),
+                previous=money(delivery.previous_price, delivery.currency, language)
+                if delivery.previous_price is not None
+                else "—",
+                previous_store=delivery.previous_store[:60],
+            )
+            rows.append([button(language, "compare_stores", "compare", delivery.product_id.hex)])
         try:
             message = await self.bot.send_message(
                 delivery.telegram_id,
-                tr(
-                    language,
-                    "notification",
-                    event=tr(language, delivery.event_type),
-                    title=delivery.title,
-                    price=money(delivery.price, delivery.currency, language),
-                ),
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(text=tr(language, "open_store"), url=delivery.url),
-                        ]
-                    ]
-                ),
+                text,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
                 request_timeout=20,
             )
             return message.message_id

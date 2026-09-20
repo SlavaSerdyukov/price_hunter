@@ -266,6 +266,7 @@ class EbayBrowseProvider(StoreProvider):
                 ean=optional_identifier(attributes.get("ean"), (8, 13)),
                 upc=optional_identifier(attributes.get("upc"), (12,)),
                 model=attributes.get("mpn"),
+                mpn=attributes.get("mpn"),
                 sku=data.get("sku"),
                 variant=variant,
                 seller=(data.get("seller") or {}).get("username"),

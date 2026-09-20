@@ -252,6 +252,14 @@ RU.update(
 EN["help"] += "\n/subscription — subscription and renewal"
 RU["help"] += "\n/subscription — подписка и продление"
 
+for _code, _catalog in (("en", EN), ("ru", RU)):
+    _catalog.update(
+        json.loads(
+            files("pricehunter.localization")
+            .joinpath(f"locales/{_code}_comparison.json")
+            .read_text("utf-8")
+        )
+    )
 CATALOGS = {"en": EN, "ru": RU}
 for _code in ("fr", "de", "es", "it", "pl"):
     CATALOGS[_code] = cast(

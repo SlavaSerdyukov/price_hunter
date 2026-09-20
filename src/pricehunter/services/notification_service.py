@@ -8,7 +8,7 @@ import structlog
 from sqlalchemy import select, update
 
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import NotificationEvent, StoreOffer, Tracker, User
+from pricehunter.db.models import NotificationEvent, ProductWatch, StoreOffer, Tracker, User
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.services.entitlement_service import EntitlementService
@@ -24,6 +24,10 @@ class Delivery:
     price: Decimal
     currency: str
     url: str
+    product_id: UUID | None = None
+    store: str = ""
+    previous_price: Decimal | None = None
+    previous_store: str = ""
 
 
 class RetryDelivery(Exception):
@@ -56,39 +60,62 @@ class NotificationService:
                 )
                 .values(status="uncertain")
             )
-            row = (
-                await session.execute(
-                    select(NotificationEvent, Tracker, User, StoreOffer)
-                    .join(Tracker, NotificationEvent.tracker_id == Tracker.id)
-                    .join(User, Tracker.user_id == User.id)
-                    .join(StoreOffer, Tracker.store_offer_id == StoreOffer.id)
-                    .where(
-                        NotificationEvent.status == "pending",
-                        NotificationEvent.available_at <= utcnow(),
-                    )
-                    .order_by(NotificationEvent.available_at)
-                    .limit(1)
-                    .with_for_update(of=NotificationEvent, skip_locked=True)
+            event = await session.scalar(
+                select(NotificationEvent)
+                .where(
+                    NotificationEvent.status == "pending",
+                    NotificationEvent.available_at <= utcnow(),
                 )
-            ).one_or_none()
-            if row is None:
-                return None
-            event, tracker, user, offer = row
-            eligible = await session.scalar(
-                select(Tracker.id).where(
-                    Tracker.id == tracker.id,
-                    Tracker.id.in_(self.entitlements.scheduled_tracker_ids(utcnow())),
-                )
+                .order_by(NotificationEvent.available_at)
+                .limit(1)
+                .with_for_update(skip_locked=True)
             )
+            if event is None:
+                return None
+            if event.product_watch_id:
+                watch = await session.get(ProductWatch, event.product_watch_id)
+                assert watch is not None
+                user = await session.get(User, watch.user_id)
+                eligible = await session.scalar(
+                    select(ProductWatch.id).where(
+                        ProductWatch.id == watch.id,
+                        ProductWatch.id.in_(self.entitlements.scheduled_watch_ids(utcnow())),
+                    )
+                )
+                snapshot = event.snapshot
+                title, url = str(snapshot["title"]), str(snapshot["url"])
+                product_id = watch.product_id
+            else:
+                assert event.tracker_id is not None
+                tracker = await session.get(Tracker, event.tracker_id)
+                assert tracker is not None
+                user = await session.get(User, tracker.user_id)
+                offer = await session.get(StoreOffer, tracker.store_offer_id)
+                assert offer is not None
+                eligible = await session.scalar(
+                    select(Tracker.id).where(
+                        Tracker.id == tracker.id,
+                        Tracker.id.in_(self.entitlements.scheduled_tracker_ids(utcnow())),
+                    )
+                )
+                title, url, product_id, snapshot = (
+                    offer.title,
+                    offer.affiliate_url or offer.direct_url,
+                    None,
+                    {},
+                )
+            assert user is not None
             rights = (await self.entitlements.for_user(user.id, session=session)).entitlements
             feature = {
                 "target_reached": Feature.TARGET_ALERTS,
                 "historical_low": Feature.HISTORICAL_LOW,
                 "back_in_stock": Feature.BACK_IN_STOCK,
+                "best_offer_back_in_stock": Feature.BACK_IN_STOCK,
             }.get(event.event_type)
             if (
                 not eligible
                 or user.telegram_user_id is None
+                or (product_id is not None and not rights.comparison_search)
                 or (feature is not None and not rights.allows(feature))
             ):
                 event.status = "cancelled"
@@ -101,10 +128,16 @@ class NotificationService:
                 telegram_id=user.telegram_user_id,
                 language=user.language_code,
                 event_type=event.event_type,
-                title=offer.title,
+                title=title,
                 price=event.price,
                 currency=event.currency,
-                url=offer.affiliate_url or offer.direct_url,
+                url=url,
+                product_id=product_id,
+                store=str(snapshot.get("store", "")),
+                previous_price=Decimal(snapshot["previous_price"])
+                if snapshot.get("previous_price")
+                else None,
+                previous_store=str(snapshot.get("previous_store", "")),
             )
 
     async def send_pending(self, limit: int = 100) -> int:

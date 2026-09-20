@@ -147,13 +147,13 @@ async def run_search(message: Message, query: str, container: Container, user: U
     language = user.language_code
     if results.unavailable_providers:
         await message.answer(tr(language, "search_partial"))
-    if not results.groups:
+    if not results.products:
         await message.answer(tr(language, "search_empty"))
         return
-    for group in results.groups:
-        for result in group:
-            offer = await container.products.persist(result)
-            await show_offer(message, offer, language)
+    from pricehunter.bot.comparison import show_comparison
+
+    for product in results.products:
+        await show_comparison(message, product, language)
 
 
 def build_router() -> Router:

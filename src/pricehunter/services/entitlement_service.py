@@ -1,12 +1,12 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Select, and_, case, exists, func, or_, select
+from sqlalchemy import Select, and_, case, exists, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import Subscription, SubscriptionPeriod, Tracker
+from pricehunter.db.models import ProductWatch, Subscription, SubscriptionPeriod, Tracker
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.subscriptions import (
     EffectiveEntitlement,
@@ -39,18 +39,20 @@ class EntitlementService:
             ),
         )
 
-    def plan_expression(self, now: datetime) -> ColumnElement[str]:
+    def plan_expression(
+        self, now: datetime, subject: type[Tracker] | type[ProductWatch] = Tracker
+    ) -> ColumnElement[str]:
         """Same policy as for_user, correlated with a Tracker's user, no stale plan cache."""
         return case(
             *[
                 (
                     exists()
                     .where(
-                        Subscription.user_id == Tracker.user_id,
+                        Subscription.user_id == subject.user_id,
                         Subscription.plan == plan,
                         self.active_at(now),
                     )
-                    .correlate(Tracker),
+                    .correlate(subject),
                     str(plan),
                 )
                 for plan in (Plan.POWER, Plan.PRO)
@@ -59,23 +61,77 @@ class EntitlementService:
         )
 
     def scheduled_tracker_ids(self, now: datetime) -> Select[tuple[UUID]]:
-        plan = self.plan_expression(now)
-        limit = case(
-            *[(plan == p, self.policy.for_plan(p).max_trackers) for p in Plan],
-            else_=0,
-        )
-        ranked = (
+        return self.scheduled_ids(now)[0]
+
+    def scheduled_watch_ids(self, now: datetime) -> Select[tuple[UUID]]:
+        return self.scheduled_ids(now)[1]
+
+    def scheduled_ids(self, now: datetime) -> tuple[Select[tuple[UUID]], Select[tuple[UUID]]]:
+        # Compute the user's effective plan once. Expanding correlated subscription
+        # checks for each subject/interval caused multi-second JIT compilation in PostgreSQL.
+        paid = (
             select(
-                Tracker.id,
-                func.row_number()
-                .over(partition_by=Tracker.user_id, order_by=(Tracker.created_at, Tracker.id))
-                .label("position"),
-                limit.label("quota"),
+                Subscription.user_id,
+                func.max(case((Subscription.plan == Plan.POWER, 2), else_=1)).label("rank"),
             )
-            .where(Tracker.enabled.is_(True))
+            .where(self.active_at(now))
+            .group_by(Subscription.user_id)
             .subquery()
         )
-        return select(ranked.c.id).where(ranked.c.position <= ranked.c.quota)
+        combined = union_all(
+            *[
+                select(
+                    model.id, model.user_id, model.created_at, literal(kind).label("kind")
+                ).where(model.enabled.is_(True))
+                for model, kind in ((Tracker, "tracker"), (ProductWatch, "watch"))
+            ]
+        ).subquery()
+        plan = case(
+            (paid.c.rank == 2, str(Plan.POWER)),
+            (paid.c.rank == 1, str(Plan.PRO)),
+            else_=str(Plan.FREE),
+        )
+        quota = case(*[(plan == p, self.policy.for_plan(p).max_trackers) for p in Plan], else_=0)
+        ranked = (
+            select(
+                combined.c.id,
+                combined.c.kind,
+                quota.label("quota"),
+                func.row_number()
+                .over(
+                    partition_by=combined.c.user_id, order_by=(combined.c.created_at, combined.c.id)
+                )
+                .label("position"),
+            )
+            .outerjoin(paid, paid.c.user_id == combined.c.user_id)
+            .where(
+                or_(
+                    combined.c.kind == "tracker",
+                    plan.in_([p for p in Plan if self.policy.for_plan(p).comparison_search]),
+                )
+            )
+            .subquery()
+        )
+        eligible = (
+            select(ranked.c.id, ranked.c.kind).where(ranked.c.position <= ranked.c.quota).cte()
+        )
+        return (
+            select(eligible.c.id).where(eligible.c.kind == "tracker"),
+            select(eligible.c.id).where(eligible.c.kind == "watch"),
+        )
+
+    async def stored_count(self, session: AsyncSession, user_id: UUID) -> int:
+        return sum(
+            [
+                (
+                    await session.scalar(
+                        select(func.count()).select_from(model).where(model.user_id == user_id)
+                    )
+                )
+                or 0
+                for model in (Tracker, ProductWatch)
+            ]
+        )
 
     async def for_user(
         self,
@@ -147,19 +203,20 @@ class EntitlementService:
 
     async def counts(self, user_id: UUID) -> tuple[int, int]:
         async with self.sessions() as session:
-            total = await session.scalar(
-                select(func.count())
-                .select_from(Tracker)
-                .where(
-                    Tracker.user_id == user_id,
-                )
-            )
-            active = await session.scalar(
-                select(func.count())
-                .select_from(Tracker)
-                .where(
-                    Tracker.user_id == user_id,
-                    Tracker.id.in_(self.scheduled_tracker_ids(utcnow())),
-                )
-            )
-            return total or 0, active or 0
+            total = await self.stored_count(session, user_id)
+            active = 0
+            for model, ids in (
+                (Tracker, self.scheduled_tracker_ids(utcnow())),
+                (ProductWatch, self.scheduled_watch_ids(utcnow())),
+            ):
+                active += (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(model)
+                        .where(
+                            model.user_id == user_id,
+                            model.id.in_(ids),
+                        )
+                    )
+                ) or 0
+            return total, active

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
 from pricehunter.api.dependencies import ContainerDependency, UserDependency
+from pricehunter.domain.comparison import ComparisonProduct
 from pricehunter.schemas.api import (
     HistoryView,
     OfferView,
@@ -14,16 +15,11 @@ from pricehunter.schemas.api import (
     TrackerView,
     UserSettingsPatch,
 )
+from pricehunter.schemas.watches import WatchCreate, WatchPatch, WatchView
 from pricehunter.services.search_service import SearchResult
 from pricehunter.services.subscription_service import SubscriptionView
 
 router = APIRouter(prefix="/api/v1")
-
-
-class ProductView(BaseModel):
-    id: UUID
-    canonical_name: str
-    offers: list[OfferView]
 
 
 @router.post("/products/resolve", response_model=OfferView)
@@ -33,12 +29,54 @@ async def resolve(
     return await container.products.resolve(data.url, user.id)
 
 
-@router.get("/products/{product_id}", response_model=ProductView)
+@router.get("/products/{product_id}", response_model=ComparisonProduct)
 async def product(
     product_id: UUID, container: ContainerDependency, user: UserDependency
-) -> ProductView:
-    name, offers = await container.products.product(product_id, user.id)
-    return ProductView(id=product_id, canonical_name=name, offers=offers)
+) -> ComparisonProduct:
+    return await container.products.product(product_id, user.id)
+
+
+@router.get("/products/{product_id}/offers", response_model=ComparisonProduct)
+async def product_offers(
+    product_id: UUID,
+    container: ContainerDependency,
+    user: UserDependency,
+    page: Annotated[int, Query(ge=0, le=10000)] = 0,
+    size: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> ComparisonProduct:
+    return await container.products.comparisons.get(product_id, user.id, page=page, size=size)
+
+
+@router.get("/product-watches", response_model=list[WatchView])
+async def watches(
+    container: ContainerDependency,
+    user: UserDependency,
+    page: Annotated[int, Query(ge=0, le=10000)] = 0,
+    size: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> list[WatchView]:
+    return await container.watches.list(user.id, page, size)
+
+
+@router.post("/product-watches", response_model=WatchView, status_code=201)
+async def create_watch(
+    data: WatchCreate, container: ContainerDependency, user: UserDependency
+) -> WatchView:
+    return await container.watches.create(user.id, data)
+
+
+@router.patch("/product-watches/{watch_id}", response_model=WatchView)
+async def update_watch(
+    watch_id: UUID, data: WatchPatch, container: ContainerDependency, user: UserDependency
+) -> WatchView:
+    return await container.watches.update(user.id, watch_id, data)
+
+
+@router.delete("/product-watches/{watch_id}", status_code=204)
+async def delete_watch(
+    watch_id: UUID, container: ContainerDependency, user: UserDependency
+) -> Response:
+    await container.watches.delete(user.id, watch_id)
+    return Response(status_code=204)
 
 
 @router.get("/products/{product_id}/history", response_model=HistoryView)

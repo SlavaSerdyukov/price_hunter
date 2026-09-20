@@ -3,6 +3,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.redis import RedisEventIsolation, RedisStorage
 
 from pricehunter.bot.billing import build_billing_router
+from pricehunter.bot.comparison import build_comparison_router
 from pricehunter.bot.handlers import build_router
 from pricehunter.bot.middleware import ConversationMiddleware, UserContextMiddleware
 from pricehunter.core.container import Container
@@ -32,5 +33,9 @@ def create_dispatcher(container: Container) -> Dispatcher:
     billing.message.outer_middleware(middleware)
     billing.callback_query.outer_middleware(middleware)
     dispatcher.include_router(billing)
+    comparison = build_comparison_router()
+    comparison.message.outer_middleware(middleware)
+    comparison.callback_query.outer_middleware(middleware)
+    dispatcher.include_router(comparison)
     dispatcher.include_router(router)
     return dispatcher

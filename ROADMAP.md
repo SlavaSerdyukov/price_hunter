@@ -1,6 +1,6 @@
 # PriceHunter roadmap
 
-M0, M1 and M2 are implemented and tested. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
+M0, M1, M2 and M3A are implemented and tested. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
 
 ## M0 — Foundation — implemented
 
@@ -42,9 +42,27 @@ See [billing operations](docs/billing.md). Stripe and Wallet Pay remain disabled
 - [ ] Obtain Amazon API access and tracking agreement; adapt storage/display to that agreement and verify live.
 - [x] eBay Belgium/EU markets, Belgian locales, native-price normalization and access diagnostic.
 - [x] Verify Production OAuth and live Browse search/lookup/refresh for Belgium with operator-owned credentials.
-- [ ] Expand comparison quality and shipping/destination context.
-- Implement Best Buy contracts.
-- Identifier matching review and product comparison UX.
+
+## M3A — Comparison Core — implemented (acceptance verified)
+
+- [x] Committed environment example, runtime docs and README link checks.
+- [x] Shared canonical resolution, persisted identifiers, conservative normalized matching.
+- [x] PostgreSQL concurrency protection; conflicts and variants remain separate.
+- [x] Persisted comparison search/API, currency separation and availability-aware best/spread.
+- [x] Seven-language comparison cards, offer pagination and exact-offer tracking.
+- [x] Canonical ProductWatch, shared quotas/scheduling and idempotent outbox notifications.
+- [x] Multi-store mock and existing eBay/WooCommerce/Amazon fixture acceptance.
+- [x] Migration preservation/backfill, quality checks and coverage above the 85% CI floor.
+
+See [comparison semantics](docs/comparison.md) and [verification](docs/verification.md).
+
+## M3B — Comparison quality and operations
+
+- Better structured identifiers/variant evidence from existing authorized providers.
+- Operator match diagnostics and reviewed duplicate repair, preserving history/watch ownership.
+- Explicit freshness/stale-offer policy and derived best-price history.
+- Large-catalog query/load measurement, SQL summaries and bounded discovery refresh.
+- Add further stores only after these comparison quality checks; Best Buy remains a future contract.
 
 ## M4 — International expansion
 

@@ -1,0 +1,23 @@
+{
+  "comparison_heading": "<b>{title}</b>\nМагазинов: {count}",
+  "comparison_offer": "{store} ({country}) · {price} · {availability}",
+  "comparison_best_label": "Лучшее предложение в наличии:",
+  "best_offer": "💰 Лучшее предложение · {currency}",
+  "watch_best": "🔔 Следить за лучшей ценой",
+  "all_offers": "📊 Все предложения",
+  "comparison_details": "🔎 Подробнее",
+  "comparison_none": "Нет предложений с подтверждённым наличием в {currency}.",
+  "cheapest_known": "Минимальная известная цена (нет в наличии или наличие не подтверждено):",
+  "comparison_spread": "Разница цен товаров в наличии: {spread}",
+  "comparison_price_note": "Указана цена товара. Доставка и налоги могут отличаться. Валюты сравниваются отдельно.",
+  "comparison_attributes": "Бренд: {brand}\nМодель: {model}\nВариант: {variant}",
+  "compare_stores": "📊 Сравнить магазины",
+  "my_watches": "🔔 Слежение за лучшей ценой",
+  "watches_empty": "Пока нет слежения за лучшей ценой. Найдите товар и нажмите «Следить за лучшей ценой».",
+  "watch_card": "<b>{title}</b>\nСлежение за лучшей ценой · {currency}\n{status}",
+  "watch_created": "Слежу за лучшим предложением в наличии в {currency}. Магазин может меняться. Управление: /watches.",
+  "merchant_became_cheapest": "Другой магазин теперь дешевле",
+  "new_best_price": "Новая лучшая цена",
+  "best_offer_back_in_stock": "Лучшее предложение снова в наличии",
+  "watch_notification": "🔔 <b>{event}</b>\n{title}\n<b>{price}</b> · {store}\nРанее: {previous} · {previous_store}"
+}

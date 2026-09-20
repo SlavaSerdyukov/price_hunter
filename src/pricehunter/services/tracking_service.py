@@ -1,7 +1,7 @@
 from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricehunter.core.config import Settings
@@ -60,13 +60,7 @@ class TrackingService:
             limits = (await self.entitlements.for_user(user_id, session=session)).entitlements
             if data.target_price is not None:
                 limits.require(Feature.TARGET_ALERTS)
-            count = await session.scalar(
-                select(func.count())
-                .select_from(Tracker)
-                .where(
-                    Tracker.user_id == user_id,
-                )
-            )
+            count = await self.entitlements.stored_count(session, user_id)
             if (count or 0) >= limits.max_trackers:
                 raise SubscriptionLimitReachedError()
             store = await session.get(Store, offer.store_id)

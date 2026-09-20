@@ -1,0 +1,23 @@
+{
+  "comparison_heading": "<b>{title}</b>\n{count} stores",
+  "comparison_offer": "{store} ({country}) · {price} · {availability}",
+  "comparison_best_label": "Best available:",
+  "best_offer": "💰 Best offer · {currency}",
+  "watch_best": "🔔 Track best",
+  "all_offers": "📊 All offers",
+  "comparison_details": "🔎 Details",
+  "comparison_none": "No confirmed in-stock offer in {currency}.",
+  "cheapest_known": "Cheapest known (availability unconfirmed or out of stock):",
+  "comparison_spread": "In-stock price spread: {spread}",
+  "comparison_price_note": "Item prices only. Shipping and tax may differ. Currencies are compared separately.",
+  "comparison_attributes": "Brand: {brand}\nModel: {model}\nVariant: {variant}",
+  "compare_stores": "📊 Compare stores",
+  "my_watches": "🔔 My price watches",
+  "watches_empty": "No best-price watches yet. Search for a product and choose Track best.",
+  "watch_card": "<b>{title}</b>\nBest-price watch · {currency}\n{status}",
+  "watch_created": "Watching the best available offer in {currency}. The merchant can change. Manage it in /watches.",
+  "merchant_became_cheapest": "Another merchant is now cheapest",
+  "new_best_price": "New best price",
+  "best_offer_back_in_stock": "A best offer is back in stock",
+  "watch_notification": "🔔 <b>{event}</b>\n{title}\n<b>{price}</b> · {store}\nPrevious best: {previous} · {previous_store}"
+}

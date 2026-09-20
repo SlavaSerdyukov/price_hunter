@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
@@ -55,6 +56,7 @@ class ProductOfferData(BaseModel):
     image_url: str | None = Field(default=None, max_length=2048)
     brand: str | None = Field(default=None, max_length=200)
     model: str | None = Field(default=None, max_length=200)
+    mpn: str | None = Field(default=None, max_length=200)
     gtin: str | None = None
     ean: str | None = None
     upc: str | None = None
@@ -82,18 +84,116 @@ class ProductOfferData(BaseModel):
 
 
 def normalized(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip().casefold())
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", value).strip().casefold())
+
+
+def model_code(value: str) -> str:
+    # Common formatting separators only: '+' and '/' can distinguish actual models.
+    return re.sub(r"[\s._\-‐‑–—]+", "", normalized(value))
+
+
+VARIANT_KEYS = {
+    "colour": "color",
+    "couleur": "color",
+    "farbe": "color",
+    "colore": "color",
+    "kolor": "color",
+    "цвет": "color",
+    "taille": "size",
+    "grösse": "size",
+    "groesse": "size",
+    "talla": "size",
+    "taglia": "size",
+    "rozmiar": "size",
+    "размер": "size",
+    "storage": "capacity",
+    "storage capacity": "capacity",
+    "capacité": "capacity",
+    "kapazität": "capacity",
+    "capacidad": "capacity",
+    "capacità": "capacity",
+    "pojemność": "capacity",
+    "ёмкость": "capacity",
+}
+COLORS = {
+    "noir": "black",
+    "schwarz": "black",
+    "negro": "black",
+    "nero": "black",
+    "czarny": "black",
+    "чёрный": "black",
+    "черный": "black",
+    "blanc": "white",
+    "weiß": "white",
+    "weiss": "white",
+    "blanco": "white",
+    "bianco": "white",
+    "biały": "white",
+    "белый": "white",
+    "rouge": "red",
+    "rot": "red",
+    "rojo": "red",
+    "rosso": "red",
+    "czerwony": "red",
+}
+
+
+def normalized_variant(variant: dict[str, str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for raw_key, raw_value in sorted(variant.items()):
+        key = normalized(raw_key).replace("_", " ").replace("-", " ")
+        key = VARIANT_KEYS.get(key, normalized(raw_key))
+        value = normalized(raw_value)
+        if key == "color":
+            value = COLORS.get(value, value)
+        elif key == "capacity":
+            value = re.sub(r"\s+", "", value)
+        elif key == "size":
+            value = value.replace(",", ".")
+        if key in result and result[key] != value:
+            # Keep contradictory aliases distinct instead of dropping information.
+            result[f"conflict:{normalized(raw_key)}"] = value
+        else:
+            result[key] = value
+    return result
+
+
+def trade_ids(offer: ProductOfferData) -> set[str]:
+    return {value.zfill(14) for value in (offer.gtin, offer.ean, offer.upc) if value}
 
 
 def trade_id(offer: ProductOfferData) -> str | None:
-    value = offer.gtin or offer.ean or offer.upc
-    return value.zfill(14) if value else None
+    values = trade_ids(offer)
+    return next(iter(values)) if len(values) == 1 else None
+
+
+def identity_signals(offer: ProductOfferData) -> list[tuple[str, str]]:
+    signals = [("gtin", value) for value in sorted(trade_ids(offer))]
+    brand = model_code(offer.brand or "")
+    if brand:
+        for value in (offer.mpn, offer.model):
+            if value and len(model_code(value)) >= 3:
+                signals.append(("brand_model", f"{brand}:{model_code(value)}"))
+    # ASIN identifies a purchasable Amazon item, never a general retailer SKU.
+    if offer.provider == "amazon" and offer.asin:
+        signals.append(("asin", normalized(offer.asin)))
+    signals.append(("listing", f"{offer.store_slug}:{offer.external_id}"))
+    return sorted(set(signals))
 
 
 def identity_key(offer: ProductOfferData) -> str:
     identifier = trade_id(offer)
-    identity = f"gtin:{identifier}" if identifier else f"{offer.store_slug}:{offer.external_id}"
-    variants = {k.casefold(): normalized(v) for k, v in offer.variant.items()}
+    signals = dict(identity_signals(offer))
+    identity = (
+        f"gtin:{identifier}"
+        if identifier
+        else f"model:{signals['brand_model']}"
+        if "brand_model" in signals
+        else f"asin:{signals['asin']}"
+        if "asin" in signals
+        else f"listing:{signals['listing']}"
+    )
+    variants = normalized_variant(offer.variant)
     raw = json.dumps([identity, variants], sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -103,25 +203,61 @@ class MatchResult:
     matched: bool
     confidence: Decimal
     method: str
+    reasons: tuple[str, ...] = ()
 
 
 class ProductMatcher:
     def match(self, left: ProductOfferData, right: ProductOfferData) -> MatchResult:
-        variants_left = {k.casefold(): normalized(v) for k, v in left.variant.items()}
-        variants_right = {k.casefold(): normalized(v) for k, v in right.variant.items()}
+        def reject(method: str, reason: str) -> MatchResult:
+            return MatchResult(False, Decimal(0), method, (reason,))
+
+        a, b = trade_ids(left), trade_ids(right)
+        if len(a) > 1 or len(b) > 1 or (a and b and a != b):
+            return reject("identifier_conflict", "conflicting_trade_identifiers")
+        if left.brand and right.brand and model_code(left.brand) != model_code(right.brand):
+            return reject("identifier_conflict", "conflicting_brands")
+        for field in ("mpn", "model"):
+            x, y = getattr(left, field), getattr(right, field)
+            if x and y and model_code(x) != model_code(y):
+                return reject("identifier_conflict", f"conflicting_{field}")
+        if (
+            left.provider == right.provider == "amazon"
+            and left.asin
+            and right.asin
+            and normalized(left.asin) != normalized(right.asin)
+        ):
+            return reject("identifier_conflict", "conflicting_asin")
+        variants_left = normalized_variant(left.variant)
+        variants_right = normalized_variant(right.variant)
         if variants_left != variants_right:
-            return MatchResult(False, Decimal("0"), "variant_mismatch")
-        a, b = trade_id(left), trade_id(right)
-        if a and b:
-            return MatchResult(a == b, Decimal("1") if a == b else Decimal("0"), "gtin")
-        if left.store_slug == right.store_slug and left.external_id == right.external_id:
-            return MatchResult(True, Decimal("1"), "listing")
-        if left.brand and right.brand and left.model and right.model:
-            matches = (normalized(left.brand), normalized(left.model)) == (
-                normalized(right.brand),
-                normalized(right.model),
+            return reject("variant_mismatch", "different_or_missing_variant_attributes")
+        # Negative title evidence can veto a merge, but never authorizes one.
+        capacities = [
+            set(re.findall(r"\b\d+(?:[.,]\d+)?\s*(?:gb|tb)\b", normalized(x.title)))
+            for x in (left, right)
+        ]
+        capacities = [{re.sub(r"\s+", "", v) for v in values} for values in capacities]
+        if capacities[0] and capacities[1] and capacities[0] != capacities[1]:
+            return reject("variant_mismatch", "title_capacity_conflict")
+        sizes = [
+            set(
+                re.findall(
+                    r"\b(?:size|taille|grösse|talla|taglia|rozmiar|размер)\s*:?\s*(\d+(?:[.,]\d+)?)\b",
+                    normalized(x.title),
+                )
             )
-            if matches:
-                return MatchResult(True, Decimal("0.90"), "brand_model")
-        # Title similarity is a suggestion, never enough to merge catalog records.
-        return MatchResult(False, Decimal("0"), "insufficient_evidence")
+            for x in (left, right)
+        ]
+        if sizes[0] and sizes[1] and sizes[0] != sizes[1]:
+            return reject("variant_mismatch", "title_size_conflict")
+        if a and b:
+            return MatchResult(True, Decimal("1"), "gtin", ("same_trade_identifier",))
+        if left.store_slug == right.store_slug and left.external_id == right.external_id:
+            return MatchResult(True, Decimal("1"), "listing_identity", ("same_merchant_listing",))
+        common = set(identity_signals(left)) & set(identity_signals(right))
+        if any(kind == "brand_model" for kind, _ in common):
+            method = "manufacturer_model" if left.mpn or right.mpn else "brand_model"
+            return MatchResult(True, Decimal("0.95"), method, ("same_brand_and_model",))
+        if any(kind == "asin" for kind, _ in common):
+            return MatchResult(True, Decimal("0.98"), "asin", ("same_amazon_item",))
+        return reject("insufficient_evidence", "title_similarity_cannot_authorize_merge")

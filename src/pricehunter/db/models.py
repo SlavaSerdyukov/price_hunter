@@ -67,8 +67,22 @@ class Product(UUIDPrimaryKey, Timestamps, Base):
     upc: Mapped[str | None] = mapped_column(String(12))
     asin: Mapped[str | None] = mapped_column(String(20))
     model: Mapped[str | None] = mapped_column(String(200))
+    mpn: Mapped[str | None] = mapped_column(String(200))
     variant: Mapped[dict[str, str]] = mapped_column(JSONB, default=dict)
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
+
+
+class ProductIdentifier(UUIDPrimaryKey, Base):
+    __tablename__ = "product_identifiers"
+    __table_args__ = (
+        UniqueConstraint("product_id", "kind", "value"),
+        Index("ix_product_identifier_lookup", "kind", "value"),
+    )
+    product_id: Mapped[UUID] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(30))
+    value: Mapped[str] = mapped_column(String(500))
+    source: Mapped[str] = mapped_column(String(80))
+    confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3))
 
 
 class StoreOffer(UUIDPrimaryKey, Timestamps, Base):
@@ -95,6 +109,8 @@ class StoreOffer(UUIDPrimaryKey, Timestamps, Base):
     seller: Mapped[str | None] = mapped_column(String(200))
     sku: Mapped[str | None] = mapped_column(String(200))
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
+    identity_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    match_confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), default=1, server_default="1")
     last_checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     next_check_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     lease_token: Mapped[UUID | None]
@@ -143,9 +159,34 @@ class Tracker(UUIDPrimaryKey, Timestamps, Base):
     last_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ProductWatch(UUIDPrimaryKey, Timestamps, Base):
+    __tablename__ = "product_watches"
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_id", "currency"),
+        CheckConstraint("target_price IS NULL OR target_price > 0", name="positive_target"),
+        CheckConstraint("currency ~ '^[A-Z]{3}$'", name="currency_code"),
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[UUID] = mapped_column(ForeignKey("products.id"), index=True)
+    currency: Mapped[str] = mapped_column(String(3))
+    target_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    notify_on_new_best: Mapped[bool] = mapped_column(default=True)
+    notify_on_price_drop: Mapped[bool] = mapped_column(default=True)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    best_offer_id: Mapped[UUID | None] = mapped_column(ForeignKey("store_offers.id"))
+    best_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    evaluation_sequence: Mapped[int] = mapped_column(default=0)
+    last_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class NotificationEvent(UUIDPrimaryKey, Base):
     __tablename__ = "notification_events"
     __table_args__ = (
+        CheckConstraint(
+            "(tracker_id IS NOT NULL)::int + (product_watch_id IS NOT NULL)::int = 1",
+            name="one_subject",
+        ),
+        Index("ix_notifications_watch_created", "product_watch_id", "created_at"),
         Index("ix_notifications_tracker_created", "tracker_id", "created_at"),
         Index(
             "ix_notifications_sending",
@@ -156,7 +197,11 @@ class NotificationEvent(UUIDPrimaryKey, Base):
             "ix_notifications_pending", "available_at", postgresql_where=text("status = 'pending'")
         ),
     )
-    tracker_id: Mapped[UUID] = mapped_column(ForeignKey("trackers.id", ondelete="CASCADE"))
+    tracker_id: Mapped[UUID | None] = mapped_column(ForeignKey("trackers.id", ondelete="CASCADE"))
+    product_watch_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("product_watches.id", ondelete="CASCADE")
+    )
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
     event_type: Mapped[str] = mapped_column(String(40))
     price: Mapped[Decimal] = mapped_column(MONEY)
     currency: Mapped[str] = mapped_column(String(3))
