@@ -11,7 +11,15 @@ from sqlalchemy.dialects.postgresql import insert
 from pricehunter.core.config import Settings
 from pricehunter.core.limits import RateLimiter
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import NotificationEvent, PriceObservation, Store, StoreOffer, Tracker
+from pricehunter.db.models import (
+    NotificationEvent,
+    PriceObservation,
+    Product,
+    ProductWatch,
+    Store,
+    StoreOffer,
+    Tracker,
+)
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.pricing import TrackerRules, anomaly_reason, evaluate_rules
 from pricehunter.domain.products import ProductOfferData
@@ -19,6 +27,7 @@ from pricehunter.domain.subscriptions import Plan
 from pricehunter.providers.base import OfferReference
 from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.product_watch_service import ProductWatchService
 
 log = structlog.get_logger()
 
@@ -40,11 +49,12 @@ class PriceCheckService:
     ) -> None:
         self.sessions, self.registry = sessions, registry
         self.limiter, self.settings, self.entitlements = limiter, settings, entitlements
+        self.watches = ProductWatchService(sessions, entitlements, settings)
 
     async def claim_due(self) -> list[RefreshClaim]:
         now = utcnow()
         async with self.sessions.begin() as session:
-            eligible = self.entitlements.scheduled_tracker_ids(now)
+            eligible, eligible_watches = self.entitlements.scheduled_ids(now)
             plan = self.entitlements.plan_expression(now)
             interval = (
                 select(
@@ -65,9 +75,33 @@ class PriceCheckService:
                 .correlate(StoreOffer)
                 .scalar_subquery()
             )
+            watch_plan = self.entitlements.plan_expression(now, ProductWatch)
+            watch_interval = (
+                select(
+                    func.min(
+                        case(
+                            *[
+                                (
+                                    watch_plan == p,
+                                    self.entitlements.policy.for_plan(p).check_interval_seconds,
+                                )
+                                for p in Plan
+                            ],
+                            else_=self.settings.free_check_seconds,
+                        )
+                    )
+                )
+                .where(
+                    ProductWatch.product_id == StoreOffer.product_id,
+                    ProductWatch.currency == StoreOffer.currency,
+                    ProductWatch.id.in_(eligible_watches),
+                )
+                .correlate(StoreOffer)
+                .scalar_subquery()
+            )
             actual_interval = case(
                 (Store.provider_type == "mock", self.settings.mock_check_interval_seconds),
-                else_=interval,
+                else_=func.least(interval, watch_interval),
             )
             offers = list(
                 await session.scalars(
@@ -76,6 +110,7 @@ class PriceCheckService:
                     .where(
                         StoreOffer.next_check_at <= now,
                         Store.active.is_(True),
+                        Store.supported.is_(True),
                         or_(
                             StoreOffer.refresh_sequence == 0,
                             StoreOffer.failure_count > 0,
@@ -84,8 +119,15 @@ class PriceCheckService:
                             <= now - func.make_interval(0, 0, 0, 0, 0, 0, actual_interval),
                         ),
                         or_(StoreOffer.lease_until.is_(None), StoreOffer.lease_until < now),
-                        exists().where(
-                            Tracker.store_offer_id == StoreOffer.id, Tracker.id.in_(eligible)
+                        or_(
+                            exists().where(
+                                Tracker.store_offer_id == StoreOffer.id, Tracker.id.in_(eligible)
+                            ),
+                            exists().where(
+                                ProductWatch.product_id == StoreOffer.product_id,
+                                ProductWatch.currency == StoreOffer.currency,
+                                ProductWatch.id.in_(eligible_watches),
+                            ),
                         ),
                     )
                     .order_by(StoreOffer.next_check_at)
@@ -166,6 +208,13 @@ class PriceCheckService:
     async def accept(self, claim: RefreshClaim, data: ProductOfferData) -> bool:
         now = utcnow()
         async with self.sessions.begin() as session:
+            product_id = await session.scalar(
+                select(StoreOffer.product_id).where(StoreOffer.id == claim.offer_id)
+            )
+            if product_id is None:
+                return False
+            # Every accepted observation for a canonical product sees a committed best state.
+            await session.get(Product, product_id, with_for_update=True)
             offer = await session.scalar(
                 select(StoreOffer)
                 .where(
@@ -201,6 +250,19 @@ class PriceCheckService:
                 ).entitlements
                 for t in trackers
             }
+            watchers = list(
+                await session.scalars(
+                    select(ProductWatch).where(
+                        ProductWatch.product_id == product_id,
+                        ProductWatch.currency == offer.currency,
+                        ProductWatch.id.in_(self.entitlements.scheduled_watch_ids(now)),
+                    )
+                )
+            )
+            for watch in watchers:
+                rights[watch.user_id] = (
+                    await self.entitlements.for_user(watch.user_id, session=session, now=now)
+                ).entitlements
             interval = min(
                 (right.check_interval_seconds for right in rights.values()),
                 default=self.settings.free_check_seconds,
@@ -317,6 +379,8 @@ class PriceCheckService:
                     ),
                     event_values,
                 )
+            await session.flush()
+            await self.watches.evaluate(session, product_id)
             return True
 
     async def prune_history(self, *, before: datetime, batch_size: int = 5000) -> int:

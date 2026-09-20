@@ -80,6 +80,10 @@ async def run(args: argparse.Namespace) -> None:
             print((await container.payment_provider.balance()).model_dump_json())
         elif args.command == "billing-retry":
             print(f"Processed {await container.billing_intake.retry_pending()} pending updates")
+        elif args.command == "catalog-backfill":
+            async with container.sessions.begin() as session:
+                count = await container.products.resolver.backfill(session)
+            print(f"Indexed {count} legacy products; rerun until zero")
         elif args.command == "prune-history":
             days = container.settings.history_retention_days
             if days <= 0:
@@ -128,6 +132,9 @@ def main() -> None:
     )
     commands.add_parser("stars-balance", help="Show bot Stars balance (operator only)")
     commands.add_parser("billing-retry", help="Retry durable pending billing updates")
+    commands.add_parser(
+        "catalog-backfill", help="Index one bounded batch of legacy canonical products"
+    )
     asyncio.run(run(parser.parse_args()))
 
 

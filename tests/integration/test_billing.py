@@ -386,7 +386,7 @@ async def test_free_feature_gates_search_quota_and_bounded_history(container):
     )
     for _ in range(3):
         result = await c.search.search("", user.id)
-        assert sum(map(len, result.groups)) <= 3
+        assert len(result.products) <= 3
     with pytest.raises(RateLimitExceededError):
         await c.search.search("", user.id)
     async with c.sessions.begin() as s:

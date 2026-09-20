@@ -36,6 +36,7 @@ async def test_complete_telegram_stars_acceptance(container, language):
     await container.users.settings(user.id, UserSettingsPatch(language_code=language))
     update_id = 0
     paid_until = int((datetime.now(UTC) + timedelta(days=30)).timestamp())
+    message_date = int(datetime.now(UTC).timestamp())
 
     async def feed(*, command=None, callback=None, precheckout=None, payment=None):
         nonlocal update_id
@@ -54,7 +55,7 @@ async def test_complete_telegram_stars_acceptance(container, language):
         else:
             update["message"] = {
                 "message_id": update_id,
-                "date": int(datetime.now(UTC).timestamp()),
+                "date": message_date,
                 "chat": {"id": 123, "type": "private"},
                 "from": sender,
             }
