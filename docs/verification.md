@@ -347,3 +347,71 @@ checks described in [billing operations](billing.md), not claimed by mock transp
 - Updated HTTP `/health/live` and `/health/ready` returned 200; ARQ health passed with
   no failed jobs. No manual Telegram message, real payment or Amazon activation was
   performed by these checks. Existing configured tracking resumes normally.
+
+## M3B autonomous discovery and freshness — 2026-09-21
+
+Baseline was recorded before implementation in [m3b-design.md](m3b-design.md):
+M3A `6da2c03`, **337 passing tests, 88.51% coverage**. Work remains on
+`feat/m3b-autonomous-discovery`; existing billing services were preserved.
+
+- Final full suite: **399 passed**, no skips, **89.45% statement coverage**. The 85%
+  gate is unchanged. Ruff lint/format (140 Python files), strict mypy (89 source files),
+  frozen/offline lock verification, `alembic upgrade head` and `alembic check` passed.
+- Tests used PostgreSQL 17 `pricehunter_test` and real Redis DB 15. Retailer and Telegram
+  calls used fixtures/test transports; these checks spent no Stars and sent no messages.
+- Acceptance verifies stale EUR 299 cannot beat fresh EUR 329/345, discovery changes
+  best to EUR 315 once, expiry/refresh returns EUR 320, and refresh restores EUR 310.
+  History and notification outbox record one transition per accepted change/replay.
+- One hundred watchers share one discovery target/search; concurrent claims, execution
+  locks, expired tokens (including late failure reports), stale batch rollback, lost
+  enqueue recovery, pause/removal, plan changes, result bounds and context validation pass.
+  Provider failures/empty results/suppression are distinct; other providers continue.
+- eBay summary → item details enrichment uses the actual adapter and HTTP fixtures,
+  with a GTIN query and separately limited details. No identity is inferred from the
+  query. Amazon ASIN discovery/currency/no-result paths are fixture-tested; live access
+  and tracking approval remain pending.
+- Freshness SQL and Python policy agree at exact TTL boundaries, provider/category
+  overrides, zero TTL, future timestamps, failures and quarantine. Unknown/stale stock
+  cannot produce a confirmed-restock claim. Current-best reads remain time-aware even
+  before expiry maintenance runs.
+- At 100/500/1000 offers, full comparisons use **six SQL queries**, bounded offer pages,
+  complete currency summaries and deterministic paging. These checks bound query count,
+  not production throughput; no wall-clock performance guarantee is claimed.
+- History tests cover canonical transitions, per-currency separation, plan windows,
+  bounded points, boundary anchors, retention, unchanged current state and observation
+  source references after pruning. Manual refresh uses the existing shared worker,
+  respects active leases/request limits, and performs no synchronous retailer calls.
+- All seven Telegram languages exercise comparison, fresh/stale labels, best-price
+  history, refresh acknowledgements and existing watch/exact-offer/notification flows.
+  Existing billing tests and concurrency tests remain. Two old matcher expectations were
+  updated specifically for M3B's approved identical-GTIN/missing-optional-metadata rule;
+  explicit conflicts, opaque variation identifiers and weak matches remain rejected.
+- Operator diagnostics and duplicate reports are bounded/read-only and covered. A safe
+  product merge is explicitly deferred: preserving conflicting watch settings, identity
+  redirects, discovery leases and immutable histories/outbox requires a reviewed design.
+- `scripts/verify_m3b_migration.py` creates/removes a separate disposable database. The
+  fresh migration chain and M3A → M3B upgrade preserve every pre-existing column/ID in
+  users, stores, products, offers, trackers, observations, product watches, outbox,
+  subscriptions and payments. Existing best-state initialization is idempotent; history
+  protects downgrade; explicit test-history removal permits downgrade/re-upgrade/check.
+  CI now runs this verifier before pytest.
+- The only test warning remains ARQ's upstream deprecated Redis `close()` call. Hosted
+  GitHub Actions, live Stars lifecycle and live Amazon behavior were not exercised.
+
+### Local M3B deployment
+
+- Frozen Docker API/bot/worker images were rebuilt. Application processes were stopped
+  before `.local/backups/before-m3b-20260921T132549Z.dump` was created with mode `0600`
+  in a `0700` directory. The backup stays outside Git/build context.
+- Revision `2872920b653a` applied; runtime `alembic check` passed. Counts before/after
+  the migration matched: **2 users, 1 exact tracker, 32 products, 36 offers,
+  467 observations, 1 product watch, 1 outbox event, 0 subscriptions, 0 payments**.
+- Restarted API, bot and worker. HTTP liveness/readiness both returned 200, and the
+  ARQ health check passed. The running comparison endpoint exposes freshness fields;
+  canonical history returns the correct Free window. The temporary API user and key
+  used for read-only checks were removed afterwards.
+- Worker logs contained six completed discovery batches, no discovery failure or
+  traceback at inspection, and healthy `j_failed=0` markers. This confirms local job
+  execution; bounded search completion is not a guarantee of new matching inventory.
+- Amazon remains disabled. No manual Telegram message, invoice, payment or purchase
+  was sent by verification; existing authorized tracking/discovery resumes normally.

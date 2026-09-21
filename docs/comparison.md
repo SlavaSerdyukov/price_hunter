@@ -1,4 +1,4 @@
-# M3A comparison core
+# Product comparison — M3A / M3B
 
 A `Product` is one canonical purchasable product/variant. A `StoreOffer` is a listing
 in a persisted `Store` marketplace. `Tracker` watches one listing; `ProductWatch`
@@ -6,7 +6,7 @@ watches a canonical product's best available price in one selected currency.
 
 ## Canonical identity
 
-URL resolution and search both use `CatalogResolver`. Search persists provider DTOs
+URL resolution, search and autonomous discovery all use `CatalogResolver`. Search persists provider DTOs
 first and groups by the resulting Product UUID, so search and later product reads
 cannot invent different temporary groupings. The repository only writes catalog rows.
 
@@ -22,8 +22,10 @@ can share them. Index source records the first contributing store. Match decisio
   Meaningful `+` and `/` remain. Known language aliases normalize colors, sizes and
   capacity; explicit UK/EU/US dimensions and unknown attributes retain their meaning.
 - Conflicting trade identifiers, brands, manufacturer codes or Amazon ASINs veto a
-  match. Structured variant dictionaries must agree, including missing attributes.
-  Different sizes, colors, capacities and conditions therefore remain separate.
+  match. Identical validated GTINs tolerate missing optional color/size/capacity metadata,
+  but explicit conflicting values always veto a match. Missing opaque variation IDs,
+  condition or size-system attributes remain conservative barriers. Brand/model-only
+  matches still require complete compatible variants.
 - Compatible GTIN evidence scores 1.00; brand/model or brand/MPN evidence scores 0.95;
   a compatible Amazon ASIN match scores 0.98. Without sufficient evidence the listing
   keeps its own Product. An initial isolated listing is not proof of a cross-store match.
@@ -37,7 +39,7 @@ can share them. Index source records the first contributing store. Match decisio
   New observations lock the Product before updating offers/watch state.
 
 Existing listing resolution reuses stored prices and identity; the refresh pipeline
-owns price changes. M3A does not automatically repair or merge duplicate legacy Products.
+owns price changes. M3B adds diagnostics, but does not automatically merge legacy Products.
 The resumable backfill indexes their evidence without changing IDs, trackers or history.
 Provider-specific opaque variation IDs remain conservative barriers to cross-store
 matching; missing/incompatible metadata can intentionally leave duplicates.
@@ -54,14 +56,17 @@ per search; each adapter may impose a smaller result limit.
 `GET /api/v1/products/{id}` returns ten offer previews. The `/offers?page=0&size=10`
 endpoint pages up to 50 offers and includes summaries across **all** eligible known
 offers. Store identity/name/country come from `Store`, not a guessed hostname. Disabled
-or unsupported stores are excluded. `last_checked_at` makes freshness visible.
+or unsupported stores are excluded. Offer DTOs add `freshness` (`fresh`, `stale`, `failed`),
+`age_seconds`, and `stale` (true for any non-fresh value), alongside `last_checked_at`.
+Currency summaries add fresh/stale/failed counts and `cheapest_stale_offer`.
+Product DTOs include bounded provider/country/currency `discovery` status entries.
 
 Recommendations and spread are calculated separately for each native currency:
 
-- `best_available_offer` is the lowest priced confirmed `IN_STOCK` listing.
+- `best_available_offer` is the lowest priced **fresh** confirmed `IN_STOCK` listing; null if none exists.
 - `UNKNOWN` and `OUT_OF_STOCK` never displace a confirmed available recommendation.
 - `cheapest_known_offer` includes all availability states and is labelled separately.
-- `price_spread` is highest minus lowest **in-stock** item price; one available listing
+- `price_spread` is highest minus lowest **fresh in-stock** item price; one available listing
   gives zero, no available listings gives null.
 - With multiple currencies, top-level best/spread are null. Use `currency_groups`;
   there is no FX rate and EUR is never compared numerically against USD.
@@ -69,7 +74,10 @@ Recommendations and spread are calculated separately for each native currency:
   null. Listed item price is not a promise of final delivered cost.
 
 Products rank by exact model/GTIN relevance, availability, confidence, number of stores,
-then stable title/UUID ties. Offers sort by currency, availability, price, store and ID.
+then stable title/UUID ties. Offer pages sort by currency, freshness, availability, price, store and ID.
+SQL counts and window ranks build whole-product summaries in three queries; a complete
+comparison uses six queries regardless of 100, 500 or 1000 listings, excluding entitlements.
+At most 50 paginated offer bodies and three summary offers per currency are materialized.
 No cross-currency price ranking or affiliate commission influences the result.
 
 ## Watches and notifications
@@ -93,14 +101,16 @@ Watches and exact trackers share the existing plan's stored-record quota and old
 enabled scheduling policy. A watch consumes one quota slot, while all known eligible
 offers in its chosen currency participate in the shared refresh worker. The fastest
 eligible subscriber's interval wins. A new/resumed watch can advance a slower existing
-schedule. Price checking does not perform repeated discovery searches; future search
-results added to the same Product also participate in the watch.
+schedule. Known-price refresh and autonomous discovery have separate schedules. Discovery
+shares one target per Product/provider/country/currency; newly attached offers participate
+immediately in comparison, watch evaluation and the normal refresh pipeline.
 
-Each accepted observation atomically updates the watch's best state and emits at most
+Each accepted observation or discovery batch atomically updates the watch's best state and emits at most
 one prioritized event: target crossing, return of an available best, merchant change,
 ordinary best-price drop. `notify_on_new_best` controls merchant/restock alerts;
 `notify_on_price_drop` controls ordinary drops. Targets and restock alerts retain the
-existing paid entitlements, checked again before delivery. Ordinary drops obey the
+existing paid entitlements, checked again before delivery. Recovery after freshness expiry
+uses `best_prices_refreshed`, not a stock claim; that event is available to Free watchers. Ordinary drops obey the
 configured cooldown; merchant changes and target/restock crossings have priority.
 Disabling a watch removes pending events; resuming resets its baseline without a
 catch-up alert. Disabling notification flags suppresses future event creation.
@@ -108,9 +118,13 @@ catch-up alert. Disabling notification flags suppresses future event creation.
 Events use the existing outbox, with an immutable current/previous price and merchant
 snapshot and unique `(watch UUID, evaluation sequence)` deduplication key. Replaying a
 refresh or concurrent discovery does not repeat a logical event. Offer observations
-remain the price-history source; best-price state and outbox snapshots are lightweight
-derived data, not another observation stream. A public best-price history chart is not
-part of M3A. Ambiguous Telegram sends retain the existing `uncertain` delivery semantics.
+remain the exact-listing history source. `ProductBestState` and `BestPriceEvent` store
+only meaningful per-currency best transitions. The bounded, authenticated endpoint
+`GET /api/v1/products/{id}/best-price-history?currency=EUR&limit=50` returns chronological
+points, current best and the minimum observed best in the plan window. Free/Pro/Power
+default to 7/90/365 days. See [history and retention](discovery.md#history-and-retention).
+`POST /api/v1/products/{id}/refresh` returns HTTP 202 with `accepted` and `queued_count`;
+it schedules stale/failed listings without waiting for retailer HTTP calls. Ambiguous Telegram sends retain the existing `uncertain` delivery semantics.
 
 ## Deterministic demo
 
@@ -143,7 +157,13 @@ uv run alembic check
 For Docker use `docker compose --profile app build`, then
 `docker compose --profile app run --rm api` before each command above, omitting `uv run`.
 Restart application services after backfill. New installations simply migrate an empty
-schema. Readiness checks require the comparison tables.
+schema. Readiness checks require the comparison/discovery tables and refresh-request column.
+M3B revision `2872920b653a` adds discovery, best-state/history tables, nullable refresh-request
+and watch-absence columns, and product/currency indexes. Existing records are preserved.
+The worker initializes history for existing watched products in bounded batches; it does
+not invent past best-price transitions from listing observations. An M3B downgrade refuses
+to discard best-price history. Restore a backup or export and explicitly remove that
+history before a reviewed downgrade.
 
 Revision `124441561d5e` adds identifiers, Product MPN, saved offer identity/confidence,
 ProductWatch and outbox watch reference/snapshot. A CHECK requires exactly one outbox
@@ -156,10 +176,10 @@ or restore the pre-upgrade backup; never force a downgrade over live watch data.
 Matching deliberately favors duplicates over false positives. Existing WooCommerce
 payloads often omit global/manufacturer identifiers, so many unrelated stores cannot
 be reliably matched yet. ASIN is Amazon-specific. No new retailer integrations or LLM
-matching were added. Summaries currently load known offers for one product in memory;
-large catalogs need SQL aggregation, query/load measurement and bounded discovery jobs.
+matching were added. Summaries use bounded SQL aggregation and paginated offer bodies.
 
-M3B should improve structured provider identity/variant evidence, expose operator
-match diagnostics and reviewed duplicate repair, add freshness/stale-offer policy and
-best-price history, and measure large-catalog scheduling. Destination-aware shipping,
-tax and timestamped FX remain M4. Amazon activation retains its separate approval gate.
+Operator diagnostics and read-only duplicate candidates are available; merging is deferred
+until audited identity redirects and watch/outbox/history reconciliation are designed.
+See [operations and limitations](discovery.md). M4 should add delivery/shipping/tax context
+and timestamped FX without weakening native-currency comparisons. Amazon activation
+retains its separate approval gate.
