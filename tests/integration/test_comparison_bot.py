@@ -1,13 +1,16 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import Update
+from sqlalchemy import update
 
 from pricehunter.bot.app import create_dispatcher
 from pricehunter.bot.keyboards import Action
 from pricehunter.bot.sender import TelegramNotificationSender
+from pricehunter.db.base import utcnow
+from pricehunter.db.models import StoreOffer
 from pricehunter.localization.languages import SUPPORTED_LANGUAGES
 from pricehunter.localization.messages import tr
 from pricehunter.providers.mock import MockStoreProvider
@@ -79,6 +82,10 @@ async def test_comparison_watch_and_exact_offer_flow_in_every_language(container
         await feed(action="watch", value=f"{alpha.product_id.hex}_EUR")
         assert tr(language, "watch_created", currency="EUR") in transport.sent[-1].text
         watch = (await container.watches.list(user.id))[0]
+        await feed(action="besthist", value=f"{alpha.product_id.hex}_EUR")
+        history = transport.sent[-1]
+        assert "329" in history.text and "Demo Alpha" in history.text
+        assert any(button.url for row in history.reply_markup.inline_keyboard for button in row)
         await feed(text="/watches")
         assert tr(language, "active") in transport.sent[-1].text
         await feed(action="wpause", value=watch.id.hex)
@@ -113,6 +120,17 @@ async def test_comparison_watch_and_exact_offer_flow_in_every_language(container
             == alpha.product_id.hex
         )
         assert await notifier.send_pending() == 0
+        async with container.sessions.begin() as session:
+            await session.execute(
+                update(StoreOffer).values(last_checked_at=utcnow() - timedelta(days=4))
+            )
+        await feed(action="compare", value=alpha.product_id.hex)
+        assert tr(language, "no_fresh_prices", currency="EUR") in transport.sent[-1].text
+        await feed(action="besthist", value=f"{alpha.product_id.hex}_EUR")
+        assert tr(language, "best_unknown") in transport.sent[-1].text
+        await feed(action="refreshcmp", value=alpha.product_id.hex)
+        # Beta was refreshed and USD never claimed; the other five leases remain active.
+        assert tr(language, "refresh_queued", count=2) == transport.sent[-1].text
         await feed(action="watches", value="0")
         await feed(action="wdelete", value=watch.id.hex)
         await feed(text="/watches")

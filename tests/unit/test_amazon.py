@@ -9,6 +9,7 @@ from pydantic import SecretStr, ValidationError
 
 from pricehunter.core.config import Settings
 from pricehunter.core.container import Container
+from pricehunter.domain.discovery import DiscoveryQuery
 from pricehunter.domain.errors import (
     InvalidProductUrlError,
     ProductNotFoundError,
@@ -81,6 +82,24 @@ async def test_resolve_search_refresh_and_oauth_json(respx_mock, item, envelope)
         payload = json.loads(request.content)
         assert payload["partnerTag"] == "test-be-21" and payload["condition"] == "New"
         assert "offersV2.listings.price" in payload["resources"]
+
+
+async def test_discovery_asin_details_currency_and_no_result(respx_mock, item):
+    token_route(respx_mock)
+    route = respx_mock.post(AmazonCreatorsProvider.api + "getItems").respond(
+        200, json={"itemsResult": {"items": [item]}}
+    )
+    respx_mock.post(AmazonCreatorsProvider.api + "searchItems").respond(
+        200, json={"searchResult": {"items": [item]}}
+    )
+    async with httpx.AsyncClient() as client:
+        adapter = provider(client)
+        query = DiscoveryQuery("asin", "B012345678", "BE", "EUR")
+        assert len(await adapter.discover(query)) == 1
+        assert await adapter.discover(DiscoveryQuery("asin", query.text, "BE", "USD")) == []
+        assert len(await adapter.discover(DiscoveryQuery("model", "shirt", "BE", "EUR"))) == 1
+        route.respond(200, json={"itemsResult": {"items": []}})
+        assert await adapter.discover(query) == []
 
 
 @pytest.mark.parametrize("status,calls", [(401, 2), (403, 1), (429, 1)])

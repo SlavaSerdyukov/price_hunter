@@ -1,6 +1,6 @@
 # PriceHunter roadmap
 
-M0, M1, M2 and M3A are implemented and tested. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
+M0, M1, M2, M3A and M3B are implemented and tested. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
 
 ## M0 — Foundation — implemented
 
@@ -56,13 +56,21 @@ See [billing operations](docs/billing.md). Stripe and Wallet Pay remain disabled
 
 See [comparison semantics](docs/comparison.md) and [verification](docs/verification.md).
 
-## M3B — Comparison quality and operations
+## M3B — Autonomous discovery and comparison operations — implemented
 
-- Better structured identifiers/variant evidence from existing authorized providers.
-- Operator match diagnostics and reviewed duplicate repair, preserving history/watch ownership.
-- Explicit freshness/stale-offer policy and derived best-price history.
-- Large-catalog query/load measurement, SQL summaries and bounded discovery refresh.
-- Add further stores only after these comparison quality checks; Best Buy remains a future contract.
+- [x] Configurable provider freshness; stale/failed listings never win current-best ranking.
+- [x] Product/provider/country/currency discovery shared by all eligible watches.
+- [x] Capability-based queries, bounded leases, fencing, retries and provider suppression.
+- [x] Single canonical resolver, missing optional GTIN metadata and explicit conflict checks.
+- [x] Idempotent new-merchant alerts through the existing outbox.
+- [x] Canonical transition history, bounded per-currency API and seven-language Telegram views.
+- [x] Bounded asynchronous manual refresh, SQL summary/load checks at 100/500/1000 offers.
+- [x] Operator diagnostics and read-only duplicate candidates.
+- [x] Migration preservation, history retention and full regression checks.
+- [ ] Reviewed product merge: deferred for audited redirects, conflicting watch settings and
+      immutable outbox/history reconciliation. Never merge duplicate candidates automatically.
+
+See [discovery operations](docs/discovery.md) and [verification](docs/verification.md).
 
 ## M4 — International expansion
 

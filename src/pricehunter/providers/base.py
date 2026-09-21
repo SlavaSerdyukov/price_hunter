@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+from pricehunter.domain.discovery import Capability, DiscoveryQuery
 from pricehunter.domain.products import ProductOfferData
 
 
@@ -17,6 +18,18 @@ class OfferReference:
 class StoreProvider(ABC):
     name: str
     domains: set[str]
+    capabilities: frozenset[Capability] = frozenset({Capability.URL_RESOLVE, Capability.REFRESH})
+    discovery_interval_seconds: int | None = None
+    discovery_countries: frozenset[str] = frozenset()
+
+    async def discover(self, query: DiscoveryQuery) -> list[ProductOfferData]:
+        return await self.search(query.text, country=query.country, currency=query.currency)
+
+    async def discovery_details(self, offer: ProductOfferData) -> ProductOfferData:
+        """Opt-in enrichment for summary-only search APIs, charged as a separate operation."""
+        return await self.refresh_offer(
+            OfferReference(offer.url, offer.external_id, offer.store_slug, 0, offer.metadata)
+        )
 
     @abstractmethod
     def supports_url(self, url: str) -> bool: ...

@@ -85,7 +85,12 @@ def test_matching_variants_and_global_identifiers(offer):
     assert ProductMatcher().match(a, b).method == "gtin"
     assert identity_key(a) == identity_key(b)
     different = b.model_copy(update={"variant": {"size": "44"}})
-    assert not ProductMatcher().match(a, different).matched
+    assert ProductMatcher().match(a, different).matched  # Identical GTIN, missing optional size.
+    assert (
+        not ProductMatcher()
+        .match(a.model_copy(update={"variant": {"size": "42"}}), different)
+        .matched
+    )
     assert identity_key(a) != identity_key(different)
     with pytest.raises(ValidationError):
         ProductOfferData(**{**offer.model_dump(), "gtin": "4006381333932"})

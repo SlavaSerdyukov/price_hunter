@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from pricehunter.domain.freshness import Freshness
 from pricehunter.domain.products import Availability, model_code, normalized
 
 
@@ -19,6 +20,9 @@ class ComparisonOffer(BaseModel):
     url: str
     image_url: str | None
     last_checked_at: datetime
+    freshness: Freshness = Freshness.FRESH
+    age_seconds: int = 0
+    stale: bool = False
     shipping_price: Decimal | None = None
     delivery_country: str | None = None
     tax_included: bool | None = None
@@ -30,6 +34,21 @@ class CurrencyComparison(BaseModel):
     best_available_offer: ComparisonOffer | None
     cheapest_known_offer: ComparisonOffer
     price_spread: Decimal | None
+    cheapest_stale_offer: ComparisonOffer | None = None
+    fresh_offer_count: int = 0
+    stale_offer_count: int = 0
+    failed_offer_count: int = 0
+    fresh_out_of_stock_count: int = 0
+
+
+class DiscoveryStatus(BaseModel):
+    provider: str
+    country: str
+    currency: str
+    status: str
+    last_success_at: datetime | None
+    next_discovery_at: datetime
+    error_code: str | None
 
 
 class ComparisonProduct(BaseModel):
@@ -48,6 +67,7 @@ class ComparisonProduct(BaseModel):
     match_confidence: Decimal
     store_count: int
     offer_count: int
+    discovery: list[DiscoveryStatus] = []
     page: int = 0
     page_size: int = 10
 
@@ -71,10 +91,24 @@ def currency_comparisons(offers: list[ComparisonOffer]) -> list[CurrencyComparis
             (o for o in offers if o.currency == currency),
             key=lambda o: (o.price, o.store_slug, str(o.offer_id)),
         )
-        available = [o for o in same if o.availability == Availability.IN_STOCK]
+        available = [
+            o
+            for o in same
+            if o.availability == Availability.IN_STOCK and o.freshness == Freshness.FRESH
+        ]
         groups.append(
             CurrencyComparison(
                 currency=currency,
+                cheapest_stale_offer=next(
+                    (o for o in same if o.freshness == Freshness.STALE), None
+                ),
+                fresh_offer_count=sum(o.freshness == Freshness.FRESH for o in same),
+                stale_offer_count=sum(o.freshness == Freshness.STALE for o in same),
+                failed_offer_count=sum(o.freshness == Freshness.FAILED for o in same),
+                fresh_out_of_stock_count=sum(
+                    o.freshness == Freshness.FRESH and o.availability == Availability.OUT_OF_STOCK
+                    for o in same
+                ),
                 best_available_offer=available[0] if available else None,
                 cheapest_known_offer=same[0],
                 price_spread=available[-1].price - available[0].price if available else None,

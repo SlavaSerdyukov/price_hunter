@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from pricehunter.core.security import validate_url
+from pricehunter.domain.discovery import Capability, DiscoveryQuery
 from pricehunter.domain.errors import (
     InvalidProductUrlError,
     ProductNotFoundError,
@@ -47,6 +48,9 @@ RESOURCES = [
 
 
 class AmazonCreatorsProvider(StoreProvider):
+    capabilities = StoreProvider.capabilities | frozenset(
+        {Capability.SEARCH_KEYWORD, Capability.SEARCH_MODEL, Capability.SEARCH_ASIN}
+    )
     name = "amazon"
     api = "https://creatorsapi.amazon/catalog/v1/"
 
@@ -70,6 +74,7 @@ class AmazonCreatorsProvider(StoreProvider):
         self.http, self.client_id, self.client_secret = http, client_id, client_secret
         self.token_host = TOKEN_HOSTS[credential_version]
         self.markets = {c: MARKETPLACES[c] for c in markets}
+        self.discovery_countries = frozenset(self.markets)
         self.host_countries = {
             host: c
             for c, domain in self.markets.items()
@@ -241,6 +246,15 @@ class AmazonCreatorsProvider(StoreProvider):
             )
         except (KeyError, ValueError, TypeError, AttributeError, InvalidProductUrlError) as exc:
             raise ProviderUnavailableError() from exc
+
+    async def discover(self, query: DiscoveryQuery) -> list[ProductOfferData]:
+        if query.method == "asin":
+            try:
+                offer = await self._get(query.country, query.text)
+            except ProductNotFoundError:
+                return []
+            return [offer] if offer.currency == query.currency else []
+        return await super().discover(query)
 
     async def _get(self, country: str, asin: str) -> ProductOfferData:
         data = await self._request("getItems", country, {"itemIds": [asin], "itemIdType": "ASIN"})

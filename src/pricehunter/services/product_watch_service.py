@@ -10,11 +10,12 @@ from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import NotificationEvent, Product, ProductWatch, Store, StoreOffer, User
 from pricehunter.db.session import SessionFactory
-from pricehunter.domain.comparison import ComparisonOffer, currency_comparisons
+from pricehunter.domain.comparison import ComparisonOffer, CurrencyComparison
 from pricehunter.domain.errors import ProductNotFoundError, SubscriptionLimitReachedError
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.schemas.watches import WatchCreate, WatchPatch, WatchView
-from pricehunter.services.comparison_service import eligible_offers
+from pricehunter.services.best_price_service import BestPriceService
+from pricehunter.services.comparison_service import ComparisonReader
 from pricehunter.services.entitlement_service import EntitlementService
 
 
@@ -23,6 +24,8 @@ class ProductWatchService:
         self, sessions: SessionFactory, entitlements: EntitlementService, settings: Settings
     ) -> None:
         self.sessions, self.entitlements, self.settings = sessions, entitlements, settings
+        self.reader = ComparisonReader(settings)
+        self.best_prices = BestPriceService(sessions, entitlements, settings)
 
     async def create(self, user_id: UUID, data: WatchCreate) -> WatchView:
         async with self.sessions.begin() as session:
@@ -46,15 +49,16 @@ class ProductWatchService:
                 return await self._view(session, existing, product)
             if await self.entitlements.stored_count(session, user_id) >= rights.max_trackers:
                 raise SubscriptionLimitReachedError()
-            offers = await eligible_offers(session, product.id, data.currency)
-            if not offers:
+            summary = await self.reader.summary(session, product.id, utcnow(), data.currency)
+            if not summary.groups:
                 raise ProductNotFoundError()
-            best = currency_comparisons(offers)[0].best_available_offer
+            best = summary.groups[0].best_available_offer
             watch = ProductWatch(
                 user_id=user_id,
                 **data.model_dump(),
                 best_offer_id=best.offer_id if best else None,
                 best_price=best.price if best else None,
+                best_absence_reason=self.absence(summary.groups[0]) if not best else None,
             )
             session.add(watch)
             await session.flush()
@@ -144,8 +148,10 @@ class ProductWatchService:
                         NotificationEvent.status == "pending",
                     )
                 )
-                offers = await eligible_offers(session, product.id, watch.currency)
-                best = currency_comparisons(offers)[0].best_available_offer if offers else None
+                summary = await self.reader.summary(session, product.id, utcnow(), watch.currency)
+                group = summary.groups[0] if summary.groups else None
+                best = group.best_available_offer if group else None
+                watch.best_absence_reason = self.absence(group) if not best else None
                 watch.best_offer_id, watch.best_price = (
                     (best.offer_id, best.price) if best else (None, None)
                 )
@@ -163,9 +169,25 @@ class ProductWatchService:
                 )
             )
 
-    async def evaluate(self, session: AsyncSession, product_id: UUID) -> None:
+    @staticmethod
+    def absence(group: CurrencyComparison | None) -> str:
+        if (
+            group is not None
+            and group.fresh_out_of_stock_count > 0
+            and group.fresh_out_of_stock_count == group.fresh_offer_count
+            and not (group.stale_offer_count or group.failed_offer_count)
+        ):
+            return "out_of_stock"
+        # Missing, failed or unknown stock evidence cannot establish a true stock-out.
+        return "stale"
+
+    async def evaluate(
+        self, session: AsyncSession, product_id: UUID, source_observation_id: UUID | None = None
+    ) -> None:
         """Caller holds the Product lock; observation/state/outbox share its transaction."""
         now = utcnow()
+        summary = await self.reader.summary(session, product_id, now)
+        await self.best_prices.record(session, product_id, summary, now, source_observation_id)
         if not await session.scalar(
             select(ProductWatch.id)
             .where(
@@ -190,11 +212,14 @@ class ProductWatchService:
             return
         product = await session.get(Product, product_id)
         assert product is not None
-        offers = await eligible_offers(session, product_id)
-        groups = {g.currency: g for g in currency_comparisons(offers)}
+        groups = {g.currency: g for g in summary.groups}
         for watch in watches:
             best = groups[watch.currency].best_available_offer if watch.currency in groups else None
             previous_id, previous_price = watch.best_offer_id, watch.best_price
+            previous_absence = watch.best_absence_reason
+            watch.best_absence_reason = (
+                self.absence(groups.get(watch.currency)) if not best else None
+            )
             if (previous_id, previous_price) == (
                 (best.offer_id, best.price) if best else (None, None)
             ):
@@ -217,6 +242,7 @@ class ProductWatchService:
                 previous_price,
                 rights.target_price_alerts,
                 rights.back_in_stock_alerts,
+                previous_absence,
             )
             if event_type is None:
                 continue
@@ -228,7 +254,8 @@ class ProductWatchService:
             ):
                 continue
             previous = await session.get(StoreOffer, previous_id) if previous_id else None
-            previous_store = next((o.store for o in offers if o.offer_id == previous_id), "—")
+            previous_store_row = await session.get(Store, previous.store_id) if previous else None
+            previous_store = previous_store_row.name if previous_store_row else "—"
             await session.execute(
                 insert(NotificationEvent)
                 .values(
@@ -263,6 +290,7 @@ class ProductWatchService:
         previous_price: Decimal | None,
         targets_allowed: bool,
         restocks_allowed: bool,
+        previous_absence: str | None = None,
     ) -> str | None:
         if (
             targets_allowed
@@ -272,6 +300,8 @@ class ProductWatchService:
         ):
             return "target_reached"
         if previous_id is None:
+            if previous_absence == "stale":
+                return "best_prices_refreshed" if watch.notify_on_new_best else None
             return (
                 "best_offer_back_in_stock"
                 if watch.notify_on_new_best and restocks_allowed

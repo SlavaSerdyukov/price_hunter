@@ -2,7 +2,7 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0 foundation, M1 tracker, M2 Telegram Stars subscriptions and M3A comparison core**. Billing is tested with
+**M0–M3B: tracking, Stars subscriptions, comparison and autonomous discovery**. Billing is tested with
 a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
@@ -31,10 +31,14 @@ a simulated Telegram transport; real Stars purchases/renewals/refunds remain man
 ## Compare a product across stores
 
 Send `/search Sony WH-1000XM6` with the mock provider enabled. One comparison card
-shows matching stores, the best confirmed in-stock offer and spread **per currency**.
+shows matching stores, the best fresh confirmed in-stock offer and spread **per currency**.
+Stale and failed prices remain visible with their age, but cannot be current best.
 **All offers** opens paginated exact-offer tracking; **Track best** creates a canonical
 product watch that can follow a different merchant when it becomes cheapest.
-Manage watches in `/watches`; existing exact trackers remain in `/my`.
+Manage watches in `/watches`; existing exact trackers remain in `/my`. Watches periodically
+search configured providers for new matching offers. **History** shows best-price transitions;
+**Refresh prices** schedules a bounded background update. All seven languages are supported.
+See [discovery and freshness operations](docs/discovery.md) for cadences, settings and diagnostics.
 
 Watches and trackers share the plan quota. Unknown shipping/tax stay unknown; no FX
 conversion is implied. See [comparison semantics and upgrade steps](docs/comparison.md).
@@ -197,6 +201,8 @@ uv run python -m pricehunter.apps.admin revoke-api-key KEY_UUID
 | `GET /api/v1/search?q=…&country=BE` | Persisted comparison `products`; partial provider failures reported |
 | `GET /api/v1/products/{product_id}/offers?page=0&size=10` | Offer pages with full per-currency summaries |
 | `GET /api/v1/product-watches?page=0&size=10` | Current user's best-price watches |
+| `GET /api/v1/products/{id}/best-price-history?currency=EUR` | Bounded canonical best-price transitions |
+| `POST /api/v1/products/{id}/refresh` | Schedule a bounded stale-price refresh; HTTP 202 |
 | `POST /api/v1/product-watches` | `{ "product_id": "…", "currency": "EUR", "target_price": "310.00" }`; target optional |
 | `PATCH /api/v1/product-watches/{id}` | Target, notification flags or enabled state |
 | `DELETE /api/v1/product-watches/{id}` | Idempotent stop watching |

@@ -34,7 +34,7 @@ class ProductService:
         self.limiter, self.settings, self.entitlements = limiter, settings, entitlements
         self.resolver = CatalogResolver()
         self.watches = ProductWatchService(sessions, entitlements, settings)
-        self.comparisons = ComparisonService(sessions, entitlements)
+        self.comparisons = ComparisonService(sessions, entitlements, settings)
 
     async def resolve(self, url: str, user_id: UUID) -> OfferView:
         await self.limiter.user(user_id)
