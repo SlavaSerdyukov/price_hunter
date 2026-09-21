@@ -112,6 +112,7 @@ class PriceCheckService:
                         Store.active.is_(True),
                         Store.supported.is_(True),
                         or_(
+                            StoreOffer.refresh_requested_at > now - timedelta(minutes=5),
                             StoreOffer.refresh_sequence == 0,
                             StoreOffer.failure_count > 0,
                             StoreOffer.suspicious_price.is_not(None),
@@ -120,6 +121,7 @@ class PriceCheckService:
                         ),
                         or_(StoreOffer.lease_until.is_(None), StoreOffer.lease_until < now),
                         or_(
+                            StoreOffer.refresh_requested_at > now - timedelta(minutes=5),
                             exists().where(
                                 Tracker.store_offer_id == StoreOffer.id, Tracker.id.in_(eligible)
                             ),
@@ -191,6 +193,12 @@ class PriceCheckService:
 
     async def failed(self, claim: RefreshClaim) -> None:
         async with self.sessions.begin() as session:
+            product_id = await session.scalar(
+                select(StoreOffer.product_id).where(StoreOffer.id == claim.offer_id)
+            )
+            if product_id is None:
+                return
+            await session.get(Product, product_id, with_for_update=True)
             offer = await session.scalar(
                 select(StoreOffer)
                 .where(
@@ -204,6 +212,8 @@ class PriceCheckService:
                 delay = min(3600, 30 * 2 ** min(offer.failure_count, 7)) + random.randint(0, 30)
                 offer.next_check_at = utcnow() + timedelta(seconds=delay)
                 offer.lease_token, offer.lease_until = None, None
+                await session.flush()
+                await self.watches.evaluate(session, product_id)
 
     async def accept(self, claim: RefreshClaim, data: ProductOfferData) -> bool:
         now = utcnow()
@@ -287,6 +297,8 @@ class PriceCheckService:
                 offer.suspicious_price, offer.suspicious_currency = data.price, data.currency
                 offer.next_check_at = now + timedelta(seconds=min(interval, 300))
                 log.warning("observation_quarantined", store_offer_id=str(offer.id), reason=reason)
+                await session.flush()
+                await self.watches.evaluate(session, product_id)
                 return False
             previous, previous_availability = offer.price, offer.availability
             minimum = offer.minimum_price
@@ -314,6 +326,7 @@ class PriceCheckService:
             offer.observation_count += 1
             offer.refresh_sequence += 1
             offer.failure_count = 0
+            offer.refresh_requested_at = None
             offer.suspicious_price, offer.suspicious_currency = None, None
             cooldown = self.settings.notification_cooldown_seconds
             recent_priority = (
@@ -380,7 +393,7 @@ class PriceCheckService:
                     event_values,
                 )
             await session.flush()
-            await self.watches.evaluate(session, product_id)
+            await self.watches.evaluate(session, product_id, observation_id)
             return True
 
     async def prune_history(self, *, before: datetime, batch_size: int = 5000) -> int:

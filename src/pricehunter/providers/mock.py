@@ -2,6 +2,7 @@ from decimal import Decimal
 from urllib.parse import urlsplit
 
 from pricehunter.core.security import canonical_url
+from pricehunter.domain.discovery import Capability, DiscoveryQuery
 from pricehunter.domain.errors import ProductNotFoundError
 from pricehunter.domain.products import Availability, ProductOfferData
 from pricehunter.providers.base import OfferReference, StoreProvider
@@ -56,13 +57,37 @@ COMPARISON_CATALOG = {
 
 
 class MockStoreProvider(StoreProvider):
+    capabilities = StoreProvider.capabilities | frozenset(
+        {Capability.SEARCH_KEYWORD, Capability.SEARCH_GTIN, Capability.SEARCH_MODEL}
+    )
     name = "mock"
     domains = {"mock.pricehunter.test"}
+
+    def __init__(self, discovery_interval_seconds: int = 600) -> None:
+        self.discovery_interval_seconds = discovery_interval_seconds
+
+    async def discover(self, query: DiscoveryQuery) -> list[ProductOfferData]:
+        if query.text in ("04006381333931", "4006381333931", "Sony WH-1000XM6"):
+            return [self._offer("sony-new")] if query.currency == "EUR" else []
+        return await super().discover(query)
 
     def supports_url(self, url: str) -> bool:
         return urlsplit(url).hostname in self.domains
 
     def _offer(self, slug: str, sequence: int = 0) -> ProductOfferData:
+        if slug in ("sony-new", "sony-old"):
+            original = self._offer("sony-a")
+            return original.model_copy(
+                update={
+                    "store_slug": "demo_new" if slug == "sony-new" else "demo_old",
+                    "store_name": "Demo New Store" if slug == "sony-new" else "Demo Old Store",
+                    "external_id": slug,
+                    "url": f"https://mock.pricehunter.test/products/{slug}",
+                    "price": Decimal("315" if sequence == 0 else "310")
+                    if slug == "sony-new"
+                    else Decimal("299"),
+                }
+            )
         if slug in COMPARISON_CATALOG:
             store, currency, prices, availability, gtin, color = COMPARISON_CATALOG[slug]
             return ProductOfferData(

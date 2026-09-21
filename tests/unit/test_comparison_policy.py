@@ -44,7 +44,7 @@ def test_variant_aliases_preserve_size_capacity_and_unknown_attributes():
         ({"model": "WH1000XM7"}, False, "identifier_conflict"),
         ({"brand": "Other"}, False, "identifier_conflict"),
         ({"variant": {"color": "white"}}, False, "variant_mismatch"),
-        ({"variant": {}}, False, "variant_mismatch"),
+        ({"variant": {}}, True, "gtin"),
         ({"variant": {"Farbe": "Schwarz"}}, True, "gtin"),
         ({"gtin": None}, True, "brand_model"),
         ({"gtin": None, "mpn": "WH1000XM6"}, True, "manufacturer_model"),

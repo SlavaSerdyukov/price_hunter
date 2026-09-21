@@ -12,9 +12,11 @@ class Action(CallbackData, prefix="ph"):
     value: str = ""
 
 
-def button(language: str, key: str, action: str, value: str = "") -> InlineKeyboardButton:
+def button(
+    language: str, key: str, action: str, value: str = "", **values: object
+) -> InlineKeyboardButton:
     return InlineKeyboardButton(
-        text=tr(language, key),
+        text=tr(language, key, **values),
         callback_data=Action(
             action=action,
             value=value,

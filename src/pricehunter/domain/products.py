@@ -206,6 +206,15 @@ class MatchResult:
     reasons: tuple[str, ...] = ()
 
 
+def variant_evidence(left: dict[str, str], right: dict[str, str]) -> str:
+    a, b = normalized_variant(left), normalized_variant(right)
+    if any(key.startswith("conflict:") for key in (*a, *b)):
+        return "conflicting"
+    if any(a[key] != b[key] for key in a.keys() & b.keys()):
+        return "conflicting"
+    return "compatible" if a == b else "unknown"
+
+
 class ProductMatcher:
     def match(self, left: ProductOfferData, right: ProductOfferData) -> MatchResult:
         def reject(method: str, reason: str) -> MatchResult:
@@ -229,8 +238,16 @@ class ProductMatcher:
             return reject("identifier_conflict", "conflicting_asin")
         variants_left = normalized_variant(left.variant)
         variants_right = normalized_variant(right.variant)
-        if variants_left != variants_right:
-            return reject("variant_mismatch", "different_or_missing_variant_attributes")
+        evidence = variant_evidence(variants_left, variants_right)
+        if evidence == "conflicting":
+            return reject("variant_mismatch", "explicit_variant_conflict")
+        if evidence == "unknown":
+            # GTIN can supply optional size/color evidence. Opaque variation IDs and
+            # condition/size-system boundaries still require an explicit agreement.
+            missing = variants_left.keys() ^ variants_right.keys()
+            optional = {"color", "size", "capacity"}
+            if not (a and a == b and missing <= optional):
+                return reject("variant_mismatch", "missing_variant_evidence")
         # Negative title evidence can veto a merge, but never authorizes one.
         capacities = [
             set(re.findall(r"\b\d+(?:[.,]\d+)?\s*(?:gb|tb)\b", normalized(x.title)))
@@ -251,7 +268,9 @@ class ProductMatcher:
         if sizes[0] and sizes[1] and sizes[0] != sizes[1]:
             return reject("variant_mismatch", "title_size_conflict")
         if a and b:
-            return MatchResult(True, Decimal("1"), "gtin", ("same_trade_identifier",))
+            return MatchResult(
+                True, Decimal("1"), "gtin", ("same_trade_identifier", f"variant_{evidence}")
+            )
         if left.store_slug == right.store_slug and left.external_id == right.external_id:
             return MatchResult(True, Decimal("1"), "listing_identity", ("same_merchant_listing",))
         common = set(identity_signals(left)) & set(identity_signals(right))

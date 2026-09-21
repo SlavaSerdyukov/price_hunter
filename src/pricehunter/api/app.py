@@ -80,6 +80,10 @@ def create_app(settings: Settings | None = None, container: Container | None = N
                     await session.execute(text("SELECT 1 FROM checkout_intents LIMIT 1"))
                     await session.execute(text("SELECT 1 FROM product_identifiers LIMIT 1"))
                     await session.execute(text("SELECT 1 FROM product_watches LIMIT 1"))
+                    await session.execute(text("SELECT 1 FROM product_discoveries LIMIT 1"))
+                    await session.execute(
+                        text("SELECT refresh_requested_at FROM store_offers LIMIT 1")
+                    )
                 await resources.redis.ping()
         except Exception:
             return JSONResponse(status_code=503, content={"status": "not_ready"})

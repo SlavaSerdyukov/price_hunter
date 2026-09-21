@@ -16,6 +16,8 @@ from pricehunter.schemas.api import (
     UserSettingsPatch,
 )
 from pricehunter.schemas.watches import WatchCreate, WatchPatch, WatchView
+from pricehunter.services.best_price_service import BestHistory
+from pricehunter.services.comparison_operations import RefreshAccepted
 from pricehunter.services.search_service import SearchResult
 from pricehunter.services.subscription_service import SubscriptionView
 
@@ -45,6 +47,26 @@ async def product_offers(
     size: Annotated[int, Query(ge=1, le=50)] = 10,
 ) -> ComparisonProduct:
     return await container.products.comparisons.get(product_id, user.id, page=page, size=size)
+
+
+@router.get("/products/{product_id}/best-price-history", response_model=BestHistory)
+async def best_price_history(
+    product_id: UUID,
+    container: ContainerDependency,
+    user: UserDependency,
+    currency: Annotated[str, Query(pattern=r"^[A-Z]{3}$")],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> BestHistory:
+    return await container.best_prices.history(product_id, user.id, currency, limit)
+
+
+@router.post("/products/{product_id}/refresh", response_model=RefreshAccepted, status_code=202)
+async def request_refresh(
+    product_id: UUID,
+    container: ContainerDependency,
+    user: UserDependency,
+) -> RefreshAccepted:
+    return await container.comparison_operations.request_refresh(product_id, user.id)
 
 
 @router.get("/product-watches", response_model=list[WatchView])

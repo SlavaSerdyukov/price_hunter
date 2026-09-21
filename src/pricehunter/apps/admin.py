@@ -14,6 +14,7 @@ from pricehunter.core.container import Container
 from pricehunter.core.security import new_api_key, token_digest
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import APIKey, NotificationEvent, User
+from pricehunter.services.catalog_diagnostics import CatalogDiagnostics
 
 
 async def run(args: argparse.Namespace) -> None:
@@ -80,6 +81,16 @@ async def run(args: argparse.Namespace) -> None:
             print((await container.payment_provider.balance()).model_dump_json())
         elif args.command == "billing-retry":
             print(f"Processed {await container.billing_intake.retry_pending()} pending updates")
+        elif args.command == "product-diagnostics":
+            product_report = await CatalogDiagnostics(
+                container.sessions, container.settings
+            ).product(args.product_id, args.compare_with)
+            print(json.dumps(product_report, default=str, ensure_ascii=False, indent=2))
+        elif args.command == "duplicate-candidates":
+            duplicate_report = await CatalogDiagnostics(
+                container.sessions, container.settings
+            ).duplicates(args.limit)
+            print(json.dumps(duplicate_report, default=str, ensure_ascii=False, indent=2))
         elif args.command == "catalog-backfill":
             async with container.sessions.begin() as session:
                 count = await container.products.resolver.backfill(session)
@@ -91,7 +102,11 @@ async def run(args: argparse.Namespace) -> None:
             count = await container.price_checks.prune_history(
                 before=utcnow() - timedelta(days=days)
             )
-            print(f"Removed {count} old observations; rerun for the next bounded batch")
+            best_count = await container.best_prices.prune()
+            print(
+                f"Removed {count} old observations and {best_count} best-price transitions; "
+                "rerun for the next bounded batch"
+            )
     finally:
         await container.close()
 
@@ -135,6 +150,15 @@ def main() -> None:
     commands.add_parser(
         "catalog-backfill", help="Index one bounded batch of legacy canonical products"
     )
+    diagnostics = commands.add_parser(
+        "product-diagnostics", help="Read-only canonical identity and freshness report"
+    )
+    diagnostics.add_argument("product_id", type=UUID)
+    diagnostics.add_argument("--compare-with", type=UUID)
+    duplicates = commands.add_parser(
+        "duplicate-candidates", help="Read-only duplicate candidates; never merge automatically"
+    )
+    duplicates.add_argument("--limit", type=int, default=20)
     asyncio.run(run(parser.parse_args()))
 
 

@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from pricehunter.core.security import validate_url
+from pricehunter.domain.discovery import Capability
 from pricehunter.domain.errors import (
     InvalidProductUrlError,
     ProductNotFoundError,
@@ -56,6 +57,10 @@ def plain_text(value: str) -> str:
 
 
 class WooCommerceProvider(StoreProvider):
+    capabilities = StoreProvider.capabilities | frozenset(
+        {Capability.SEARCH_KEYWORD, Capability.SEARCH_MODEL, Capability.VARIANTS}
+    )
+
     def __init__(self, http: ProviderHTTP, shop: str) -> None:
         self.http = http
         self.shop = SHOPS[shop]

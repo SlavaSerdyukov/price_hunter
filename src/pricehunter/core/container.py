@@ -20,6 +20,8 @@ from pricehunter.services.billing_catalog import BillingCatalog
 from pricehunter.services.billing_intake import BillingIntake
 from pricehunter.services.billing_reconciliation import BillingReconciliation
 from pricehunter.services.billing_service import BillingService
+from pricehunter.services.comparison_operations import ComparisonOperations
+from pricehunter.services.discovery_service import ProductDiscoveryService
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.price_check_service import PriceCheckService
 from pricehunter.services.product_service import ProductService
@@ -61,7 +63,7 @@ class Container:
         self.limiter = RateLimiter(self.redis, settings)
         providers: list[StoreProvider] = []
         if settings.mock_provider_enabled:
-            providers.append(MockStoreProvider())
+            providers.append(MockStoreProvider(settings.mock_discovery_seconds))
         if (
             settings.ebay_enabled
             and settings.ebay_client_id.get_secret_value()
@@ -144,6 +146,13 @@ class Container:
             self.sessions, self.registry, self.limiter, settings, self.entitlements
         )
         self.watches = ProductWatchService(self.sessions, self.entitlements, settings)
+        self.comparison_operations = ComparisonOperations(
+            self.sessions, self.registry, self.limiter, settings, self.entitlements
+        )
+        self.best_prices = self.watches.best_prices
+        self.discovery = ProductDiscoveryService(
+            self.sessions, self.registry, self.limiter, settings, self.entitlements
+        )
         self.trackers = TrackingService(self.sessions, self.entitlements, settings)
         self.search = SearchService(self.registry, self.limiter, self.entitlements, self.products)
         self.price_checks = PriceCheckService(

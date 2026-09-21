@@ -102,10 +102,34 @@ class Settings(BaseSettings):
     batch_size: int = Field(100, ge=1, le=1000)
     notification_cooldown_seconds: int = Field(3600, ge=0)
     history_retention_days: int = Field(0, ge=0)
+    offer_freshness_seconds: dict[str, Annotated[int, Field(ge=0)]] = {
+        "default": 86400,
+        "ebay": 64800,
+        "woocommerce": 86400,
+        "amazon": 0,
+        "mock": 300,
+    }
+    discovery_enabled: bool = True
+    discovery_plan_seconds: dict[str, Annotated[int, Field(ge=60)]] = {
+        "free": 604800,
+        "pro": 86400,
+        "power": 21600,
+    }
+    mock_discovery_seconds: int = Field(600, ge=60)
+    discovery_batch_size: int = Field(20, ge=1, le=100)
+    discovery_result_limit: int = Field(50, ge=1, le=100)
+    discovery_lease_seconds: int = Field(180, ge=90)
+    discovery_failure_threshold: int = Field(5, ge=1)
+    discovery_suppression_seconds: int = Field(3600, ge=60)
+    comparison_refresh_limit: int = Field(20, ge=1, le=100)
     support_contact: str = "Contact the bot administrator for support."
 
     @model_validator(mode="after")
     def production_safety(self) -> "Settings":
+        if "default" not in self.offer_freshness_seconds:
+            raise ValueError("OFFER_FRESHNESS_SECONDS requires a default policy")
+        if set(self.discovery_plan_seconds) != {"free", "pro", "power"}:
+            raise ValueError("DISCOVERY_PLAN_SECONDS must configure free, pro and power")
         if set(self.plan_features) != {"free", "pro", "power"}:
             raise ValueError("PLAN_FEATURES must configure free, pro and power")
         if self.stars_billing_enabled and not self.telegram_bot_token.get_secret_value():

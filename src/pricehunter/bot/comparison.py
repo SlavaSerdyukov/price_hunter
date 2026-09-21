@@ -1,9 +1,11 @@
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from babel.dates import format_datetime
 
 from pricehunter.bot.keyboards import Action, button
 from pricehunter.core.container import Container
@@ -29,14 +31,31 @@ async def answer_sections(
     await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
+def age_text(seconds: int, language: str) -> str:
+    if seconds < 60:
+        return tr(language, "age_now")
+    divisor, key = (
+        (60, "age_minutes")
+        if seconds < 3600
+        else (3600, "age_hours")
+        if seconds < 86400
+        else (86400, "age_days")
+    )
+    return tr(language, key, count=seconds // divisor)
+
+
 def offer_line(offer: ComparisonOffer, language: str) -> str:
-    return tr(
-        language,
-        "comparison_offer",
-        store=offer.store[:60],
-        country=offer.store_country,
-        price=money(offer.price, offer.currency, language),
-        availability=tr(language, offer.availability),
+    return (
+        tr(
+            language,
+            "comparison_offer",
+            store=offer.store[:60],
+            country=offer.store_country,
+            price=money(offer.price, offer.currency, language),
+            availability=tr(language, offer.availability),
+        )
+        + "\n"
+        + tr(language, f"freshness_{offer.freshness}", age=age_text(offer.age_seconds, language))
     )
 
 
@@ -77,6 +96,19 @@ async def show_comparison(message: Message, product: ComparisonProduct, language
             rows.append(
                 [button(language, "watch_best", "watch", f"{product.id.hex}_{group.currency}")]
             )
+        rows.append(
+            [
+                button(
+                    language,
+                    "best_price_history",
+                    "besthist",
+                    f"{product.id.hex}_{group.currency}",
+                    currency=group.currency,
+                )
+            ]
+        )
+        if not group.fresh_offer_count:
+            lines.append(tr(language, "no_fresh_prices", currency=group.currency))
         if group.price_spread is not None:
             lines.append(
                 tr(
@@ -86,7 +118,10 @@ async def show_comparison(message: Message, product: ComparisonProduct, language
                 )
             )
     lines.extend(offer_line(offer, language) for offer in product.offers[:4])
+    if any(d.status == "backed_off" for d in product.discovery):
+        lines.append(tr(language, "discovery_partial"))
     lines.append(tr(language, "comparison_price_note"))
+    rows.append([button(language, "refresh_prices", "refreshcmp", product.id.hex)])
     rows.append(
         [
             button(language, "all_offers", "offers", f"{product.id.hex}_0"),
@@ -159,6 +194,15 @@ async def show_watches(message: Message, container: Container, user: User, page:
                     [
                         button(
                             language,
+                            "best_price_history",
+                            "besthist",
+                            f"{watch.product_id.hex}_{watch.currency}",
+                            currency=watch.currency,
+                        )
+                    ],
+                    [
+                        button(
+                            language,
                             "pause" if watch.enabled else "resume",
                             "wpause" if watch.enabled else "wresume",
                             watch.id.hex,
@@ -180,6 +224,53 @@ async def show_watches(message: Message, container: Container, user: User, page:
         )
 
 
+async def show_best_history(
+    message: Message, container: Container, user: User, product_id: UUID, currency: str
+) -> None:
+    history = await container.best_prices.history(product_id, user.id, currency, limit=10)
+    language = user.language_code
+    best = history.current_best
+    current = (
+        f"{money(best.price, currency, language)} · {best.store[:60]}"
+        if best
+        else tr(language, "best_unknown")
+    )
+    lines = [
+        tr(language, "best_history_title", title=history.canonical_name[:180], currency=currency),
+        tr(language, "best_history_current", current=current),
+        tr(
+            language,
+            "best_history_low",
+            days=history.retention_days,
+            price=money(history.minimum, currency, language)
+            if history.minimum is not None
+            else "—",
+        ),
+    ]
+    for point in reversed(history.points):
+        lines.append(
+            tr(
+                language,
+                "best_history_point",
+                date=format_datetime(
+                    point.timestamp, "short", tzinfo=ZoneInfo(user.timezone), locale=language
+                ),
+                price=money(point.price, currency, language) if point.price is not None else "—",
+                store=(point.store or "—")[:60],
+                event=tr(language, f"best_history_{point.event_type}"),
+            )
+        )
+    if not history.points:
+        lines.append(tr(language, "best_history_empty"))
+    rows = [[button(language, "compare_stores", "compare", product_id.hex)]]
+    if best:
+        rows.append(
+            [InlineKeyboardButton(text=tr(language, "best_offer", currency=currency), url=best.url)]
+        )
+    rows.append([button(language, "back", "watches", "0")])
+    await answer_sections(message, lines, rows)
+
+
 def build_comparison_router() -> Router:
     router = Router(name="comparison")
 
@@ -193,7 +284,18 @@ def build_comparison_router() -> Router:
     @router.callback_query(
         Action.filter(
             F.action.in_(
-                {"compare", "offers", "details", "watch", "watches", "wpause", "wresume", "wdelete"}
+                {
+                    "compare",
+                    "offers",
+                    "details",
+                    "watch",
+                    "watches",
+                    "wpause",
+                    "wresume",
+                    "wdelete",
+                    "besthist",
+                    "refreshcmp",
+                }
             )
         )
     )
@@ -211,7 +313,20 @@ def build_comparison_router() -> Router:
         await query.answer()
         await state.clear()
         action, value = callback_data.action, callback_data.value
-        if action == "watches":
+        if action == "besthist":
+            product_id, currency = value.split("_", 1)
+            if (
+                len(currency) != 3
+                or not currency.isascii()
+                or not currency.isalpha()
+                or not currency.isupper()
+            ):
+                raise ValueError("Invalid currency")
+            await show_best_history(query.message, container, user, UUID(product_id), currency)
+        elif action == "refreshcmp":
+            accepted = await container.comparison_operations.request_refresh(UUID(value), user.id)
+            await query.message.answer(tr(language, "refresh_queued", count=accepted.queued_count))
+        elif action == "watches":
             await show_watches(
                 query.message, container, user, min(max(int(value or "0"), 0), 10000)
             )

@@ -1,4 +1,5 @@
 import hashlib
+from collections.abc import Iterable
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricehunter.db.models import Product, ProductIdentifier, Store, StoreOffer
 from pricehunter.db.repositories.catalog import CatalogRepository
+from pricehunter.domain.discovery import DiscoveryMismatch
 from pricehunter.domain.products import (
     ProductMatcher,
     ProductOfferData,
@@ -75,16 +77,26 @@ class CatalogResolver:
                 )
             )
 
-    async def resolve(self, session: AsyncSession, data: ProductOfferData) -> StoreOffer:
-        signals = identity_signals(data)
-        # Shared evidence locks serialize competing stores, including GTIN/model bridges.
-        # Sorted acquisition prevents cross-identifier lock inversion; no process-local lock.
+    async def lock_evidence(
+        self, session: AsyncSession, offers: Iterable[ProductOfferData]
+    ) -> None:
+        signals = sorted({signal for offer in offers for signal in identity_signals(offer)})
         for kind, value in signals:
             digest = hashlib.sha256(f"catalog:{kind}:{value}".encode()).digest()
             await session.execute(
                 text("SELECT pg_advisory_xact_lock(:key)"),
                 {"key": int.from_bytes(digest[:8], "big", signed=True)},
             )
+
+    async def resolve(
+        self,
+        session: AsyncSession,
+        data: ProductOfferData,
+        *,
+        expected_product_id: UUID | None = None,
+    ) -> StoreOffer:
+        signals = identity_signals(data)
+        await self.lock_evidence(session, [data])
         existing = await session.scalar(
             select(StoreOffer)
             .join(Store)
@@ -96,6 +108,8 @@ class CatalogResolver:
             )
         )
         if existing:
+            if expected_product_id and existing.product_id != expected_product_id:
+                raise DiscoveryMismatch()
             # Preserve the historical listing's identity and price. Refreshes own prices.
             return existing
         candidates = list(
@@ -127,6 +141,15 @@ class CatalogResolver:
                 for offer, store in rows
             ]
             # Do not let a weak listing bridge two conflicting strong identities.
+            for result in results:
+                if result.method in ("identifier_conflict", "variant_mismatch"):
+                    structlog.get_logger().info(
+                        "catalog_match_rejected",
+                        product_id=str(candidate.id),
+                        store=data.store_slug,
+                        method=result.method,
+                        reasons=result.reasons,
+                    )
             if results and all(result.matched for result in results):
                 matches.append((candidate, max(result.confidence for result in results)))
         if matches:
@@ -134,6 +157,8 @@ class CatalogResolver:
             matches = [
                 (product, confidence) for product, confidence in matches if confidence == highest
             ]
+        if expected_product_id and (len(matches) != 1 or matches[0][0].id != expected_product_id):
+            raise DiscoveryMismatch()
         if len(matches) == 1:
             product, confidence = matches[0]
             for key in ("brand", "model", "mpn", "ean", "upc", "asin"):
@@ -167,8 +192,9 @@ class CatalogResolver:
         await self._index(session, product.id, data)
         offer = await CatalogRepository(session).save_resolved(data, product.id, confidence)
         structlog.get_logger().info(
-            "catalog_resolved",
+            "canonical_offer_added",
             product_id=str(product.id),
+            offer_id=str(offer.id),
             store=data.store_slug,
             match_confidence=str(confidence),
             candidate_count=len(candidates),

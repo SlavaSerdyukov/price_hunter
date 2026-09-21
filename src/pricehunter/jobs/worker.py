@@ -11,6 +11,7 @@ from pricehunter.bot.sender import TelegramNotificationSender
 from pricehunter.core.config import get_settings
 from pricehunter.core.container import Container
 from pricehunter.core.logging import configure_logging
+from pricehunter.services.discovery_service import DiscoveryClaim
 from pricehunter.services.notification_service import NotificationService
 from pricehunter.services.price_check_service import RefreshClaim
 
@@ -70,10 +71,49 @@ async def maintain_billing(ctx: dict[str, Any]) -> int:
     return retried
 
 
+async def discover_products(ctx: dict[str, Any]) -> int:
+    container = cast(Container, ctx["container"])
+    await container.discovery.synchronize()
+    claims = await container.discovery.claim_due()
+    for claim in claims:
+        try:
+            await ctx["redis"].enqueue_job(
+                "discover_product",
+                str(claim.target_id),
+                str(claim.token),
+                _job_id=f"discovery:{claim.token}",
+            )
+        except Exception:
+            structlog.get_logger().warning(
+                "discovery_enqueue_failed", target_id=str(claim.target_id)
+            )
+    return len(claims)
+
+
+async def discover_product(ctx: dict[str, Any], target_id: str, token: str) -> bool:
+    return await cast(Container, ctx["container"]).discovery.discover(
+        DiscoveryClaim(UUID(target_id), UUID(token))
+    )
+
+
+async def maintain_comparisons(ctx: dict[str, Any]) -> int:
+    return await cast(Container, ctx["container"]).comparison_operations.maintain()
+
+
 class WorkerSettings:
     timezone = UTC
-    functions = [refresh_offer, refresh_due_offers, send_notifications, maintain_billing]
+    functions = [
+        refresh_offer,
+        refresh_due_offers,
+        send_notifications,
+        maintain_billing,
+        discover_product,
+        discover_products,
+        maintain_comparisons,
+    ]
     cron_jobs = [
+        cron(discover_products, second=20, run_at_startup=True, unique=True),
+        cron(maintain_comparisons, second={2, 32}, run_at_startup=True, unique=True),
         cron(maintain_billing, second=10, run_at_startup=True, unique=True),
         cron(refresh_due_offers, second={0, 30}, run_at_startup=True, unique=True),
         cron(send_notifications, second={5, 15, 25, 35, 45, 55}, run_at_startup=True, unique=True),

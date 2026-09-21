@@ -8,6 +8,7 @@ import httpx
 from pydantic import ValidationError
 
 from pricehunter.core.security import validate_url
+from pricehunter.domain.discovery import Capability
 from pricehunter.domain.errors import (
     InvalidProductUrlError,
     ProviderHTTPError,
@@ -72,6 +73,15 @@ def optional_identifier(value: object, lengths: tuple[int, ...] = (8, 12, 13, 14
 
 
 class EbayBrowseProvider(StoreProvider):
+    capabilities = StoreProvider.capabilities | frozenset(
+        {
+            Capability.SEARCH_KEYWORD,
+            Capability.SEARCH_GTIN,
+            Capability.SEARCH_MODEL,
+            Capability.SEARCH_DETAILS,
+            Capability.VARIANTS,
+        }
+    )
     name = "ebay"
     api = "https://api.ebay.com"
 
@@ -91,6 +101,7 @@ class EbayBrowseProvider(StoreProvider):
             raise ValueError("Unsupported Belgian locale")
         self.belgium_locale = belgium_locale
         self.markets = {c: MARKETPLACES[c] for c in countries if c in MARKETPLACES}
+        self.discovery_countries = frozenset(self.markets)
         self.domains = {h for domain, _ in self.markets.values() for h in (domain, "www." + domain)}
         self.host_countries = {
             h: country
