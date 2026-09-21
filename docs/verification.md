@@ -415,3 +415,8 @@ M3A `6da2c03`, **337 passing tests, 88.51% coverage**. Work remains on
   execution; bounded search completion is not a guarantee of new matching inventory.
 - Amazon remains disabled. No manual Telegram message, invoice, payment or purchase
   was sent by verification; existing authorized tracking/discovery resumes normally.
+- A clean Git archive installed with frozen/offline dependencies and `--no-editable`.
+  All **249 unit tests** passed against that installed package (`uv run --no-sync`).
+  Seven packaged locales, `.env.example` and all local README/roadmap/docs links passed
+  independently of the working tree. No local `.env` or development-only source path
+  was required for this package verification.
