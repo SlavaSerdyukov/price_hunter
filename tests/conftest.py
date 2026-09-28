@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from pricehunter.core.config import Settings
 from pricehunter.core.container import Container
 from pricehunter.db.base import Base
+from pricehunter.domain.provider_policy import SYNTHETIC_POLICY
 
 
 @pytest.fixture
@@ -41,6 +42,20 @@ async def container(sessions, redis) -> AsyncIterator[Container]:
     settings = Settings(
         _env_file=None,
         environment="test",
+        provider_data_policies={
+            name: SYNTHETIC_POLICY
+            for name in (
+                "ebay",
+                "amazon",
+                "woocommerce_pine64_eu",
+                "woocommerce_hemptees_be",
+                "woocommerce_westernshop_be",
+                "woocommerce_raspberrypi_dk",
+                "failed",
+                "empty",
+                "summaries",
+            )
+        },
         user_requests_per_minute=100,
         notification_cooldown_seconds=0,
         telegram_bot_token=SecretStr("123456789:TEST_TOKEN_FOR_LOCAL_TESTS_ONLY_12345"),

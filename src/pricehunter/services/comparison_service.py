@@ -9,7 +9,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import Product, ProductDiscovery, Store, StoreOffer
+from pricehunter.db.models import Product, ProductDiscovery, Store, StoreOffer, User
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.comparison import (
     ComparisonOffer,
@@ -17,10 +17,12 @@ from pricehunter.domain.comparison import (
     CurrencyComparison,
     DiscoveryStatus,
 )
-from pricehunter.domain.errors import ProductNotFoundError
+from pricehunter.domain.errors import PriceHunterError, ProductNotFoundError
 from pricehunter.domain.freshness import Freshness, OfferFreshnessPolicy
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.fx_service import FxService
+from pricehunter.services.outbound_service import OutboundLinkService
 
 
 @dataclass
@@ -35,8 +37,20 @@ class ComparisonSummary:
 class ComparisonReader:
     """Three summary queries regardless of listing count; offer bodies are paginated."""
 
-    def __init__(self, settings: Settings) -> None:
-        self.policy = OfferFreshnessPolicy(settings.offer_freshness_seconds)
+    def __init__(self, settings: Settings, permission: str | None = None) -> None:
+        self.permission = permission
+        self.settings = settings
+        self.outbound = OutboundLinkService(settings)
+        base = OfferFreshnessPolicy(settings.offer_freshness_seconds)
+        self.policy = OfferFreshnessPolicy(
+            {
+                **settings.offer_freshness_seconds,
+                **{
+                    name: min(base.ttl(name), policy.max_cache_seconds)
+                    for name, policy in settings.provider_data_policies.items()
+                },
+            }
+        )
 
     def ttl_expression(self) -> ColumnElement[int]:
         configured = self.policy.seconds
@@ -77,12 +91,27 @@ class ComparisonReader:
             else_=str(Freshness.STALE),
         )
 
-    @staticmethod
-    def filters(product_id: UUID, currency: str | None = None) -> list[ColumnElement[bool]]:
+    def filters(self, product_id: UUID, currency: str | None = None) -> list[ColumnElement[bool]]:
         filters = [
             StoreOffer.product_id == product_id,
             Store.active.is_(True),
             Store.supported.is_(True),
+            or_(
+                *[
+                    and_(
+                        Store.provider_type == name,
+                        StoreOffer.last_checked_at
+                        > utcnow() - timedelta(seconds=policy.max_cache_seconds),
+                    )
+                    for name, policy in {
+                        "mock": self.settings.data_policy("mock"),
+                        **self.settings.provider_data_policies,
+                    }.items()
+                    if policy.reviewed
+                    and policy.catalog_persistence_allowed
+                    and (self.permission is None or getattr(policy, self.permission))
+                ]
+            ),
         ]
         if currency:
             filters.append(StoreOffer.currency == currency)
@@ -96,16 +125,23 @@ class ComparisonReader:
             failures=offer.failure_count,
             quarantined=offer.suspicious_price is not None,
         )
+        policy = self.settings.data_policy(store.provider_type)
+        try:
+            url = self.outbound.link(offer, store)
+        except PriceHunterError:
+            url = None
         return ComparisonOffer(
             offer_id=offer.id,
             store=store.name,
             store_slug=store.slug,
-            store_country=store.country,
+            store_country=offer.metadata_json.get("market_country", store.country),
             title=offer.title,
             price=offer.price,
             currency=offer.currency,
             availability=offer.availability,
-            url=offer.affiliate_url or offer.direct_url,
+            url=url,
+            provider=store.provider_type,
+            attribution=policy.display_attribution_required,
             image_url=offer.image_url,
             last_checked_at=offer.last_checked_at,
             freshness=freshness,
@@ -273,13 +309,59 @@ class ComparisonService:
     ) -> None:
         self.sessions, self.entitlements = sessions, entitlements
         self.reader = ComparisonReader(settings)
+        self.fx = FxService(sessions, settings)
 
     async def get(
-        self, product_id: UUID, user_id: UUID, *, page: int = 0, size: int = 10
+        self,
+        product_id: UUID,
+        user_id: UUID,
+        *,
+        page: int = 0,
+        size: int = 10,
+        market_country: str | None = None,
     ) -> ComparisonProduct:
         (await self.entitlements.for_user(user_id)).entitlements.require(Feature.COMPARISON_SEARCH)
         async with self.sessions() as session:
-            return await self.build(session, product_id, page=page, size=size)
+            result = await self.build(session, product_id, page=page, size=size)
+            user = await session.get(User, user_id)
+            if user:
+                result.market_country = market_country or user.country_code
+                result.preferred_currency = user.preferred_currency
+                snapshot = await self.fx.snapshot(session)
+                if snapshot:
+                    views = [
+                        *result.offers,
+                        *[
+                            o
+                            for g in result.currency_groups
+                            for o in (
+                                g.best_available_offer,
+                                g.cheapest_known_offer,
+                                g.cheapest_stale_offer,
+                            )
+                            if o
+                        ],
+                    ]
+                    for offer in views:
+                        if offer.currency == user.preferred_currency:
+                            continue
+                        converted = snapshot.convert(
+                            offer.price, offer.currency, user.preferred_currency
+                        )
+                        if converted is not None:
+                            offer.reference_price, offer.reference_currency = (
+                                converted,
+                                user.preferred_currency,
+                            )
+                            offer.fx_rate = snapshot.cross_rate(
+                                offer.currency, user.preferred_currency
+                            )
+                            offer.fx_effective_date, offer.fx_fetched_at, offer.fx_source = (
+                                snapshot.effective_date,
+                                snapshot.fetched_at,
+                                snapshot.source,
+                            )
+            return result
 
     async def build(
         self, session: AsyncSession, product_id: UUID, *, page: int = 0, size: int = 10

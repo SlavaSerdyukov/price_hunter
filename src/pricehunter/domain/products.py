@@ -6,8 +6,19 @@ from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Any
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+
+from pricehunter.core.security import validate_url
 
 
 def decimal_input(value: object) -> object:
@@ -47,7 +58,12 @@ class ProductOfferData(BaseModel):
     store_domain: str = Field(min_length=1, max_length=200)
     country: str = Field(pattern=r"^[A-Z]{2}$")
     external_id: str = Field(min_length=1, max_length=200)
-    url: str = Field(max_length=2048)
+    external_merchant_id: str | None = Field(default=None, max_length=100)
+    url: str = Field(default="", max_length=2048)
+    direct_url: str | None = Field(default=None, max_length=2048)
+    affiliate_url: str | None = Field(default=None, max_length=2048)
+    affiliate_network: str | None = Field(default=None, max_length=80)
+    affiliate_metadata: dict[str, Any] = Field(default_factory=dict)
     title: str = Field(min_length=1, max_length=500)
     price: Money
     currency: str = Field(pattern=r"^[A-Z]{3}$")
@@ -65,6 +81,30 @@ class ProductOfferData(BaseModel):
     seller: str | None = Field(default=None, max_length=200)
     variant: dict[str, str] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_locator(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            data = dict(data)
+            if "direct_url" not in data and "affiliate_url" not in data:
+                data["direct_url"] = data.get("url")
+            if not data.get("url"):
+                data["url"] = data.get("direct_url") or data.get("affiliate_url") or ""
+        return data
+
+    @model_validator(mode="after")
+    def safe_destinations(self) -> "ProductOfferData":
+        if not (self.direct_url or self.affiliate_url):
+            raise ValueError("Offer requires an HTTPS destination")
+        for value in (self.url, self.direct_url, self.affiliate_url):
+            if value:
+                validate_url(value, {urlsplit(value).hostname or ""})
+        if self.affiliate_url and not self.affiliate_network:
+            raise ValueError("Affiliate URL requires network identity")
+        if len(json.dumps(self.affiliate_metadata)) > 4096:
+            raise ValueError("Affiliate metadata exceeds budget")
+        return self
 
     @field_validator("title")
     @classmethod

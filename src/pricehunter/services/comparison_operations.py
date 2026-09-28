@@ -9,6 +9,7 @@ from pricehunter.core.limits import RateLimiter
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import Product, ProductBestState, ProductWatch, Store, StoreOffer
 from pricehunter.db.session import SessionFactory
+from pricehunter.domain.discovery import Capability
 from pricehunter.domain.errors import ProductNotFoundError
 from pricehunter.domain.freshness import Freshness
 from pricehunter.domain.subscriptions import Feature
@@ -52,7 +53,15 @@ class ComparisonOperations:
                     .join(Store)
                     .where(
                         *self.reader.filters(product_id),
-                        Store.provider_type.in_(self.registry.providers),
+                        Store.provider_type.in_(
+                            [
+                                p.name
+                                for p in self.registry.providers.values()
+                                if Capability.REFRESH in p.capabilities
+                                and self.settings.data_policy(p.name).refresh_allowed
+                                and self.settings.data_policy(p.name).tracking_allowed
+                            ]
+                        ),
                         self.reader.freshness_expression(now) != Freshness.FRESH,
                         or_(StoreOffer.lease_until.is_(None), StoreOffer.lease_until < now),
                     )

@@ -1,5 +1,6 @@
 import asyncio
 import random
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
@@ -51,7 +52,7 @@ class ProductDiscoveryService:
     ) -> None:
         self.sessions, self.registry, self.limiter = sessions, registry, limiter
         self.settings, self.entitlements = settings, entitlements
-        self.resolver = CatalogResolver()
+        self.resolver = CatalogResolver(settings)
         self.watches = ProductWatchService(sessions, entitlements, settings)
 
     def interests(self, now: datetime) -> Subquery:
@@ -60,7 +61,7 @@ class ProductDiscoveryService:
             *[(plan == p, seconds) for p, seconds in self.settings.discovery_plan_seconds.items()],
             else_=self.settings.discovery_plan_seconds["free"],
         )
-        country = func.coalesce(User.country_code, "BE")
+        country = ProductWatch.market_country
         return (
             select(
                 ProductWatch.product_id,
@@ -82,6 +83,8 @@ class ProductDiscoveryService:
         async with self.sessions.begin() as session:
             interests = self.interests(now)
             for provider in self.registry.providers.values():
+                if not self.settings.data_policy(provider.name).tracking_allowed:
+                    continue
                 if not provider.capabilities & {
                     Capability.SEARCH_GTIN,
                     Capability.SEARCH_MODEL,
@@ -156,7 +159,13 @@ class ProductDiscoveryService:
                         ),
                     )
                     .where(
-                        ProductDiscovery.provider.in_(self.registry.providers),
+                        ProductDiscovery.provider.in_(
+                            [
+                                name
+                                for name in self.registry.providers
+                                if self.settings.data_policy(name).tracking_allowed
+                            ]
+                        ),
                         or_(
                             ProductDiscovery.lease_until.is_(None),
                             ProductDiscovery.lease_until < now,
@@ -226,6 +235,7 @@ class ProductDiscoveryService:
                 )
                 .limit(1)
             )
+            self.settings.data_policy(target.provider).require("tracking_allowed")
             provider = self.registry.get(target.provider)
             query = ProductSearchIdentity(
                 product.gtin,
@@ -253,14 +263,22 @@ class ProductDiscoveryService:
         try:
             # A hard timeout also covers fixture/custom adapters exempt from ordinary mock limits.
             async with asyncio.timeout(self.settings.provider_timeout_seconds):
-                async with self.limiter.provider(provider.name):
+                async with (
+                    nullcontext()
+                    if provider.manages_request_limits
+                    else self.limiter.provider(provider.name)
+                ):
                     results = await provider.discover(query)
                 if Capability.SEARCH_DETAILS in provider.capabilities:
                     detailed = []
                     for offer in results[: self.settings.discovery_result_limit]:
                         # Summary identifiers are not inferred from the search query.
                         # Each details operation consumes the shared provider budget.
-                        async with self.limiter.provider(provider.name):
+                        async with (
+                            nullcontext()
+                            if provider.manages_request_limits
+                            else self.limiter.provider(provider.name)
+                        ):
                             try:
                                 detailed.append(await provider.discovery_details(offer))
                             except ProductNotFoundError:

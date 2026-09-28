@@ -134,7 +134,7 @@ async def setup_watch(container):
     user = await container.users.telegram(111)
     a, b = [await persist(container, slug) for slug in ("sony-a", "sony-b")]
     watch = await container.watches.create(
-        user.id, WatchCreate(product_id=a.product_id, currency="EUR")
+        user.id, WatchCreate(market_country="BE", product_id=a.product_id, currency="EUR")
     )
     return user, a, b, watch
 
@@ -195,7 +195,7 @@ async def test_watch_currency_and_stock_guardrails(container):
         assert await session.scalar(select(func.count()).select_from(NotificationEvent)) == 0
     with pytest.raises(ProductNotFoundError):
         await container.watches.create(
-            user.id, WatchCreate(product_id=a.product_id, currency="JPY")
+            user.id, WatchCreate(market_country="BE", product_id=a.product_id, currency="JPY")
         )
 
 
@@ -231,12 +231,18 @@ async def test_watch_api_create_patch_delete_and_targets(container):
     async with client, other:
         response = await client.post(
             "/api/v1/product-watches",
-            json={"product_id": str(a.product_id), "currency": "EUR", "target_price": "300"},
+            json={
+                "product_id": str(a.product_id),
+                "market_country": "BE",
+                "currency": "EUR",
+                "target_price": "300",
+            },
         )
         assert response.status_code == 201
         watch_id = response.json()["id"]
         duplicate = await client.post(
-            "/api/v1/product-watches", json={"product_id": str(a.product_id), "currency": "EUR"}
+            "/api/v1/product-watches",
+            json={"product_id": str(a.product_id), "market_country": "BE", "currency": "EUR"},
         )
         assert duplicate.json()["id"] == watch_id
         assert len((await client.get("/api/v1/product-watches")).json()) == 1
@@ -364,7 +370,9 @@ async def test_watch_and_exact_creation_cannot_race_past_shared_quota(container)
     b = await persist(container, "sony-b")
     await container.trackers.create(user.id, TrackerCreate(store_offer_id=a.id))
     results = await asyncio.gather(
-        container.watches.create(user.id, WatchCreate(product_id=a.product_id, currency="EUR")),
+        container.watches.create(
+            user.id, WatchCreate(market_country="BE", product_id=a.product_id, currency="EUR")
+        ),
         container.trackers.create(user.id, TrackerCreate(store_offer_id=b.id)),
         return_exceptions=True,
     )
@@ -374,12 +382,14 @@ async def test_watch_and_exact_creation_cannot_race_past_shared_quota(container)
 
 async def test_search_provider_order_partial_failures_and_persistence_errors(container):
     class FixtureProvider:
+        manages_request_limits = False
         name = "fixture"
 
         async def search(self, *args, **kwargs):
             return [MockStoreProvider()._offer(s) for s in ("sony-b", "sony-a", "sony-white")]
 
     class FailedProvider:
+        manages_request_limits = False
         name = "failed"
 
         async def search(self, *args, **kwargs):
@@ -400,8 +410,13 @@ async def test_search_provider_order_partial_failures_and_persistence_errors(con
 
 
 async def test_faster_watch_advances_existing_schedule_and_downgrade_shares_quota(container):
+    from copy import copy
+
     from pricehunter.db.models import Subscription
 
+    provider = copy(container.registry.get("mock"))
+    provider.name = "ebay"
+    container.registry.providers["ebay"] = provider
     user = await container.users.telegram(111)
     a, b = [await persist(container, slug) for slug in ("sony-a", "sony-b")]
     # A real-store listing previously scheduled for a slower Free subscriber.
@@ -417,7 +432,7 @@ async def test_faster_watch_advances_existing_schedule_and_downgrade_shares_quot
     await grant_plan(container, user.id)
     exact = await container.trackers.create(user.id, TrackerCreate(store_offer_id=a.id))
     watch = await container.watches.create(
-        user.id, WatchCreate(product_id=a.product_id, currency="EUR")
+        user.id, WatchCreate(market_country="BE", product_id=a.product_id, currency="EUR")
     )
     assert {c.offer_id for c in await container.price_checks.claim_due()} == {a.id, b.id}
     latest = await container.trackers.create(user.id, TrackerCreate(store_offer_id=b.id))

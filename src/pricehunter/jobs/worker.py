@@ -11,6 +11,8 @@ from pricehunter.bot.sender import TelegramNotificationSender
 from pricehunter.core.config import get_settings
 from pricehunter.core.container import Container
 from pricehunter.core.logging import configure_logging
+from pricehunter.providers.http import ProviderHTTP
+from pricehunter.services.catalog_policy_maintenance import CatalogPolicyMaintenance
 from pricehunter.services.discovery_service import DiscoveryClaim
 from pricehunter.services.notification_service import NotificationService
 from pricehunter.services.price_check_service import RefreshClaim
@@ -25,7 +27,7 @@ async def startup(ctx: dict[str, Any]) -> None:
         bot = create_bot(container)
         ctx["bot"] = bot
         ctx["notifications"] = NotificationService(
-            container.sessions, TelegramNotificationSender(bot), container.entitlements
+            container.sessions, TelegramNotificationSender(bot), container.entitlements, settings
         )
 
 
@@ -100,6 +102,15 @@ async def maintain_comparisons(ctx: dict[str, Any]) -> int:
     return await cast(Container, ctx["container"]).comparison_operations.maintain()
 
 
+async def maintain_commerce(ctx: dict[str, Any]) -> bool:
+    container = cast(Container, ctx["container"])
+    await container.outbound.retain(container.sessions)
+    await CatalogPolicyMaintenance(container.sessions, container.settings).purge()
+    return await container.fx.refresh(
+        ProviderHTTP(container.http, timeout=20, max_bytes=100000), container.redis
+    )
+
+
 class WorkerSettings:
     timezone = UTC
     functions = [
@@ -110,8 +121,12 @@ class WorkerSettings:
         discover_product,
         discover_products,
         maintain_comparisons,
+        maintain_commerce,
     ]
     cron_jobs = [
+        cron(
+            maintain_commerce, minute={0, 15, 30, 45}, second=40, run_at_startup=True, unique=True
+        ),
         cron(discover_products, second=20, run_at_startup=True, unique=True),
         cron(maintain_comparisons, second={2, 32}, run_at_startup=True, unique=True),
         cron(maintain_billing, second=10, run_at_startup=True, unique=True),

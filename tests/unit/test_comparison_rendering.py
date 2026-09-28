@@ -55,6 +55,7 @@ async def test_watch_pages_show_quota_paused_disabled_and_active_states():
             product_id=uuid4(),
             canonical_name="Headphones <script>",
             currency="EUR",
+            market_country="BE",
             scheduled=index == 0,
             enabled=index != 1,
         )

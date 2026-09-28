@@ -8,6 +8,7 @@ from sqlalchemy import exists, select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pricehunter.core.config import Settings
 from pricehunter.db.models import Product, ProductIdentifier, Store, StoreOffer
 from pricehunter.db.repositories.catalog import CatalogRepository
 from pricehunter.domain.discovery import DiscoveryMismatch
@@ -34,6 +35,9 @@ def stored_evidence(product: Product, offer: StoreOffer, store: Store) -> Produc
         country=store.country,
         external_id=offer.external_id,
         url=offer.url,
+        direct_url=offer.direct_url,
+        affiliate_url=offer.affiliate_url,
+        affiliate_network=offer.affiliate_network,
         title=offer.title,
         price=offer.price,
         currency=offer.currency,
@@ -44,6 +48,9 @@ def stored_evidence(product: Product, offer: StoreOffer, store: Store) -> Produc
 
 class CatalogResolver:
     """One persistence/matching path for URL resolution and provider search results."""
+
+    def __init__(self, settings: Settings | None = None) -> None:
+        self.settings = settings or Settings(_env_file=None)
 
     @staticmethod
     def _confidence(data: ProductOfferData) -> Decimal:
@@ -95,6 +102,8 @@ class CatalogResolver:
         *,
         expected_product_id: UUID | None = None,
     ) -> StoreOffer:
+        policy = self.settings.data_policy(data.provider)
+        policy.require("catalog_persistence_allowed")
         signals = identity_signals(data)
         await self.lock_evidence(session, [data])
         existing = await session.scalar(
@@ -190,7 +199,9 @@ class CatalogResolver:
             await session.flush()
             confidence = self._confidence(data)
         await self._index(session, product.id, data)
-        offer = await CatalogRepository(session).save_resolved(data, product.id, confidence)
+        offer = await CatalogRepository(session).save_resolved(
+            data, product.id, confidence, history_allowed=policy.price_history_allowed
+        )
         structlog.get_logger().info(
             "canonical_offer_added",
             product_id=str(product.id),

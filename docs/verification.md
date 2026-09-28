@@ -420,3 +420,74 @@ M3A `6da2c03`, **337 passing tests, 88.51% coverage**. Work remains on
   Seven packaged locales, `.env.example` and all local README/roadmap/docs links passed
   independently of the working tree. No local `.env` or development-only source path
   was required for this package verification.
+
+## M4A international commerce — 2026-09-28
+
+Implemented on `feat/m4a-international-commerce`. The pre-change audit and design
+are in [m4a-design.md](m4a-design.md); operating instructions are in
+[international-commerce.md](international-commerce.md).
+
+1. **M3B baseline.** PR #2 was merged as `0d6d493` and
+   [main CI passed](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/35608647734)
+   before implementation. The local baseline was **399 passed, 89.41% coverage**,
+   with lint, formatting, strict typing, schema comparison and migration verification
+   passing. No M4A hosted CI execution or deployment is claimed by this local report.
+2. **Schema.** Revision `2c125500eaf6` adds required watch market, market-aware watch
+   uniqueness, merchant external ID, affiliate metadata, nullable direct URL, optional
+   delivery fields, minimal OutboundClick and Decimal FxRate tables. Billing schema
+   and services were not redesigned. Downgrade refuses incompatible M4A data.
+3. **Market migration.** The extended `scripts/verify_m3b_migration.py` successfully
+   upgraded a real M3B-shaped scratch database, preserving all pre-existing columns
+   and IDs in users/products/identifiers/stores/offers/observations/trackers/watches/
+   discoveries/best states/history/outbox/subscriptions/payments. Existing watches
+   inherit saved DE or legacy BE; new country-less accounts receive `country_required`.
+   Tests verify BE/EUR and DE/EUR coexistence, separate discovery targets, unchanged
+   watch country after profile edits, and country-preserving Telegram notification links.
+4. **eBay EPN.** Fake HTTP exercises optional campaign context, returned affiliate
+   URL persistence, direct fallback without campaign, explicit country/postal context
+   and Belgian destination aliases. No per-user affiliate reference is sent or stored.
+   Existing live Browse access does not establish live EPN attribution or data-use rights.
+5. **Rakuten.** Fixture tests cover documented token form, cached concurrent renewal,
+   one authentication retry, safe bounded XML, pagination, shared concurrent request
+   limiting, MID merchant identity, market-scoped listing identity, Decimal sale rules,
+   UPC validation, malformed-item isolation and partial provider failure. Stock stays
+   unknown; SEARCH_MODEL does not claim GTIN filtering or item refresh. Reviewed
+   search-only results create no history and expire through bounded cache eviction.
+6. **Outbound links.** API/Telegram cards, comparisons, trackers and notifications use
+   the central policy selector. Signed redirects resolve current server-side offers;
+   tests reject tampered/expired tokens, unknown offers, inactive stores, unsafe
+   schemes/hosts and query-injected destinations. Commission metadata does not alter
+   native-price ranking or notification decisions. Configured attribution is rendered.
+7. **Clicks and privacy.** A successful redirect appends a minimal event; rejected
+   redirects append none. Schema assertions exclude Telegram/account IDs, IP, UA and
+   other user metadata. Retention and foreign-key detachment are tested. Analytics
+   have no public read endpoint; proxy logging remains a deployment responsibility.
+8. **Reference FX.** ECB snapshots persist atomically with source, effective date and
+   fetch timestamp. Tests cover Decimal direct/inverse/cross conversion, same and
+   unsupported currencies, weekend reuse, stale cutoff, invalid rates/XML, shared
+   fetch/cadence and failure backoff. Approximate display amounts leave native prices,
+   per-currency best offers, alerts and Stars billing unchanged.
+9. **Final checks.** **497 tests passed, no skips, 89.86% statement coverage**; the 85%
+   gate is unchanged. Ruff lint and formatting (156 Python files), strict mypy
+   (96 source files), `alembic upgrade head`, `alembic check`, migration preservation /
+   guarded downgrade / re-upgrade, and local README/roadmap/docs links all passed.
+   Tests use dedicated PostgreSQL `pricehunter_test` and Redis DB 15. All seven bot
+   languages remain covered. The sole warning is the existing upstream ARQ call to
+   deprecated Redis `close()`. Retailer and Telegram test transports sent no messages,
+   made no purchases and spent no Stars.
+10. **Live verification and remaining gates.** A read-only request through the real
+    public HTTP transport successfully parsed official ECB daily XML at
+    `2026-09-28T11:19:55.421921+00:00`: 29 currencies, effective date **2026-09-25**.
+    It wrote no database data. Rakuten and EPN remain fixture-tested, credential/policy-
+    gated: live token/account/MID access, campaign attribution, actual returned links,
+    display requirements and commission eligibility still need account-specific checks.
+    Amazon retains its existing approval gate. The running local application remains
+    M3B; this work did not modify its `.env`, migrate its database or restart its services.
+    Configure reviewed policies for enabled real sources before an M4A upgrade.
+11. **Proposed M4B scope.** Add explicit delivery country/postal input, documented
+    shipping/tax and destination availability, unknown-cost semantics and separately
+    labeled delivered-cost comparison only when required components are known. Add
+    reviewed Awin/CJ feed onboarding with identifier, variant, stock and retention
+    provenance. Keep native ranking, deterministic matching and existing billing;
+    automatic merge, frontend/Mini App/mobile, new checkout methods and ML matching
+    remain outside that scope.

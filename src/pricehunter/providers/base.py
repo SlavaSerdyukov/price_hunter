@@ -21,6 +21,8 @@ class StoreProvider(ABC):
     capabilities: frozenset[Capability] = frozenset({Capability.URL_RESOLVE, Capability.REFRESH})
     discovery_interval_seconds: int | None = None
     discovery_countries: frozenset[str] = frozenset()
+    # Multi-page APIs account for every HTTP request internally using the shared limiter.
+    manages_request_limits: bool = False
 
     async def discover(self, query: DiscoveryQuery) -> list[ProductOfferData]:
         return await self.search(query.text, country=query.country, currency=query.currency)

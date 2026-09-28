@@ -13,9 +13,17 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from pricehunter.core.config import Settings
 from pricehunter.core.container import Container
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import NotificationEvent, PaymentEvent, Subscription
+from pricehunter.db.models import (
+    BestPriceEvent,
+    NotificationEvent,
+    PaymentEvent,
+    ProductBestState,
+    ProductDiscovery,
+    ProductIdentifier,
+    Subscription,
+)
 
-name = "pricehunter_m3b_" + uuid4().hex[:10] + "_test"
+name = "pricehunter_m4a_" + uuid4().hex[:10] + "_test"
 test_url = make_url(os.environ["TEST_DATABASE_URL"])
 if not (test_url.database or "").endswith("_test"):
     raise RuntimeError("TEST_DATABASE_URL must name a dedicated database ending _test")
@@ -24,7 +32,7 @@ env = dict(os.environ, DATABASE_URL=scratch_url, PYTHONPATH="src")
 ids = [uuid4() for _ in range(6)]
 
 
-def migrate(*args, success=True):
+def migrate(*args, success=True, contains="Export best-price history"):
     result = subprocess.run(
         [sys.executable, "-m", "alembic", *args], env=env, capture_output=True, text=True
     )
@@ -32,7 +40,7 @@ def migrate(*args, success=True):
         if result.returncode:
             raise RuntimeError(result.stdout + result.stderr)
     else:
-        assert result.returncode and "Export best-price history" in result.stderr
+        assert result.returncode and contains in result.stderr
 
 
 async def main():
@@ -147,9 +155,73 @@ async def main():
                         "notification_events",
                         "subscriptions",
                         "payment_events",
+                        "product_identifiers",
+                        "product_discoveries",
+                        "product_best_states",
+                        "best_price_events",
                     )
                 }
 
+        # Create a real M3B-shaped database before upgrading M4A. Models below
+        # are unchanged tables; old watch inserts deliberately omit market_country.
+        migrate("upgrade", "2872920b653a")
+        german_user, german_watch = uuid4(), uuid4()
+        async with engine.begin() as c:
+            await c.execute(
+                text(
+                    "INSERT INTO users (id, language_code, country_code, preferred_currency, "
+                    "timezone, last_active_at) VALUES (:id, 'de', 'DE', 'EUR', 'UTC', now())"
+                ),
+                {"id": german_user},
+            )
+            await c.execute(
+                text(
+                    "INSERT INTO product_watches (id,user_id,product_id,currency,"
+                    "notify_on_new_best,"
+                    "notify_on_price_drop,enabled,best_offer_id,best_price,evaluation_sequence) "
+                    "VALUES (:id,:user,:product,'EUR',true,true,true,:offer,329,0)"
+                ),
+                {"id": german_watch, "user": german_user, "product": ids[2], "offer": ids[3]},
+            )
+            await c.execute(
+                insert(ProductIdentifier).values(
+                    id=uuid4(),
+                    product_id=ids[2],
+                    kind="brand_model",
+                    value="sony:wh1000xm6",
+                    source="legacy",
+                    confidence="0.95",
+                )
+            )
+            await c.execute(
+                insert(ProductDiscovery).values(
+                    id=uuid4(), product_id=ids[2], provider="mock", country="BE", currency="EUR"
+                )
+            )
+            await c.execute(
+                insert(ProductBestState).values(
+                    id=uuid4(),
+                    product_id=ids[2],
+                    currency="EUR",
+                    store_offer_id=ids[3],
+                    price=329,
+                    sequence=1,
+                    next_evaluation_at=utcnow() + timedelta(minutes=5),
+                )
+            )
+            await c.execute(
+                insert(BestPriceEvent).values(
+                    id=uuid4(),
+                    product_id=ids[2],
+                    currency="EUR",
+                    store_offer_id=ids[3],
+                    price=329,
+                    store="Legacy",
+                    event_type="initial_best",
+                    sequence=1,
+                    source_observation_id=ids[5],
+                )
+            )
         original = await snapshot()
         migrate("upgrade", "head")
         await engine.dispose()
@@ -162,9 +234,37 @@ async def main():
                     assert {k: v for k, v in before.items() if k != "updated_at"} == {
                         k: current[k] for k in before if k != "updated_at"
                     }, table
-            assert await container.comparison_operations.maintain() == 1
             assert await container.comparison_operations.maintain() == 0
             assert await container.discovery.synchronize() == 1
+            async with engine.connect() as c:
+                markets = dict(
+                    (await c.execute(text("SELECT id, market_country FROM product_watches"))).all()
+                )
+                assert markets[watch_id] == "BE"  # Only legacy missing-country rows get BE.
+                assert markets[german_watch] == "DE"
+                assert (
+                    await c.scalar(
+                        text(
+                            "SELECT is_nullable FROM information_schema.columns "
+                            "WHERE table_name='store_offers' AND column_name='direct_url'"
+                        )
+                    )
+                    == "YES"
+                )
+                assert await c.scalar(text("SELECT count(*) FROM outbound_clicks")) == 0
+                assert await c.scalar(text("SELECT count(*) FROM fx_rates")) == 0
+            async with engine.begin() as c:
+                await c.execute(
+                    text(
+                        "INSERT INTO fx_rates (id,base_currency,quote_currency,rate,effective_date,"
+                        "fetched_at,source) VALUES (:id,'EUR','USD',1.15,current_date,now(),'ECB')"
+                    ),
+                    {"id": uuid4()},
+                )
+            migrate("downgrade", "2872920b653a", success=False, contains="Export or reconcile M4A")
+            async with engine.begin() as c:
+                assert await c.scalar(text("SELECT count(*) FROM fx_rates")) == 1
+                await c.execute(text("DELETE FROM fx_rates"))
             migrate("downgrade", "124441561d5e", success=False)
             async with engine.begin() as c:
                 await c.execute(text("DELETE FROM best_price_events"))
@@ -174,8 +274,9 @@ async def main():
         finally:
             await container.close()
         print(
-            "PASS: fresh migration chain; M3A users/offers/trackers/watches/history/"
-            "outbox/subscription/payment preserved; best-state backfill idempotent; "
+            "PASS: M3A -> real M3B -> M4A; users/products/identifiers/stores/offers/"
+            "observations/trackers/watches/discoveries/best states/history/outbox/"
+            "subscriptions/payments preserved; BE/DE market migration; nullable direct URL; "
             "guarded downgrade/re-upgrade; schema check"
         )
     finally:

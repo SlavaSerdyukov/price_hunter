@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -17,7 +17,15 @@ class ComparisonOffer(BaseModel):
     price: Decimal
     currency: str
     availability: Availability
-    url: str
+    url: str | None
+    provider: str = "mock"
+    attribution: str | None = None
+    reference_price: Decimal | None = None
+    reference_currency: str | None = None
+    fx_rate: Decimal | None = None
+    fx_effective_date: date | None = None
+    fx_fetched_at: datetime | None = None
+    fx_source: str | None = None
     image_url: str | None
     last_checked_at: datetime
     freshness: Freshness = Freshness.FRESH
@@ -54,6 +62,8 @@ class DiscoveryStatus(BaseModel):
 class ComparisonProduct(BaseModel):
     id: UUID
     canonical_name: str
+    market_country: str | None = None
+    preferred_currency: str | None = None
     brand: str | None
     gtin: str | None = None
     model: str | None

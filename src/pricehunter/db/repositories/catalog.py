@@ -22,7 +22,12 @@ class CatalogRepository:
         return offer
 
     async def save_resolved(
-        self, data: ProductOfferData, product_id: UUID, confidence: Decimal
+        self,
+        data: ProductOfferData,
+        product_id: UUID,
+        confidence: Decimal,
+        *,
+        history_allowed: bool = True,
     ) -> StoreOffer:
         await self.session.execute(
             insert(Store)
@@ -32,6 +37,7 @@ class CatalogRepository:
                 name=data.store_name,
                 domain=data.store_domain,
                 provider_type=data.provider,
+                external_merchant_id=data.external_merchant_id,
                 country=data.country,
             )
             .on_conflict_do_nothing(index_elements=[Store.slug])
@@ -59,7 +65,10 @@ class CatalogRepository:
                 store_id=store.id,
                 external_id=data.external_id,
                 url=data.url,
-                direct_url=data.url,
+                direct_url=data.direct_url,
+                affiliate_url=data.affiliate_url,
+                affiliate_network=data.affiliate_network,
+                affiliate_metadata=data.affiliate_metadata,
                 title=data.title,
                 image_url=data.image_url,
                 price=data.price,
@@ -93,7 +102,7 @@ class CatalogRepository:
             .on_conflict_do_nothing(index_elements=[StoreOffer.store_id, StoreOffer.external_id])
             .returning(StoreOffer.id)
         )
-        if inserted:
+        if inserted and history_allowed:
             self.session.add(
                 PriceObservation(
                     store_offer_id=offer_id,

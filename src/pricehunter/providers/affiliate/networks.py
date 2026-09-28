@@ -3,10 +3,6 @@
 from pricehunter.providers.affiliate.base import AffiliateProvider
 
 
-class RakutenProvider(AffiliateProvider):
-    name = "rakuten"
-
-
 class CJProvider(AffiliateProvider):
     name = "cj"
 

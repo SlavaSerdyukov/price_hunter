@@ -83,6 +83,7 @@ class MockStoreProvider(StoreProvider):
                     "store_name": "Demo New Store" if slug == "sony-new" else "Demo Old Store",
                     "external_id": slug,
                     "url": f"https://mock.pricehunter.test/products/{slug}",
+                    "direct_url": f"https://mock.pricehunter.test/products/{slug}",
                     "price": Decimal("315" if sequence == 0 else "310")
                     if slug == "sony-new"
                     else Decimal("299"),

@@ -2,7 +2,9 @@ from uuid import UUID
 
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from babel import Locale
 
+from pricehunter.domain.markets import MARKET_CHOICES
 from pricehunter.localization.languages import LANGUAGE_NAMES, SUPPORTED_LANGUAGES
 from pricehunter.localization.messages import tr
 
@@ -37,7 +39,7 @@ def main_menu(language: str) -> InlineKeyboardMarkup:
     )
 
 
-def offer_keyboard(language: str, offer_id: UUID, url: str) -> InlineKeyboardMarkup:
+def offer_keyboard(language: str, offer_id: UUID, url: str | None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -46,9 +48,25 @@ def offer_keyboard(language: str, offer_id: UUID, url: str) -> InlineKeyboardMar
             ],
             [
                 button(language, "history", "history", offer_id.hex),
-                InlineKeyboardButton(text=tr(language, "open_store"), url=url),
+                *([InlineKeyboardButton(text=tr(language, "open_store"), url=url)] if url else []),
             ],
         ]
+    )
+
+
+def country_keyboard(
+    language: str, *, action: str = "country", prefix: str = ""
+) -> InlineKeyboardMarkup:
+    locale = Locale(language)
+    buttons = [
+        InlineKeyboardButton(
+            text=f"{country} · {locale.territories.get(country, country)}",
+            callback_data=Action(action=action, value=prefix + country).pack(),
+        )
+        for country in MARKET_CHOICES
+    ]
+    return InlineKeyboardMarkup(
+        inline_keyboard=[buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     )
 
 

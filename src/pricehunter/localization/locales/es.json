@@ -125,7 +125,7 @@
   "compare_stores": "📊 Comparar tiendas",
   "my_watches": "🔔 Mis seguimientos del mejor precio",
   "watches_empty": "Todavía no sigues el mejor precio. Busca un producto y elige Seguir el mejor precio.",
-  "watch_card": "<b>{title}</b>\nSeguimiento del mejor precio · {currency}\n{status}",
+  "watch_card": "<b>{title}</b>\nSeguimiento del mejor precio · {currency}\n{status}\nMercado: {market_country}",
   "watch_created": "Siguiendo la mejor oferta en stock en {currency}. La tienda puede cambiar. Gestión: /watches.",
   "merchant_became_cheapest": "Otra tienda es ahora la más barata",
   "new_best_price": "Nuevo mejor precio",
@@ -155,5 +155,11 @@
   "best_history_merchant_changed": "Cambio de tienda",
   "best_history_became_unavailable": "Sin oferta actual",
   "best_history_restored": "Oferta actual restablecida",
-  "best_history_window_start": "Al inicio del período"
+  "best_history_window_start": "Al inicio del período",
+  "market_context": "Mercado: {country} · catálogo; entrega según la tienda.",
+  "country_required": "Elige un país de mercado antes de crear el seguimiento.",
+  "provider_policy": "Este uso del proveedor aún no está autorizado.",
+  "affiliate_disclosure": "Algunos enlaces son de afiliados. PriceHunter puede recibir una comisión; nunca influye en el orden de las ofertas.",
+  "fx_reference": "≈ {price} · referencia {source}, {date}",
+  "provider_attribution": "{attribution}"
 }

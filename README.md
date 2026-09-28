@@ -2,7 +2,7 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0–M3B: tracking, Stars subscriptions, comparison and autonomous discovery**. Billing is tested with
+**M0–M4A: tracking, Stars subscriptions, discovery and international commerce**. Billing is tested with
 a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
@@ -24,6 +24,9 @@ a simulated Telegram transport; real Stars purchases/renewals/refunds remain man
 - Amazon Creators API adapter with fixture tests, disabled pending access and tracking approval.
 - Versioned authenticated REST endpoints using the same services as the bot.
 - Shared offer refreshes, persisted scheduling, retries, anomaly quarantine and outbox.
+- Durable market-country watches, reviewed provider data policies, official eBay EPN support.
+- Credential/policy-gated Rakuten Product Search, signed outbound links and minimal click records.
+- Optional timestamped ECB reference conversion; native-currency rankings stay authoritative.
 - Durable PostgreSQL state, migrations, Docker, CI, health checks and operator commands.
 - Free/Pro/Power entitlements; recurring Stars checkout, expiry, upgrades, cancellation,
   refunds, durable payment intake and operator reconciliation. `/plans` and `/subscription`.
@@ -40,8 +43,10 @@ search configured providers for new matching offers. **History** shows best-pric
 **Refresh prices** schedules a bounded background update. All seven languages are supported.
 See [discovery and freshness operations](docs/discovery.md) for cadences, settings and diagnostics.
 
-Watches and trackers share the plan quota. Unknown shipping/tax stay unknown; no FX
-conversion is implied. See [comparison semantics and upgrade steps](docs/comparison.md).
+Watches and trackers share the plan quota. Choose a market country before creating a watch;
+profile changes never move an existing watch. Unknown shipping/tax stay unknown. Optional
+[ECB reference conversion](docs/fx.md) is approximate and never changes native ranking.
+See [M4A configuration and upgrade steps](docs/international-commerce.md).
 For an existing database, stop application services, back up, migrate and run
 `uv run python -m pricehunter.apps.admin catalog-backfill` until zero before restarting.
 
@@ -131,7 +136,7 @@ The API accepts `en`, `fr`, `de`, `es`, `it`, `pl` and `ru` in
 ## Real stores without keys
 
 For electronics and clothing without retailer credentials, enable the reviewed shops
-with `WOOCOMMERCE_STORES=["pine64_eu","raspberrypi_dk","hemptees_be","westernshop_be"]`. See the
+with a reviewed `PROVIDER_DATA_POLICIES` entry per shop and `WOOCOMMERCE_STORES=["pine64_eu","raspberrypi_dk","hemptees_be","westernshop_be"]`. See the
 [public stores guide](docs/public-stores.md) for tested links, variant selection,
 native currencies and diagnostic commands. These integrations work independently
 of eBay approval. Real Free-plan trackers refresh every 12 hours by default.
@@ -163,7 +168,7 @@ SQLAlchemy rather than generic CRUD abstractions. REST DTOs live under `schemas`
 
 A canonical `Product` identifies a real product/variant. A `StoreOffer` identifies a
 listing within a marketplace. Many `Tracker` rows share that offer; `ProductWatch`
-tracks all known eligible offers of a Product in one currency. Schedulers claim
+tracks a Product with a durable market country and native comparison currency. Schedulers claim
 due offers with `SKIP LOCKED`; short database leases and fencing tokens recover stale
 workers and lost enqueue operations. A Redis lease prevents concurrent duplicate
 fetches of the same claim. External I/O happens outside database transactions.
@@ -212,6 +217,7 @@ uv run python -m pricehunter.apps.admin revoke-api-key KEY_UUID
 | `DELETE /api/v1/trackers/{id}` | Idempotent stop tracking |
 | `GET /api/v1/subscriptions/me` | Effective plan, expiry, renewal state, quotas, counts and features |
 | `PATCH /api/v1/users/me/settings` | Language, country, currency, timezone |
+| `GET /r/{token}` | Optional signed HTTPS store redirect; no arbitrary destinations |
 | `GET /health/live`, `GET /health/ready` | Process and PostgreSQL/migrations/Redis readiness |
 
 Amounts in JSON are decimal strings, never binary floats. Dates are UTC. Pagination
@@ -240,7 +246,12 @@ token the worker refreshes prices but leaves pending Telegram deliveries untouch
 | `USER_REQUESTS_PER_MINUTE`, `PROVIDER_*` | Shared limits, concurrency and total timeout |
 | `MAX_RESPONSE_BYTES`, `REFRESH_LEASE_SECONDS`, `BATCH_SIZE` | Request/worker bounds |
 | `NOTIFICATION_COOLDOWN_SECONDS`, `HISTORY_RETENTION_DAYS` | Alert suppression and optional retention |
-| `AMAZON_*`, `BESTBUY_API_KEY`, `STRIPE_SECRET_KEY`, `WALLET_PAY_API_KEY` | Future integration inputs; currently unused |
+| `PROVIDER_DATA_POLICIES` | Required reviewed permissions for each real provider |
+| `RAKUTEN_*`, `EBAY_EPN_CAMPAIGN_ID` | Gated Product Search and official EPN context |
+| `PUBLIC_BASE_URL`, `REDIRECT_*`, `OUTBOUND_CLICK_RETENTION_DAYS` | Optional signed redirects and click retention |
+| `FX_ENABLED`, `FX_REFRESH_SECONDS`, `FX_MAX_AGE_DAYS` | Shared ECB reference snapshots and display age limit |
+| `AMAZON_*` | Existing Creators adapter, pending access and tracking approval |
+| `BESTBUY_API_KEY`, `STRIPE_SECRET_KEY`, `WALLET_PAY_API_KEY` | Deferred integration inputs |
 
 For webhook mode, run the API with `TELEGRAM_MODE=webhook`, a random secret of at
 least 32 characters and the bot token. Configure Telegram's `setWebhook` for
@@ -315,7 +326,8 @@ calls and paid API credentials are never needed by CI.
    permission and policy review; there is no scraping/bypass engine in this release.
 3. Parse listing IDs locally, call fixed API hosts through `ProviderHTTP`, and use the
    public-IP transport. No automatic redirects, environment proxies or arbitrary hrefs.
-4. Register it in the composition root only when feature flag and credentials permit.
+4. Record its reviewed ProviderDataPolicy; register only when permissions, feature flag
+   and credentials permit. Capabilities must describe documented operations.
 5. Add stored HTTP fixtures plus malformed/timeout/identity/marketplace tests. Choose
    provider-specific quota values within the retailer's approved access limits.
 
@@ -333,8 +345,9 @@ refresh were verified separately from fixture tests on 2026-09-19. Current offic
 The [Amazon Creators API adapter](docs/amazon-setup.md) supports OAuth LwA 3.x,
 GetItems/SearchItems and OffersV2. It is disabled until both API access and separate
 Amazon approval for tracking are obtained. Live access remains unverified. Best Buy
-and authorized Rakuten/CJ/Awin feeds remain future contracts. Retailer-specific storage,
-history, display and affiliate conditions must be implemented before enabling access.
+and full CJ/Awin feeds remain future contracts. [Rakuten Product Search](docs/rakuten-setup.md)
+is implemented and fixture-tested, gated by credentials, partner MIDs and reviewed permissions.
+All real providers require explicit storage/history/tracking/affiliate policy configuration.
 
 ## Telegram Stars subscriptions
 
@@ -363,8 +376,9 @@ Automated payment tests spend no Stars; no real payment verification is claimed.
 
 ## Future integrations
 
-Offer columns separate direct URLs, affiliate URLs/network/click IDs. Ranking does not
-use commissions. Referral registration supports `?start=ref_CODE`, with unique user
+Offers separate nullable direct URLs from affiliate URLs/network metadata.
+[Outbound links and optional signed redirects](docs/affiliate-links.md) centralize selection
+and record clicks without Telegram/IP/User-Agent data. Ranking does not use commissions. Referral registration supports `?start=ref_CODE`, with unique user
 codes and one-time referrer attribution; reward/conversion workflows remain later work.
 
 ## Important limitations
@@ -373,12 +387,14 @@ codes and one-time referrer attribution; reward/conversion workflows remain late
   network failure. Logical events are idempotent; a timeout or crashed in-flight send
   becomes `uncertain` and is not automatically resent. Monitor/reconcile these rows.
 - Search and prices are native-currency values, excluding any guaranteed total shipping,
-  tax or FX conversion. Availability may be unknown. No title-only catalog merges.
+  tax or checkout FX. Optional ECB amounts are reference displays only. Availability may
+  be unknown. No title-only catalog merges.
 - An extreme drop requires a repeated observation. A currency change is quarantined
   indefinitely until reviewed; it never silently rewrites the historical currency.
 - WooCommerce and eBay variant buttons show up to 100 concrete combinations, eight per page,
   and expire after 15 minutes. Clothing search returns up to five offers per shop.
-  Amazon is implemented but disabled and unverified live; Best Buy/feeds remain contracts.
+  Amazon is implemented but disabled and unverified live; Best Buy and full Awin/CJ feeds
+  remain deferred. Rakuten/EPN monetization still needs live account validation.
 - Free has limited search/history and basic drop alerts. Existing paid-only preferences
   remain stored after downgrade and resume when the user has the required entitlement.
 - Shared offers use the fastest eligible tracker/watch interval. Future commercial

@@ -14,6 +14,7 @@ from pricehunter.db.models import StoreOffer
 from pricehunter.localization.languages import SUPPORTED_LANGUAGES
 from pricehunter.localization.messages import tr
 from pricehunter.providers.mock import MockStoreProvider
+from pricehunter.schemas.api import UserSettingsPatch
 from pricehunter.services.notification_service import NotificationService
 
 pytestmark = pytest.mark.integration
@@ -80,8 +81,14 @@ async def test_comparison_watch_and_exact_offer_flow_in_every_language(container
         assert tr(language, "comparison_best_label") in card.text
         assert "Demo Alpha" in card.text and "USD" in card.text
         await feed(action="watch", value=f"{alpha.product_id.hex}_EUR")
+        assert tr(language, "country_required") in transport.sent[-1].text
+        await feed(action="wmarket", value=f"{alpha.product_id.hex}_EUR_BE")
         assert tr(language, "watch_created", currency="EUR") in transport.sent[-1].text
         watch = (await container.watches.list(user.id))[0]
+        await container.users.settings(user.id, UserSettingsPatch(country_code="DE"))
+        await feed(action="wcompare", value=watch.id.hex)
+        assert tr(language, "market_context", country="BE") in transport.sent[-1].text
+        assert (await container.watches.get(user.id, watch.id)).market_country == "BE"
         await feed(action="besthist", value=f"{alpha.product_id.hex}_EUR")
         history = transport.sent[-1]
         assert "329" in history.text and "Demo Alpha" in history.text
@@ -115,10 +122,11 @@ async def test_comparison_watch_and_exact_offer_flow_in_every_language(container
         alert = transport.sent[-1]
         assert tr(language, "merchant_became_cheapest") in alert.text
         assert "319" in alert.text and "329" in alert.text and "Demo Beta" in alert.text
-        assert (
-            Action.unpack(alert.reply_markup.inline_keyboard[1][0].callback_data).value
-            == alpha.product_id.hex
-        )
+        assert tr(language, "market_context", country="BE") in alert.text
+        comparison_action = Action.unpack(alert.reply_markup.inline_keyboard[1][0].callback_data)
+        assert comparison_action.value == f"{alpha.product_id.hex}_BE"
+        await feed(action=comparison_action.action, value=comparison_action.value)
+        assert tr(language, "market_context", country="BE") in transport.sent[-1].text
         assert await notifier.send_pending() == 0
         async with container.sessions.begin() as session:
             await session.execute(

@@ -3,12 +3,14 @@ from uuid import UUID
 
 from pydantic import Field, field_validator
 
+from pricehunter.domain.markets import CountryCode
 from pricehunter.domain.products import Money
 from pricehunter.schemas.api import InputModel
 
 
 class WatchCreate(InputModel):
     product_id: UUID
+    market_country: CountryCode | None = None
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     target_price: Money | None = None
     notify_on_new_best: bool = True
@@ -30,6 +32,7 @@ class WatchPatch(InputModel):
 
 
 class WatchView(WatchCreate):
+    market_country: CountryCode
     id: UUID
     canonical_name: str
     enabled: bool

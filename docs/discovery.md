@@ -31,8 +31,9 @@ If EUR 299 is stale and EUR 319 is fresh, current best is EUR 319. With no fresh
 current best is null. `cheapest_known_offer` includes all states;
 `cheapest_stale_offer` separately identifies the cheapest timed-out observation.
 DTO `stale` means non-fresh, including failed; inspect `freshness` for the exact reason.
-Telegram labels freshness/age and offers a background refresh button. No FX conversion
-or shipping/tax/destination guarantee is implied.
+Telegram labels freshness/age and offers a background refresh button. M4A optionally
+adds [ECB reference displays](fx.md); they do not change native ranking or establish a
+shipping/tax/destination guarantee. Reviewed provider cache limits cap freshness.
 
 The reader uses three SQL queries for full summaries, bounded per-currency ranked
 offer bodies, and a separate paginated query. Product/currency indexes support those
@@ -43,8 +44,10 @@ an unbounded scan of offer timestamps. Readers never rely on the sweep to reject
 
 `ProductDiscovery` has a unique `(product_id, provider, country, currency)` key.
 One hundred watchers with the same context share one target and one provider search.
-Country is the watch owner's selected country, defaulting to BE; currency is the watch's
-native comparison currency. This context is not proof of shipping availability.
+Country is persisted as ProductWatch.market_country; currency is the watch's native
+comparison currency. Only legacy migration uses saved account country or BE. New watches
+require an explicit/saved country. Profile edits never retarget existing watches.
+This context is not proof of shipping availability. See [M4A](international-commerce.md).
 
 The existing entitlement policy selects enabled watches inside the current shared
 watch/tracker quota. For each context the fastest eligible plan sets the cadence:
@@ -194,3 +197,12 @@ Acceptance covers the old stale EUR 299 vs fresh EUR 329/345, discovery at EUR 3
 expiry/recovery through EUR 320 then EUR 310; one transition/alert per accepted change.
 See [verification](verification.md) for executed checks and remaining live integration gates.
 Amazon remains disabled while approval is pending; fixture tests do not claim live access.
+
+## M4A provider permissions
+
+Discovery requires reviewed tracking permission; refresh scheduling additionally needs
+refresh permission and a real REFRESH capability. Rakuten uses exact brand/model phrase
+search with returned validated UPC evidence, never an invented GTIN query. It has no
+item refresh capability; search-only offers expire and are evicted under their cache policy.
+Pagination and retries consume the shared per-request Rakuten budget. See
+[Rakuten setup](rakuten-setup.md) and [provider policy](international-commerce.md).

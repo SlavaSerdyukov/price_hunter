@@ -106,6 +106,7 @@ async def test_hundred_watchers_share_one_target_and_concurrent_lease(container)
             await session.flush()
             session.add(
                 ProductWatch(
+                    market_country="BE",
                     user_id=user.id,
                     product_id=a.product_id,
                     currency="EUR",
@@ -289,7 +290,9 @@ async def test_unsupported_identity_market_and_removed_provider(container):
         MockStoreProvider()._offer("headphones").model_copy(update={"brand": None, "model": None})
     )
     a = await container.products.persist(data)
-    await container.watches.create(user.id, WatchCreate(product_id=a.product_id, currency="EUR"))
+    await container.watches.create(
+        user.id, WatchCreate(market_country="BE", product_id=a.product_id, currency="EUR")
+    )
     p = container.registry.get("mock")
     p.discovery_countries = frozenset({"US"})
     assert await container.discovery.synchronize() == 0
@@ -427,7 +430,7 @@ async def test_ebay_discovery_fetches_actual_identity_instead_of_assuming_query_
             await session.execute(update(User).values(country_code="DE"))
         a = await container.products.persist(adapter._normalize(payload, "DE"))
         await container.watches.create(
-            user.id, WatchCreate(product_id=a.product_id, currency="EUR")
+            user.id, WatchCreate(market_country="DE", product_id=a.product_id, currency="EUR")
         )
         new = dict(
             payload,

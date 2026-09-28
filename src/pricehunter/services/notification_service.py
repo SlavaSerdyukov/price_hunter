@@ -7,11 +7,14 @@ from uuid import UUID
 import structlog
 from sqlalchemy import select, update
 
+from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import NotificationEvent, ProductWatch, StoreOffer, Tracker, User
+from pricehunter.db.models import NotificationEvent, ProductWatch, Store, StoreOffer, Tracker, User
 from pricehunter.db.session import SessionFactory
+from pricehunter.domain.errors import PriceHunterError
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.outbound_service import OutboundLinkService
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,8 @@ class Delivery:
     store: str = ""
     previous_price: Decimal | None = None
     previous_store: str = ""
+    attribution: str | None = None
+    market_country: str | None = None
 
 
 class RetryDelivery(Exception):
@@ -45,9 +50,15 @@ class NotificationSender(Protocol):
 
 class NotificationService:
     def __init__(
-        self, sessions: SessionFactory, sender: NotificationSender, entitlements: EntitlementService
+        self,
+        sessions: SessionFactory,
+        sender: NotificationSender,
+        entitlements: EntitlementService,
+        settings: Settings | None = None,
     ) -> None:
         self.sessions, self.sender, self.entitlements = sessions, sender, entitlements
+        self.settings = settings or Settings(_env_file=None)
+        self.outbound = OutboundLinkService(self.settings)
 
     async def claim(self) -> Delivery | None:
         async with self.sessions.begin() as session:
@@ -83,7 +94,8 @@ class NotificationService:
                     )
                 )
                 snapshot = event.snapshot
-                title, url = str(snapshot["title"]), str(snapshot["url"])
+                title = str(snapshot["title"])
+                offer = await session.get(StoreOffer, UUID(str(snapshot["offer_id"])))
                 product_id = watch.product_id
             else:
                 assert event.tracker_id is not None
@@ -98,13 +110,28 @@ class NotificationService:
                         Tracker.id.in_(self.entitlements.scheduled_tracker_ids(utcnow())),
                     )
                 )
-                title, url, product_id, snapshot = (
-                    offer.title,
-                    offer.affiliate_url or offer.direct_url,
-                    None,
-                    {},
-                )
+                title, product_id, snapshot = offer.title, None, {}
             assert user is not None
+            store = await session.get(Store, offer.store_id) if offer else None
+            if offer is None or store is None:
+                event.status = "cancelled"
+                return None
+            try:
+                policy = self.settings.data_policy(store.provider_type)
+                policy.require("tracking_allowed")
+                if event.event_type == "historical_low":
+                    policy.require("price_history_allowed")
+                url = self.outbound.link(
+                    offer,
+                    store,
+                    surface="notification",
+                    market_country=watch.market_country
+                    if event.product_watch_id and watch is not None
+                    else user.country_code,
+                )
+            except PriceHunterError:
+                event.status = "cancelled"
+                return None
             rights = (await self.entitlements.for_user(user.id, session=session)).entitlements
             feature = {
                 "target_reached": Feature.TARGET_ALERTS,
@@ -132,6 +159,8 @@ class NotificationService:
                 price=event.price,
                 currency=event.currency,
                 url=url,
+                attribution=policy.display_attribution_required,
+                market_country=watch.market_country if event.product_watch_id and watch else None,
                 product_id=product_id,
                 store=str(snapshot.get("store", "")),
                 previous_price=Decimal(snapshot["previous_price"])

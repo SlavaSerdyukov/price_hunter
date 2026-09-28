@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import nullcontext
 from uuid import UUID
 
 import structlog
@@ -45,7 +46,14 @@ class SearchService:
 
         async def one(provider: StoreProvider) -> tuple[list[ProductOfferData], str | None]:
             try:
-                async with self.limiter.provider(provider.name):
+                async with (
+                    asyncio.timeout(self.limiter.settings.provider_timeout_seconds),
+                    (
+                        nullcontext()
+                        if provider.manages_request_limits
+                        else self.limiter.provider(provider.name)
+                    ),
+                ):
                     return await provider.search(query, country=country, currency=currency), None
             except Exception:
                 structlog.get_logger().warning("search_provider_failed", provider=provider.name)

@@ -11,7 +11,12 @@ from pricehunter.db.base import utcnow
 from pricehunter.db.models import NotificationEvent, Product, ProductWatch, Store, StoreOffer, User
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.comparison import ComparisonOffer, CurrencyComparison
-from pricehunter.domain.errors import ProductNotFoundError, SubscriptionLimitReachedError
+from pricehunter.domain.errors import (
+    CountryRequiredError,
+    ProductNotFoundError,
+    ProviderPolicyError,
+    SubscriptionLimitReachedError,
+)
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.schemas.watches import WatchCreate, WatchPatch, WatchView
 from pricehunter.services.best_price_service import BestPriceService
@@ -24,16 +29,20 @@ class ProductWatchService:
         self, sessions: SessionFactory, entitlements: EntitlementService, settings: Settings
     ) -> None:
         self.sessions, self.entitlements, self.settings = sessions, entitlements, settings
-        self.reader = ComparisonReader(settings)
+        self.reader = ComparisonReader(settings, permission="tracking_allowed")
         self.best_prices = BestPriceService(sessions, entitlements, settings)
 
     async def create(self, user_id: UUID, data: WatchCreate) -> WatchView:
         async with self.sessions.begin() as session:
-            if await session.get(User, user_id, with_for_update=True) is None:
+            user = await session.get(User, user_id, with_for_update=True)
+            if user is None:
                 raise ProductNotFoundError()
             product = await session.get(Product, data.product_id, with_for_update=True)
             if product is None:
                 raise ProductNotFoundError()
+            market = data.market_country or user.country_code
+            if market is None:
+                raise CountryRequiredError()
             rights = (await self.entitlements.for_user(user_id, session=session)).entitlements
             rights.require(Feature.COMPARISON_SEARCH)
             if data.target_price is not None:
@@ -43,6 +52,7 @@ class ProductWatchService:
                     ProductWatch.user_id == user_id,
                     ProductWatch.product_id == product.id,
                     ProductWatch.currency == data.currency,
+                    ProductWatch.market_country == market,
                 )
             )
             if existing:
@@ -51,11 +61,21 @@ class ProductWatchService:
                 raise SubscriptionLimitReachedError()
             summary = await self.reader.summary(session, product.id, utcnow(), data.currency)
             if not summary.groups:
+                if await session.scalar(
+                    select(StoreOffer.id)
+                    .where(
+                        StoreOffer.product_id == product.id,
+                        StoreOffer.currency == data.currency,
+                    )
+                    .limit(1)
+                ):
+                    raise ProviderPolicyError()
                 raise ProductNotFoundError()
             best = summary.groups[0].best_available_offer
             watch = ProductWatch(
                 user_id=user_id,
-                **data.model_dump(),
+                **data.model_dump(exclude={"market_country"}),
+                market_country=market,
                 best_offer_id=best.offer_id if best else None,
                 best_price=best.price if best else None,
                 best_absence_reason=self.absence(summary.groups[0]) if not best else None,
@@ -94,6 +114,7 @@ class ProductWatchService:
             id=watch.id,
             product_id=product.id,
             canonical_name=product.canonical_name,
+            market_country=watch.market_country,
             currency=watch.currency,
             target_price=watch.target_price,
             enabled=watch.enabled,
@@ -119,6 +140,22 @@ class ProductWatchService:
                 )
             ).all()
             return [await self._view(session, watch, product) for watch, product in rows]
+
+    async def get(self, user_id: UUID, watch_id: UUID) -> WatchView:
+        async with self.sessions() as session:
+            row = (
+                await session.execute(
+                    select(ProductWatch, Product)
+                    .join(Product)
+                    .where(
+                        ProductWatch.id == watch_id,
+                        ProductWatch.user_id == user_id,
+                    )
+                )
+            ).one_or_none()
+            if row is None:
+                raise ProductNotFoundError()
+            return await self._view(session, row[0], row[1])
 
     async def update(self, user_id: UUID, watch_id: UUID, patch: WatchPatch) -> WatchView:
         async with self.sessions.begin() as session:
@@ -271,6 +308,7 @@ class ProductWatchService:
                         "offer_id": str(best.offer_id),
                         "store": best.store,
                         "country": best.store_country,
+                        "market_country": watch.market_country,
                         "url": best.url,
                         "previous_price": str(previous_price)
                         if previous_price is not None

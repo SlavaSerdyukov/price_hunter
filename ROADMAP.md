@@ -1,6 +1,6 @@
 # PriceHunter roadmap
 
-M0, M1, M2, M3A and M3B are implemented and tested. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
+M0, M1, M2, M3A, M3B and M4A are implemented. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
 
 ## M0 — Foundation — implemented
 
@@ -72,14 +72,31 @@ See [comparison semantics](docs/comparison.md) and [verification](docs/verificat
 
 See [discovery operations](docs/discovery.md) and [verification](docs/verification.md).
 
-## M4 — International expansion
+## M4A — International commerce — implementation and fixtures
 
-- More locales/marketplaces, explicit FX source/timestamps and shipping/tax context.
-- Authorized Rakuten/CJ/Awin feeds, fashion variants, retention rollups.
+- [x] Durable watch market country, country picker, same-currency market coexistence.
+- [x] Legacy country migration, nullable direct URLs, merchant IDs and delivery placeholders.
+- [x] Reviewed provider permissions and bounded search-only catalog cache eviction.
+- [x] Official eBay EPN context and returned affiliate URLs; no user-specific shared reference.
+- [x] Gated Rakuten tokens/XML/pagination/merchant/price/UPC normalization; honest capabilities.
+- [x] Central outbound policy, signed expiring redirects, minimal clicks and retention.
+- [x] Shared persisted ECB reference rates, approximate displays, staleness and native ranking.
+- [x] Seven locales, migration preservation and fixture acceptance.
+- [ ] Live Rakuten account/partner/currency/link verification and EPN attribution/commission check.
+- [ ] Operator review/configuration of each real provider's actual data-use agreement before activation.
+
+See [international commerce](docs/international-commerce.md) and [verification](docs/verification.md).
+
+## M4B — Delivery context and reviewed feed onboarding — proposed
+
+- Explicit delivery country/postal input and documented shipping/tax/stock by destination.
+- Missing-cost semantics and separately labeled delivered-cost comparison when complete.
+- Authorized Awin/CJ feeds with identifier/fashion-variant provenance and contract retention.
+- Preserve native currency groups and deterministic matching; no automatic product merge.
 
 ## M5 — Platform
 
 - Mini App, web/mobile clients, external billing and public API credentials.
-- Affiliate attribution, referral conversion and B2B reports.
+- Sale/conversion attribution, referral rewards and B2B reports.
 
 See README for tested release capabilities and explicit limitations.

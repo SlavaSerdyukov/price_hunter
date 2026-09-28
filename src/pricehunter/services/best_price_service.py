@@ -4,12 +4,12 @@ from uuid import UUID
 
 import structlog
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import BestPriceEvent, Product, ProductBestState
+from pricehunter.db.models import BestPriceEvent, Product, ProductBestState, Store, StoreOffer
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.comparison import ComparisonOffer
 from pricehunter.domain.errors import ProductNotFoundError
@@ -41,7 +41,7 @@ class BestPriceService:
         self, sessions: SessionFactory, entitlements: EntitlementService, settings: Settings
     ) -> None:
         self.sessions, self.entitlements, self.settings = sessions, entitlements, settings
-        self.reader = ComparisonReader(settings)
+        self.reader = ComparisonReader(settings, permission="price_history_allowed")
 
     async def record(
         self,
@@ -61,6 +61,8 @@ class BestPriceService:
         groups = {g.currency: g for g in summary.groups}
         for currency in sorted(states.keys() | groups.keys()):
             best = groups[currency].best_available_offer if currency in groups else None
+            if best and not self.settings.data_policy(best.provider).price_history_allowed:
+                continue
             state = states.get(currency)
             is_new = state is None
             if state is None:
@@ -122,6 +124,25 @@ class BestPriceService:
             conditions = [
                 BestPriceEvent.product_id == product_id,
                 BestPriceEvent.currency == currency,
+                or_(
+                    BestPriceEvent.store_offer_id.is_(None),
+                    BestPriceEvent.store_offer_id.in_(
+                        select(StoreOffer.id)
+                        .join(Store)
+                        .where(
+                            Store.provider_type.in_(
+                                [
+                                    name
+                                    for name, policy in {
+                                        "mock": self.settings.data_policy("mock"),
+                                        **self.settings.provider_data_policies,
+                                    }.items()
+                                    if policy.price_history_allowed
+                                ]
+                            )
+                        )
+                    ),
+                ),
             ]
             recent = list(
                 await session.scalars(

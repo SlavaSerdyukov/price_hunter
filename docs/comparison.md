@@ -55,8 +55,9 @@ per search; each adapter may impose a smaller result limit.
 
 `GET /api/v1/products/{id}` returns ten offer previews. The `/offers?page=0&size=10`
 endpoint pages up to 50 offers and includes summaries across **all** eligible known
-offers. Store identity/name/country come from `Store`, not a guessed hostname. Disabled
-or unsupported stores are excluded. Offer DTOs add `freshness` (`fresh`, `stale`, `failed`),
+offers. Merchant identity/name come from `Store`, not a guessed hostname. Market comes
+from provider evidence when supplied, otherwise Store.country. Disabled,
+unsupported and policy-ineligible offers are excluded. Offer DTOs add `freshness` (`fresh`, `stale`, `failed`),
 `age_seconds`, and `stale` (true for any non-fresh value), alongside `last_checked_at`.
 Currency summaries add fresh/stale/failed counts and `cheapest_stale_offer`.
 Product DTOs include bounded provider/country/currency `discovery` status entries.
@@ -69,14 +70,17 @@ Recommendations and spread are calculated separately for each native currency:
 - `price_spread` is highest minus lowest **fresh in-stock** item price; one available listing
   gives zero, no available listings gives null.
 - With multiple currencies, top-level best/spread are null. Use `currency_groups`;
-  there is no FX rate and EUR is never compared numerically against USD.
+  native EUR is never compared numerically against native USD. Optional timestamped
+  [ECB reference conversions](fx.md) are display values and do not change ranking.
 - Unknown `shipping_price`, `delivery_country`, `tax_included` and `total_price` remain
   null. Listed item price is not a promise of final delivered cost.
 
 Products rank by exact model/GTIN relevance, availability, confidence, number of stores,
 then stable title/UUID ties. Offer pages sort by currency, freshness, availability, price, store and ID.
 SQL counts and window ranks build whole-product summaries in three queries; a complete
-comparison uses six queries regardless of 100, 500 or 1000 listings, excluding entitlements.
+comparison uses a bounded number of queries regardless of 100, 500 or 1000 listings.
+M3B's core aggregation used six; M4A adds account context and, when enabled, a shared
+persisted FX snapshot read, without per-offer queries or network calls.
 At most 50 paginated offer bodies and three summary offers per currency are materialized.
 No cross-currency price ranking or affiliate commission influences the result.
 
@@ -85,12 +89,14 @@ No cross-currency price ranking or affiliate commission influences the result.
 Create a watch with `POST /api/v1/product-watches`:
 
 ```json
-{"product_id": "PRODUCT_UUID", "currency": "EUR", "target_price": "310.00"}
+{"product_id": "PRODUCT_UUID", "market_country": "BE", "currency": "EUR", "target_price": "310.00"}
 ```
 
 Omit the optional target for an ordinary watch. Currency must have a known eligible
 offer. Creation snapshots the current best without sending an alert; repeated creation
-returns the same user/product/currency watch. `GET` lists owned watches, `PATCH /{id}`
+returns the same user/product/market/currency watch. An omitted market uses the saved
+account country; without either, creation requires country selection. Profile changes
+preserve existing watches and their discovery markets. `GET` lists owned watches, `PATCH /{id}`
 changes target/flags/enabled, and `DELETE /{id}` is idempotent and ownership scoped.
 `target_price: null` clears the target. `scheduled` distinguishes manual pause from
 quota pause. The Telegram card has **Track best** per currency; **All offers** retains
@@ -175,11 +181,13 @@ or restore the pre-upgrade backup; never force a downgrade over live watch data.
 
 Matching deliberately favors duplicates over false positives. Existing WooCommerce
 payloads often omit global/manufacturer identifiers, so many unrelated stores cannot
-be reliably matched yet. ASIN is Amazon-specific. No new retailer integrations or LLM
-matching were added. Summaries use bounded SQL aggregation and paginated offer bodies.
+be reliably matched yet. ASIN is Amazon-specific. Rakuten adds a credential/policy-gated
+source without changing deterministic matching. Summaries use bounded SQL aggregation
+and paginated offer bodies.
 
 Operator diagnostics and read-only duplicate candidates are available; merging is deferred
 until audited identity redirects and watch/outbox/history reconciliation are designed.
-See [operations and limitations](discovery.md). M4 should add delivery/shipping/tax context
-and timestamped FX without weakening native-currency comparisons. Amazon activation
+See [operations and limitations](discovery.md). [M4A](international-commerce.md) adds
+durable markets, affiliate links and timestamped reference FX. M4B should add confirmed
+delivery/shipping/tax context without weakening native-currency comparisons. Amazon activation
 retains its separate approval gate.

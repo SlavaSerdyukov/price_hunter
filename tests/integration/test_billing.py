@@ -616,8 +616,15 @@ async def test_real_store_interval_recalculates_on_expiry_and_shared_paid_user(
     billing, monkeypatch
 ):
     from pricehunter.db.models import Store, StoreOffer
+    from pricehunter.domain.provider_policy import SYNTHETIC_POLICY
 
     c, _ = billing
+    c.settings.provider_data_policies["test_real"] = SYNTHETIC_POLICY
+    from copy import copy
+
+    provider = copy(c.registry.get("mock"))
+    provider.name = "test_real"
+    c.registry.providers["test_real"] = provider
     user, _, payment = await purchased(billing)
     offer = await c.products.resolve("https://mock.pricehunter.test/products/headphones", user.id)
     await c.trackers.create(user.id, TrackerCreate(store_offer_id=offer.id))
