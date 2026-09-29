@@ -1,8 +1,9 @@
-# Product comparison — M3A / M3B
+# Product comparison — M3A through M4A.1
 
 A `Product` is one canonical purchasable product/variant. A `StoreOffer` is a listing
-in a persisted `Store` marketplace. `Tracker` watches one listing; `ProductWatch`
-watches a canonical product's best available price in one selected currency.
+in a persisted `Store` merchant/marketplace and one catalog market. `Tracker` watches
+one listing; `ProductWatch` watches a global canonical product's best available price
+in one selected market and native currency.
 
 ## Canonical identity
 
@@ -38,8 +39,11 @@ can share them. Index source records the first contributing store. Match decisio
   evidence and unique product/listing keys serialize concurrent provider discoveries.
   New observations lock the Product before updating offers/watch state.
 
-Existing listing resolution reuses stored prices and identity; the refresh pipeline
-owns price changes. M3B adds diagnostics, but does not automatically merge legacy Products.
+Existing listing resolution preserves canonical identity. REFRESH-capable providers
+keep worker-owned prices when rediscovered. An explicit SEARCH_SNAPSHOT ingestion mode
+lets SNAPSHOT_REFRESH providers update mutable listing fields after resolver validation;
+it never silently rewrites product/store/external identity. See [M4A.1](m4a1-market-correctness.md).
+M3B adds diagnostics, but does not automatically merge legacy Products.
 The resumable backfill indexes their evidence without changing IDs, trackers or history.
 Provider-specific opaque variation IDs remain conservative barriers to cross-store
 matching; missing/incompatible metadata can intentionally leave duplicates.
@@ -53,16 +57,19 @@ products, not individual offers. Successful providers remain usable when another
 `unavailable_providers` reports failures. At most 100 results per provider are persisted
 per search; each adapter may impose a smaller result limit.
 
-`GET /api/v1/products/{id}` returns ten offer previews. The `/offers?page=0&size=10`
+`GET /api/v1/products/{id}?country=BE` returns ten offer previews. The `/offers?page=0&size=10&country=BE`
 endpoint pages up to 50 offers and includes summaries across **all** eligible known
-offers. Merchant identity/name come from `Store`, not a guessed hostname. Market comes
-from provider evidence when supplied, otherwise Store.country. Disabled,
+offers in that market. Country uses explicit input, otherwise the saved profile;
+without either, user-facing search/comparison/history/refresh return `country_required`.
+Search reloads shared canonical products with its exact requested country, so a later DE
+search cannot contaminate an earlier BE result. Merchant identity/name come from `Store`;
+offer market always comes from StoreOffer.market_country. Disabled,
 unsupported and policy-ineligible offers are excluded. Offer DTOs add `freshness` (`fresh`, `stale`, `failed`),
 `age_seconds`, and `stale` (true for any non-fresh value), alongside `last_checked_at`.
 Currency summaries add fresh/stale/failed counts and `cheapest_stale_offer`.
 Product DTOs include bounded provider/country/currency `discovery` status entries.
 
-Recommendations and spread are calculated separately for each native currency:
+Recommendations and spread are calculated separately for each market/native currency:
 
 - `best_available_offer` is the lowest priced **fresh** confirmed `IN_STOCK` listing; null if none exists.
 - `UNKNOWN` and `OUT_OF_STOCK` never displace a confirmed available recommendation.
@@ -105,13 +112,13 @@ Target/notification-flag editing for watches is currently via REST.
 
 Watches and exact trackers share the existing plan's stored-record quota and oldest-
 enabled scheduling policy. A watch consumes one quota slot, while all known eligible
-offers in its chosen currency participate in the shared refresh worker. The fastest
+offers in its chosen market and currency participate in the shared refresh worker. The fastest
 eligible subscriber's interval wins. A new/resumed watch can advance a slower existing
 schedule. Known-price refresh and autonomous discovery have separate schedules. Discovery
 shares one target per Product/provider/country/currency; newly attached offers participate
 immediately in comparison, watch evaluation and the normal refresh pipeline.
 
-Each accepted observation or discovery batch atomically updates the watch's best state and emits at most
+Each accepted observation or discovery batch atomically updates that market's watch best state and emits at most
 one prioritized event: target crossing, return of an available best, merchant change,
 ordinary best-price drop. `notify_on_new_best` controls merchant/restock alerts;
 `notify_on_price_drop` controls ordinary drops. Targets and restock alerts retain the
@@ -126,23 +133,30 @@ snapshot and unique `(watch UUID, evaluation sequence)` deduplication key. Repla
 refresh or concurrent discovery does not repeat a logical event. Offer observations
 remain the exact-listing history source. `ProductBestState` and `BestPriceEvent` store
 only meaningful per-currency best transitions. The bounded, authenticated endpoint
-`GET /api/v1/products/{id}/best-price-history?currency=EUR&limit=50` returns chronological
+`GET /api/v1/products/{id}/best-price-history?country=BE&currency=EUR&limit=50` returns chronological
 points, current best and the minimum observed best in the plan window. Free/Pro/Power
 default to 7/90/365 days. See [history and retention](discovery.md#history-and-retention).
-`POST /api/v1/products/{id}/refresh` returns HTTP 202 with `accepted` and `queued_count`;
-it schedules stale/failed listings without waiting for retailer HTTP calls. Ambiguous Telegram sends retain the existing `uncertain` delivery semantics.
+`POST /api/v1/products/{id}/refresh?country=BE` returns HTTP 202 with `accepted`,
+`queued_count` and `market_country`; it schedules stale/failed listings only in that
+market, without retailer HTTP in the request. History uses
+`/best-price-history?country=BE&currency=EUR`. Its series is product/market/currency;
+ambiguous pre-M4A.1 global events remain stored with NULL market and are excluded.
+Catalog comparison, watch comparison/evaluation and history apply catalog, tracking
+and history permission respectively. Ambiguous Telegram sends retain the existing
+`uncertain` delivery semantics.
 
 ## Deterministic demo
 
-With the mock provider enabled, search `/search Sony WH-1000XM6`:
+With the mock provider enabled, choose DE in settings and search `/search Sony WH-1000XM6`:
 
 - One black product has Demo Alpha EUR 329, Demo Beta EUR 345, cheaper unavailable/
-  unknown listings and a separate USD group. EUR available spread is 16.
+  unknown listings. EUR available spread is 16. Its US/USD offer is visible in the US
+  market, not in the German comparison; native currency is independent of market.
 - The white variant and conflicting-GTIN item remain separate products.
 - Choose **Track best** in EUR. On refresh Alpha becomes EUR 349 and Beta EUR 319;
   the watch follows Beta and emits `merchant_became_cheapest` once. Depending on refresh
   completion order an intermediate legitimate best may be observed.
-- `/search ZX200` demonstrates brand/model matching without GTIN and separate 128/256 GB
+- In the BE market, `/search ZX200` demonstrates brand/model matching without GTIN and separate 128/256 GB
   variants. Demo prices are fixtures, not retailer quotes.
 
 Adapter fixtures additionally cover eBay marketplaces, Amazon ASIN/variant matching,

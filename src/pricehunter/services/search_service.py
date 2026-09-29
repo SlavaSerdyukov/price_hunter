@@ -7,11 +7,13 @@ from pydantic import BaseModel
 
 from pricehunter.core.limits import RateLimiter
 from pricehunter.domain.comparison import ComparisonProduct, comparison_rank
+from pricehunter.domain.ingestion import search_ingestion
 from pricehunter.domain.products import ProductOfferData
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.providers.base import StoreProvider
 from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.market_context import user_market
 from pricehunter.services.product_service import ProductService
 
 
@@ -39,6 +41,8 @@ class SearchService:
         country: str | None = None,
         currency: str | None = None,
     ) -> SearchResult:
+        async with self.products.sessions() as session:
+            country = await user_market(session, user_id, country)
         await self.limiter.user(user_id)
         limits = (await self.entitlements.for_user(user_id)).entitlements
         limits.require(Feature.COMPARISON_SEARCH)
@@ -67,12 +71,24 @@ class SearchService:
         )
         unavailable = {name for _, name in responses if name}
         for data in incoming:
+            if data.country != country:
+                continue
             try:
-                persisted.add((await self.products.persist(data)).product_id)
+                persisted.add(
+                    (
+                        await self.products.persist(
+                            data,
+                            mode=search_ingestion(self.registry.get(data.provider).capabilities),
+                        )
+                    ).product_id
+                )
             except Exception:
                 unavailable.add(data.provider)
                 structlog.get_logger().warning("search_persistence_failed", provider=data.provider)
-        comparisons = [await self.products.product(product_id, user_id) for product_id in persisted]
+        comparisons = [
+            await self.products.product(product_id, user_id, market_country=country)
+            for product_id in persisted
+        ]
         comparisons.sort(key=lambda product: comparison_rank(product, query))
         return SearchResult(
             products=comparisons[: limits.search_result_limit],

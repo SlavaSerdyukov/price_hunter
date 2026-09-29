@@ -23,9 +23,16 @@ Send this to authenticated `POST /api/v1/product-watches`; watch responses inclu
 the persisted market. Market cannot be patched: create a separate watch deliberately.
 Exact-offer trackers continue to represent one merchant listing.
 
+Canonical Product is global; Store identifies the merchant. StoreOffer.market_country
+is the authoritative catalog context, supplied by ProductOfferData.country. A shared
+merchant/MID can have separate offers in BE and DE, even with the same external ID.
+Store.country remains primary/legacy integration context and is not a comparison filter.
+
 Market identifies the retailer catalog to query. It does **not** establish delivery
-eligibility. Comparison/history still group all known matching offers by native
-currency, rather than claiming a cheapest deliverable offer in that country.
+eligibility. Comparison/history now filter by market first, then group by native
+currency. BE/EUR and DE/EUR cannot supply each other's best price, schedule or alert.
+Authenticated search, product, offers, history and refresh accept validated `country`;
+explicit country overrides the saved profile, and neither means `country_required`.
 StoreOffer has optional delivery_country, postal_code, shipping_price and tax
 columns for M4B; M4A does not populate an invented delivered total.
 
@@ -77,7 +84,9 @@ for permanent price history or Telegram alerts.
 
 Rakuten can run as reviewed search-only catalog data with history/tracking/refresh
 disabled. Such offers do not create price observations, watches or automatic item
-refreshes. Their unknown stock cannot win the current available-price ranking.
+refreshes. Repeat search updates their current snapshot safely through an explicit
+SNAPSHOT_REFRESH capability; it does not accumulate historical minima/counters.
+Their unknown stock cannot win the current available-price ranking.
 Unreviewed legacy data is hidden from current comparison and refresh scheduling;
 the migration does not erase historical data. Review retention before deployment.
 
@@ -103,7 +112,17 @@ placeholders, OutboundClick and FxRate. All M3B and billing records are preserve
 Downgrade refuses affiliate-only offers, multiple-market watches, click or FX data
 until exported/reconciled; it never fabricates missing direct URLs.
 
-The existing migration-verifier command now covers M3A → real M3B → M4A:
+M4A.1 migration `b7c21a48d903` adds required offer market: valid metadata market first,
+otherwise Store.country. It adds `(product_id, market_country, currency)` indexing and
+market-aware listing/best-series uniqueness. All old best events keep NULL market;
+their global comparison scope cannot be inferred from the winning merchant. Old
+best-state IDs are retained as inactive NULL-market rows. Market-specific history
+excludes these legacy events. Existing watches are marked for silent baseline rebuild
+by bounded maintenance; IDs/settings remain, and rebuild sends no price-change alert.
+New events have a real market and independent sequence. Downgrade refuses scoped history,
+source-versioned snapshots or listing identities that cannot fit the former schema.
+
+The existing migration-verifier command now covers M3A → real M3B → M4A → M4A.1:
 
 ```bash
 uv run python scripts/verify_m3b_migration.py

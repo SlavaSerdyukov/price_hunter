@@ -23,6 +23,7 @@ class OfferView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     product_id: UUID
+    market_country: CountryCode
     title: str
     store: str = ""
     attribution: str | None = None

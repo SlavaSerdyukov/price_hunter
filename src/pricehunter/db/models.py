@@ -120,14 +120,18 @@ class ProductIdentifier(UUIDPrimaryKey, Base):
 class StoreOffer(UUIDPrimaryKey, Timestamps, Base):
     __tablename__ = "store_offers"
     __table_args__ = (
-        UniqueConstraint("store_id", "external_id"),
+        UniqueConstraint("store_id", "external_id", "market_country"),
         CheckConstraint("price > 0", name="positive_price"),
+        CheckConstraint("market_country ~ '^[A-Z]{2}$'", name="offer_market_country"),
         Index("ix_offers_due", "next_check_at"),
         Index("ix_offers_product_currency", "product_id", "currency"),
+        Index("ix_offers_product_market_currency", "product_id", "market_country", "currency"),
     )
     product_id: Mapped[UUID] = mapped_column(ForeignKey("products.id"), index=True)
     store_id: Mapped[UUID] = mapped_column(ForeignKey("stores.id"))
     external_id: Mapped[str] = mapped_column(String(200))
+    market_country: Mapped[str] = mapped_column(String(2))
+    source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     url: Mapped[str] = mapped_column(String(2048))
     direct_url: Mapped[str | None] = mapped_column(String(2048))
     affiliate_url: Mapped[str | None] = mapped_column(String(2048))
@@ -417,10 +421,14 @@ class ProductDiscovery(UUIDPrimaryKey, Timestamps, Base):
 class ProductBestState(UUIDPrimaryKey, Base):
     __tablename__ = "product_best_states"
     __table_args__ = (
-        UniqueConstraint("product_id", "currency"),
+        UniqueConstraint(
+            "product_id", "market_country", "currency", postgresql_nulls_not_distinct=True
+        ),
+        CheckConstraint("market_country ~ '^[A-Z]{2}$'", name="best_state_market_country"),
         Index("ix_best_state_expiry", "next_evaluation_at"),
     )
     product_id: Mapped[UUID] = mapped_column(ForeignKey("products.id"), index=True)
+    market_country: Mapped[str | None] = mapped_column(String(2))
     currency: Mapped[str] = mapped_column(String(3))
     store_offer_id: Mapped[UUID | None] = mapped_column(ForeignKey("store_offers.id"))
     price: Mapped[Decimal | None] = mapped_column(MONEY)
@@ -432,10 +440,18 @@ class ProductBestState(UUIDPrimaryKey, Base):
 class BestPriceEvent(UUIDPrimaryKey, Base):
     __tablename__ = "best_price_events"
     __table_args__ = (
-        UniqueConstraint("product_id", "currency", "sequence"),
-        Index("ix_best_history", "product_id", "currency", "observed_at"),
+        UniqueConstraint(
+            "product_id",
+            "market_country",
+            "currency",
+            "sequence",
+            postgresql_nulls_not_distinct=True,
+        ),
+        CheckConstraint("market_country ~ '^[A-Z]{2}$'", name="best_event_market_country"),
+        Index("ix_best_history", "product_id", "market_country", "currency", "observed_at"),
     )
     product_id: Mapped[UUID] = mapped_column(ForeignKey("products.id"))
+    market_country: Mapped[str | None] = mapped_column(String(2))
     currency: Mapped[str] = mapped_column(String(3))
     sequence: Mapped[int]
     store_offer_id: Mapped[UUID | None] = mapped_column(ForeignKey("store_offers.id"))

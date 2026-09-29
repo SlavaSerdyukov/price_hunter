@@ -116,6 +116,17 @@ class NotificationService:
             if offer is None or store is None:
                 event.status = "cancelled"
                 return None
+            if (
+                event.product_watch_id
+                and watch is not None
+                and (
+                    watch.market_country != offer.market_country
+                    or event.snapshot.get("market_country", watch.market_country)
+                    != watch.market_country
+                )
+            ):
+                event.status = "cancelled"
+                return None
             try:
                 policy = self.settings.data_policy(store.provider_type)
                 policy.require("tracking_allowed")
@@ -127,7 +138,7 @@ class NotificationService:
                     surface="notification",
                     market_country=watch.market_country
                     if event.product_watch_id and watch is not None
-                    else user.country_code,
+                    else offer.market_country,
                 )
             except PriceHunterError:
                 event.status = "cancelled"

@@ -50,6 +50,9 @@ async def test_market_is_durable_and_same_currency_watches_coexist(container):
         await container.watches.create(
             user.id, WatchCreate(product_id=offer.product_id, currency="EUR")
         )
+    await container.products.persist(
+        MockStoreProvider()._offer("sony-a").model_copy(update={"country": "BE"})
+    )
     await container.users.settings(user.id, UserSettingsPatch(country_code="BE"))
     be = await container.watches.create(
         user.id, WatchCreate(product_id=offer.product_id, currency="EUR")
@@ -75,8 +78,10 @@ async def test_market_is_durable_and_same_currency_watches_coexist(container):
 
 
 async def test_watch_api_requires_country_and_exposes_persisted_market(container):
-    offer = await persist(container, "sony-a")
-    async with await api_client(container, 777) as client:
+    offer = await container.products.persist(
+        MockStoreProvider()._offer("sony-a").model_copy(update={"country": "CA"})
+    )
+    async with await api_client(container, 777, country=None) as client:
         data = {"product_id": str(offer.product_id), "currency": "EUR"}
         response = await client.post("/api/v1/product-watches", json=data)
         assert response.status_code == 400 and response.json()["error"] == "country_required"
@@ -94,7 +99,7 @@ async def test_redirect_resolves_live_policy_and_appends_no_pii(container):
     container.settings.public_base_url = "https://prices.example"
     container.settings.redirect_signing_secret = SecretStr("fixture-signing-secret-32-characters")
     offer = await persist(container, "sony-a")
-    token = container.outbound.sign(offer.id, surface="telegram", market_country="BE")
+    token = container.outbound.sign(offer.id, surface="telegram", market_country="DE")
     app = create_app(container.settings, container)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app), base_url="http://testserver", follow_redirects=False
@@ -119,7 +124,7 @@ async def test_redirect_resolves_live_policy_and_appends_no_pii(container):
         assert (
             click.offer_id == offer.id
             and click.surface == "telegram"
-            and click.market_country == "BE"
+            and click.market_country == "DE"
         )
         assert click.affiliate_network is None
         assert set(OutboundClick.__table__.columns.keys()) == {
@@ -197,7 +202,7 @@ async def test_epn_persistence_and_affiliate_neutral_ranking_notifications(conta
     assert container.outbound.verify(delivery.url.rsplit("/", 1)[1])[:3] == (
         b.id,
         "notification",
-        "BE",
+        "DE",
     )
     import json
 
@@ -240,7 +245,7 @@ async def test_rakuten_ingests_partner_merchant_without_stock_or_history(contain
     data = RakutenProvider._normalize(parse_xml(raw).find("item"), "BE", "12345")
     saved = await container.products.persist(data)
     user = await container.users.telegram(777)
-    comparison = await container.products.product(saved.product_id, user.id)
+    comparison = await container.products.product(saved.product_id, user.id, market_country="BE")
     assert comparison.best_available_offer is None
     assert comparison.offers[0].store == "Fixture Clothing"
     assert (
@@ -263,14 +268,18 @@ async def test_rakuten_ingests_partner_merchant_without_stock_or_history(contain
             user.id, WatchCreate(product_id=saved.product_id, currency="EUR", market_country="BE")
         )
     assert (
-        await container.comparison_operations.request_refresh(saved.product_id, user.id)
+        await container.comparison_operations.request_refresh(
+            saved.product_id, user.id, market_country="BE"
+        )
     ).queued_count == 0
     assert await container.price_checks.claim_due() == []
     async with container.sessions.begin() as session:
         await session.execute(
             update(StoreOffer).values(last_checked_at=utcnow() - timedelta(hours=2))
         )
-    assert (await container.products.product(saved.product_id, user.id)).offers == []
+    assert (
+        await container.products.product(saved.product_id, user.id, market_country="BE")
+    ).offers == []
     from pricehunter.services.catalog_policy_maintenance import CatalogPolicyMaintenance
 
     maintenance = CatalogPolicyMaintenance(container.sessions, container.settings)
@@ -305,11 +314,11 @@ async def test_rakuten_search_partial_failure_and_no_per_user_rate_limit_bypass(
             http,
             RakutenTokenManager(http, "id", "secret", "123"),
             container.limiter,
-            {"BE": ["12345"]},
+            {"DE": ["12345"]},
         )
         container.registry.providers["rakuten"] = provider
         user = await container.users.telegram(777)
-        result = await container.search.search("Sony", user.id, country="BE")
+        result = await container.search.search("Sony", user.id, country="DE")
         assert result.products and result.unavailable_providers == ["rakuten"]
         assert calls.count("/productsearch/1.0") == 1
 
@@ -345,7 +354,7 @@ async def test_fx_shared_fetch_staleness_and_native_price_unchanged(container):
             assert await session.scalar(select(func.count()).select_from(FxRate)) == 4
         user = await container.users.telegram(777)
         await container.users.settings(
-            user.id, UserSettingsPatch(country_code="BE", preferred_currency="USD")
+            user.id, UserSettingsPatch(country_code="DE", preferred_currency="USD")
         )
         offer = await persist(container, "sony-a")
         comparison = await container.products.product(offer.product_id, user.id)
@@ -376,7 +385,7 @@ async def test_rakuten_registration_requires_policy_and_credentials(sessions, re
         rakuten_client_id=SecretStr("id"),
         rakuten_client_secret=SecretStr("secret"),
         rakuten_account_id=SecretStr("123"),
-        rakuten_advertisers={"BE": ["12345"]},
+        rakuten_advertisers={"DE": ["12345"]},
         provider_data_policies={"rakuten": search_policy()},
     )
     container = Container(settings, sessions=sessions, redis=redis)

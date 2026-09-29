@@ -151,6 +151,12 @@ async def show_settings(message: Message, user: User) -> None:
 
 
 async def run_search(message: Message, query: str, container: Container, user: User) -> None:
+    if user.country_code is None:
+        await message.answer(
+            tr(user.language_code, "country_required"),
+            reply_markup=country_keyboard(user.language_code),
+        )
+        return
     results = await container.search.search(query[:200], user.id, country=user.country_code)
     language = user.language_code
     if results.unavailable_providers:

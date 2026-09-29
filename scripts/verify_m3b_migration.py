@@ -23,7 +23,7 @@ from pricehunter.db.models import (
     Subscription,
 )
 
-name = "pricehunter_m4a_" + uuid4().hex[:10] + "_test"
+name = "pricehunter_m4a1_" + uuid4().hex[:10] + "_test"
 test_url = make_url(os.environ["TEST_DATABASE_URL"])
 if not (test_url.database or "").endswith("_test"):
     raise RuntimeError("TEST_DATABASE_URL must name a dedicated database ending _test")
@@ -223,6 +223,48 @@ async def main():
                 )
             )
         original = await snapshot()
+        migrate("upgrade", "2c125500eaf6")
+        await engine.dispose()
+        m4a = await snapshot()
+        for table, rows in original.items():
+            for before, current in zip(rows, m4a[table], strict=True):
+                assert {k: v for k, v in before.items() if k != "updated_at"} == {
+                    k: current[k] for k in before if k != "updated_at"
+                }, table
+        # The same merchant already serves two catalog markets at the M4A boundary.
+        belgian_offer = uuid4()
+        async with engine.begin() as c:
+            await c.execute(
+                text('UPDATE store_offers SET metadata = \'{"market_country":"DE"}\'::jsonb')
+            )
+            columns = (
+                (
+                    await c.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_name='store_offers' ORDER BY ordinal_position"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            names = ",".join('"' + name + '"' for name in columns)
+            overrides = {
+                "id": ":id",
+                "external_id": "'legacy-be'",
+                "metadata": '\'{"market_country":"ZZ"}\'::jsonb',
+                "price": "340",
+            }
+            values = ",".join(overrides.get(name, '"' + name + '"') for name in columns)
+            await c.execute(
+                text(
+                    f"INSERT INTO store_offers ({names}) SELECT {values} "
+                    "FROM store_offers WHERE id=:source"
+                ),
+                {"id": belgian_offer, "source": ids[3]},
+            )
+        original = await snapshot()
         migrate("upgrade", "head")
         await engine.dispose()
         settings = Settings(_env_file=None, database_url=scratch_url)
@@ -231,10 +273,54 @@ async def main():
             after = await snapshot()
             for table, rows in original.items():
                 for before, current in zip(rows, after[table], strict=True):
-                    assert {k: v for k, v in before.items() if k != "updated_at"} == {
-                        k: current[k] for k in before if k != "updated_at"
+                    derived = {"updated_at"}
+                    if table == "product_best_states":
+                        derived.add("next_evaluation_at")
+                    if table == "product_watches":
+                        derived.add("best_absence_reason")
+                    assert {k: v for k, v in before.items() if k not in derived} == {
+                        k: current[k] for k in before if k not in derived
                     }, table
+            assert all(row["market_country"] is None for row in after["best_price_events"])
+            assert all(row["market_country"] is None for row in after["product_best_states"])
+            assert await container.comparison_operations.maintain() == 2
             assert await container.comparison_operations.maintain() == 0
+            async with engine.connect() as c:
+                offer_markets = dict(
+                    (await c.execute(text("SELECT id,market_country FROM store_offers"))).all()
+                )
+                assert offer_markets[ids[3]] == "DE" and offer_markets[belgian_offer] == "BE"
+                watches = dict(
+                    (
+                        await c.execute(
+                            text("SELECT market_country,best_price FROM product_watches")
+                        )
+                    ).all()
+                )
+                assert watches == {"BE": 340, "DE": 329}
+                assert await c.scalar(text("SELECT count(*) FROM notification_events")) == 1
+                assert (
+                    await c.scalar(
+                        text("SELECT count(*) FROM best_price_events WHERE market_country IS NULL")
+                    )
+                    == 1
+                )
+                assert (
+                    await c.scalar(
+                        text(
+                            "SELECT count(*) FROM best_price_events "
+                            "WHERE market_country IS NOT NULL"
+                        )
+                    )
+                    == 2
+                )
+            migrate(
+                "downgrade", "2c125500eaf6", success=False, contains="Export market-scoped history"
+            )
+            async with engine.begin() as c:
+                await c.execute(
+                    text("DELETE FROM best_price_events WHERE market_country IS NOT NULL")
+                )
             assert await container.discovery.synchronize() == 1
             async with engine.connect() as c:
                 markets = dict(
@@ -274,9 +360,10 @@ async def main():
         finally:
             await container.close()
         print(
-            "PASS: M3A -> real M3B -> M4A; users/products/identifiers/stores/offers/"
+            "PASS: M3A -> real M3B -> M4A -> M4A.1; users/products/identifiers/stores/offers/"
             "observations/trackers/watches/discoveries/best states/history/outbox/"
             "subscriptions/payments preserved; BE/DE market migration; nullable direct URL; "
+            "ambiguous history preserved; scoped baselines rebuilt without alerts; "
             "guarded downgrade/re-upgrade; schema check"
         )
     finally:

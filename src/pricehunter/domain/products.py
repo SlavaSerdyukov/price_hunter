@@ -9,6 +9,7 @@ from typing import Annotated, Any
 from urllib.parse import urlsplit
 
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -19,6 +20,7 @@ from pydantic import (
 )
 
 from pricehunter.core.security import validate_url
+from pricehunter.domain.markets import CountryCode
 
 
 def decimal_input(value: object) -> object:
@@ -56,7 +58,8 @@ class ProductOfferData(BaseModel):
     store_slug: str = Field(min_length=1, max_length=80)
     store_name: str = Field(min_length=1, max_length=100)
     store_domain: str = Field(min_length=1, max_length=200)
-    country: str = Field(pattern=r"^[A-Z]{2}$")
+    country: CountryCode
+    source_updated_at: AwareDatetime | None = None
     external_id: str = Field(min_length=1, max_length=200)
     external_merchant_id: str | None = Field(default=None, max_length=100)
     url: str = Field(default="", max_length=2048)

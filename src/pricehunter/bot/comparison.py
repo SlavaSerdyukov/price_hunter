@@ -136,7 +136,8 @@ async def show_comparison(message: Message, product: ComparisonProduct, language
                     language,
                     "best_price_history",
                     "besthist",
-                    f"{product.id.hex}_{group.currency}",
+                    f"{product.id.hex}_{group.currency}"
+                    + (f"_{product.market_country}" if product.market_country else ""),
                     currency=group.currency,
                 )
             ]
@@ -155,7 +156,16 @@ async def show_comparison(message: Message, product: ComparisonProduct, language
     if any(d.status == "backed_off" for d in product.discovery):
         lines.append(tr(language, "discovery_partial"))
     lines.append(tr(language, "comparison_price_note"))
-    rows.append([button(language, "refresh_prices", "refreshcmp", product.id.hex)])
+    rows.append(
+        [
+            button(
+                language,
+                "refresh_prices",
+                "refreshcmp",
+                product.id.hex + (f"_{product.market_country}" if product.market_country else ""),
+            )
+        ]
+    )
     rows.append(
         [
             button(
@@ -292,7 +302,7 @@ async def show_watches(message: Message, container: Container, user: User, page:
                             language,
                             "best_price_history",
                             "besthist",
-                            f"{watch.product_id.hex}_{watch.currency}",
+                            f"{watch.product_id.hex}_{watch.currency}_{watch.market_country}",
                             currency=watch.currency,
                         )
                     ],
@@ -321,9 +331,17 @@ async def show_watches(message: Message, container: Container, user: User, page:
 
 
 async def show_best_history(
-    message: Message, container: Container, user: User, product_id: UUID, currency: str
+    message: Message,
+    container: Container,
+    user: User,
+    product_id: UUID,
+    currency: str,
+    *,
+    market_country: str | None = None,
 ) -> None:
-    history = await container.best_prices.history(product_id, user.id, currency, limit=10)
+    history = await container.best_prices.history(
+        product_id, user.id, currency, limit=10, market_country=market_country
+    )
     language = user.language_code
     best = history.current_best
     current = (
@@ -333,6 +351,7 @@ async def show_best_history(
     )
     lines = [
         tr(language, "best_history_title", title=history.canonical_name[:180], currency=currency),
+        tr(language, "market_context", country=history.market_country),
         tr(language, "best_history_current", current=current),
         tr(
             language,
@@ -364,7 +383,7 @@ async def show_best_history(
                 language,
                 "compare_stores",
                 "compare",
-                product_id.hex,
+                f"{product_id.hex}_{history.market_country}",
             )
         ]
     ]
@@ -423,11 +442,16 @@ def build_comparison_router() -> Router:
         if action == "wcompare":
             watch = await container.watches.get(user.id, UUID(value))
             product = await container.products.comparisons.get(
-                watch.product_id, user.id, market_country=watch.market_country
+                watch.product_id,
+                user.id,
+                market_country=watch.market_country,
+                permission="tracking_allowed",
             )
             await show_comparison(query.message, product, language)
         elif action == "besthist":
-            product_id, currency = value.split("_", 1)
+            parts = value.split("_")
+            product_id, currency = parts[:2]
+            market = parts[2] if len(parts) == 3 else None
             if (
                 len(currency) != 3
                 or not currency.isascii()
@@ -435,9 +459,14 @@ def build_comparison_router() -> Router:
                 or not currency.isupper()
             ):
                 raise ValueError("Invalid currency")
-            await show_best_history(query.message, container, user, UUID(product_id), currency)
+            await show_best_history(
+                query.message, container, user, UUID(product_id), currency, market_country=market
+            )
         elif action == "refreshcmp":
-            accepted = await container.comparison_operations.request_refresh(UUID(value), user.id)
+            parts = value.split("_")
+            accepted = await container.comparison_operations.request_refresh(
+                UUID(parts[0]), user.id, market_country=parts[1] if len(parts) == 2 else None
+            )
             await query.message.answer(tr(language, "refresh_queued", count=accepted.queued_count))
         elif action == "watches":
             await show_watches(

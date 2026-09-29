@@ -71,7 +71,9 @@ class RakutenProvider(StoreProvider):
 
     name = "rakuten"
     domains: set[str] = set()
-    capabilities = frozenset({Capability.SEARCH_KEYWORD, Capability.SEARCH_MODEL})
+    capabilities = frozenset(
+        {Capability.SEARCH_KEYWORD, Capability.SEARCH_MODEL, Capability.SNAPSHOT_REFRESH}
+    )
     manages_request_limits = True
 
     def __init__(

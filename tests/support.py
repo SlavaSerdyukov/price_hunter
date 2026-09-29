@@ -19,3 +19,10 @@ async def grant_plan(container, user_id, plan="pro", *, until=None):
         session.add(row)
         await session.flush()
         return row.id
+
+
+async def market_user(container, telegram_id, country="DE"):
+    from pricehunter.schemas.api import UserSettingsPatch
+
+    user = await container.users.telegram(telegram_id)
+    return await container.users.settings(user.id, UserSettingsPatch(country_code=country))

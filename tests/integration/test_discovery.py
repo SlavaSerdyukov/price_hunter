@@ -26,7 +26,7 @@ from pricehunter.providers.mock import MockStoreProvider
 from pricehunter.schemas.watches import WatchCreate, WatchPatch
 from pricehunter.services.discovery_service import DiscoveryClaim
 from tests.integration.test_comparison import accept_price, event_types, persist, setup_watch
-from tests.support import grant_plan
+from tests.support import grant_plan, market_user
 
 pytestmark = pytest.mark.integration
 
@@ -101,12 +101,12 @@ async def test_hundred_watchers_share_one_target_and_concurrent_lease(container)
     _, a, _, _ = await setup_watch(container)
     async with container.sessions.begin() as session:
         for i in range(99):
-            user = User(id=uuid4(), telegram_user_id=1000 + i, country_code="BE")
+            user = User(id=uuid4(), telegram_user_id=1000 + i, country_code="DE")
             session.add(user)
             await session.flush()
             session.add(
                 ProductWatch(
-                    market_country="BE",
+                    market_country="DE",
                     user_id=user.id,
                     product_id=a.product_id,
                     currency="EUR",
@@ -143,7 +143,7 @@ async def test_fencing_expired_claims_paused_and_disabled_targets(container):
         assert (await session.get(ProductDiscovery, old.target_id)).failure_count == 0
     (current,) = await container.discovery.claim_due()
     assert current.token != old.token
-    query = DiscoveryQuery("gtin", "4006381333931", "BE", "EUR")
+    query = DiscoveryQuery("gtin", "4006381333931", "DE", "EUR")
     data = [MockStoreProvider()._offer("sony-new")]
     assert not await container.discovery.accept(old, data, query, 600)
     await container.discovery.failed(old, "late_failure")
@@ -247,7 +247,7 @@ async def test_only_matching_results_attach_and_missing_metadata_cannot_bridge_c
             good,
             good,
         ],
-        DiscoveryQuery("gtin", "4006381333931", "BE", "EUR"),
+        DiscoveryQuery("gtin", "4006381333931", "DE", "EUR"),
         600,
     )
     assert (await counts(container))[:3] == [1, 3, 3]
@@ -285,13 +285,15 @@ async def test_discovery_contexts_fastest_plan_and_expired_subscription(containe
 
 
 async def test_unsupported_identity_market_and_removed_provider(container):
-    user = await container.users.telegram(111)
+    user = await market_user(container, 111)
     data = (
-        MockStoreProvider()._offer("headphones").model_copy(update={"brand": None, "model": None})
+        MockStoreProvider()
+        ._offer("headphones")
+        .model_copy(update={"brand": None, "model": None, "country": "DE"})
     )
     a = await container.products.persist(data)
     await container.watches.create(
-        user.id, WatchCreate(market_country="BE", product_id=a.product_id, currency="EUR")
+        user.id, WatchCreate(market_country="DE", product_id=a.product_id, currency="EUR")
     )
     p = container.registry.get("mock")
     p.discovery_countries = frozenset({"US"})
@@ -364,12 +366,12 @@ async def test_result_bound_and_context_validation(container):
     data = MockStoreProvider()._offer("sony-new")
     with pytest.raises(ValueError, match="context"):
         await container.discovery.accept(
-            claim, [data], DiscoveryQuery("gtin", "x", "DE", "EUR"), 600
+            claim, [data], DiscoveryQuery("gtin", "x", "BE", "EUR"), 600
         )
     container.settings.discovery_result_limit = 1
     different = data.model_copy(update={"external_id": "more", "store_slug": "more"})
     assert await container.discovery.accept(
-        claim, [data, different], DiscoveryQuery("gtin", "x", "BE", "EUR"), 600
+        claim, [data, different], DiscoveryQuery("gtin", "x", "DE", "EUR"), 600
     )
     assert (await counts(container))[:3] == [1, 3, 3]
 
@@ -425,7 +427,7 @@ async def test_ebay_discovery_fetches_actual_identity_instead_of_assuming_query_
             ProviderHTTP(client, timeout=5, max_bytes=20000), "test-id", "test-secret", ["DE"]
         )
         container.registry.providers = {"ebay": adapter}
-        user = await container.users.telegram(111)
+        user = await market_user(container, 111)
         async with container.sessions.begin() as session:
             await session.execute(update(User).values(country_code="DE"))
         a = await container.products.persist(adapter._normalize(payload, "DE"))

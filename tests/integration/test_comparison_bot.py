@@ -70,26 +70,37 @@ async def test_comparison_watch_and_exact_offer_flow_in_every_language(container
                 )
             )
         await feed(text="/start")
+        await feed(action="country", value="DE")
         before = len(transport.sent)
         await feed(text="/search Sony WH-1000XM6")
         cards = [m for m in transport.sent[before:] if m.reply_markup]
         assert len(cards) == 3  # Three canonical variants/conflicting IDs, not nine offer cards.
         alpha = await container.products.persist(base)
         user = await container.users.telegram(777)
-        await feed(action="compare", value=alpha.product_id.hex)
+        await feed(action="compare", value=f"{alpha.product_id.hex}_DE")
         card = transport.sent[-1]
         assert tr(language, "comparison_best_label") in card.text
-        assert "Demo Alpha" in card.text and "USD" in card.text
+        assert "Demo Alpha" in card.text and "USD" not in card.text
+        await container.users.settings(user.id, UserSettingsPatch(country_code=None))
         await feed(action="watch", value=f"{alpha.product_id.hex}_EUR")
         assert tr(language, "country_required") in transport.sent[-1].text
-        await feed(action="wmarket", value=f"{alpha.product_id.hex}_EUR_BE")
+        await feed(action="wmarket", value=f"{alpha.product_id.hex}_EUR_DE")
         assert tr(language, "watch_created", currency="EUR") in transport.sent[-1].text
         watch = (await container.watches.list(user.id))[0]
-        await container.users.settings(user.id, UserSettingsPatch(country_code="DE"))
+        await container.users.settings(user.id, UserSettingsPatch(country_code="BE"))
         await feed(action="wcompare", value=watch.id.hex)
-        assert tr(language, "market_context", country="BE") in transport.sent[-1].text
-        assert (await container.watches.get(user.id, watch.id)).market_country == "BE"
-        await feed(action="besthist", value=f"{alpha.product_id.hex}_EUR")
+        assert tr(language, "market_context", country="DE") in transport.sent[-1].text
+        assert (await container.watches.get(user.id, watch.id)).market_country == "DE"
+        actions = [
+            Action.unpack(b.callback_data)
+            for row in transport.sent[-1].reply_markup.inline_keyboard
+            for b in row
+            if b.callback_data
+        ]
+        history_action = next(a for a in actions if a.action == "besthist")
+        refresh_action = next(a for a in actions if a.action == "refreshcmp")
+        assert history_action.value.endswith("_DE") and refresh_action.value.endswith("_DE")
+        await feed(action=history_action.action, value=history_action.value)
         history = transport.sent[-1]
         assert "329" in history.text and "Demo Alpha" in history.text
         assert any(button.url for row in history.reply_markup.inline_keyboard for button in row)
@@ -99,16 +110,16 @@ async def test_comparison_watch_and_exact_offer_flow_in_every_language(container
         assert not (await container.watches.list(user.id))[0].scheduled
         await feed(action="wresume", value=watch.id.hex)
         assert (await container.watches.list(user.id))[0].scheduled
-        await feed(action="offers", value=f"{alpha.product_id.hex}_1")
+        await feed(action="offers", value=f"{alpha.product_id.hex}_1_DE")
         assert (
-            len([row for row in transport.sent[-1].reply_markup.inline_keyboard if row[0].url]) == 2
+            len([row for row in transport.sent[-1].reply_markup.inline_keyboard if row[0].url]) == 1
         )
-        await feed(action="offers", value=f"{alpha.product_id.hex}_0")
+        await feed(action="offers", value=f"{alpha.product_id.hex}_0_DE")
         card = transport.sent[-1]
         action = Action.unpack(card.reply_markup.inline_keyboard[0][1].callback_data)
         await feed(action=action.action, value=action.value)
         assert len(await container.trackers.list(user.id)) == 1
-        await feed(action="details", value=alpha.product_id.hex)
+        await feed(action="details", value=f"{alpha.product_id.hex}_DE")
         assert "Sony" in transport.sent[-1].text and "WH" in transport.sent[-1].text
         beta = await container.products.persist(MockStoreProvider()._offer("sony-b"))
         claim = next(c for c in await container.price_checks.claim_due() if c.offer_id == beta.id)
@@ -122,23 +133,23 @@ async def test_comparison_watch_and_exact_offer_flow_in_every_language(container
         alert = transport.sent[-1]
         assert tr(language, "merchant_became_cheapest") in alert.text
         assert "319" in alert.text and "329" in alert.text and "Demo Beta" in alert.text
-        assert tr(language, "market_context", country="BE") in alert.text
+        assert tr(language, "market_context", country="DE") in alert.text
         comparison_action = Action.unpack(alert.reply_markup.inline_keyboard[1][0].callback_data)
-        assert comparison_action.value == f"{alpha.product_id.hex}_BE"
+        assert comparison_action.value == f"{alpha.product_id.hex}_DE"
         await feed(action=comparison_action.action, value=comparison_action.value)
-        assert tr(language, "market_context", country="BE") in transport.sent[-1].text
+        assert tr(language, "market_context", country="DE") in transport.sent[-1].text
         assert await notifier.send_pending() == 0
         async with container.sessions.begin() as session:
             await session.execute(
                 update(StoreOffer).values(last_checked_at=utcnow() - timedelta(days=4))
             )
-        await feed(action="compare", value=alpha.product_id.hex)
+        await feed(action="compare", value=f"{alpha.product_id.hex}_DE")
         assert tr(language, "no_fresh_prices", currency="EUR") in transport.sent[-1].text
-        await feed(action="besthist", value=f"{alpha.product_id.hex}_EUR")
+        await feed(action="besthist", value=f"{alpha.product_id.hex}_EUR_DE")
         assert tr(language, "best_unknown") in transport.sent[-1].text
-        await feed(action="refreshcmp", value=alpha.product_id.hex)
-        # Beta was refreshed and USD never claimed; the other five leases remain active.
-        assert tr(language, "refresh_queued", count=2) == transport.sent[-1].text
+        await feed(action=refresh_action.action, value=refresh_action.value)
+        # Only DE Beta needs a new request; the other five DE leases remain active.
+        assert tr(language, "refresh_queued", count=1) == transport.sent[-1].text
         await feed(action="watches", value="0")
         await feed(action="wdelete", value=watch.id.hex)
         await feed(text="/watches")

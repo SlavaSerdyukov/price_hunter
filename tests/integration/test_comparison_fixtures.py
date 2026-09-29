@@ -46,9 +46,9 @@ async def test_ebay_marketplaces_and_normalized_provider_share_gtin(container):
     offers = [await container.products.persist(data) for data in (de, be, normalized)]
     assert len({offer.product_id for offer in offers}) == 1
     user = await container.users.telegram(111)
-    product = await container.products.product(offers[0].product_id, user.id)
-    assert product.store_count == 3
-    assert {o.store_country for o in product.offers} == {"BE", "DE"}
+    product = await container.products.product(offers[0].product_id, user.id, market_country="DE")
+    assert product.store_count == 2
+    assert {o.store_country for o in product.offers} == {"DE"}
     assert product.gtin == "04006381333931"
     used = de.model_copy(update={"external_id": "used", "variant": {"condition": "3000"}})
     assert (await container.products.persist(used)).product_id != product.id
@@ -73,8 +73,8 @@ async def test_amazon_scoped_asin_and_variants_persist_from_existing_fixture(con
     other = await container.products.persist(adapter._normalize(payload, "DE"))
     assert other.product_id != a.product_id
     user = await container.users.telegram(111)
-    comparison = await container.products.product(a.product_id, user.id)
-    assert comparison.store_count == 2 and comparison.variant == {"size": "m", "color": "blue"}
+    comparison = await container.products.product(a.product_id, user.id, market_country="BE")
+    assert comparison.store_count == 1 and comparison.variant == {"size": "m", "color": "blue"}
 
 
 async def test_woocommerce_sku_and_title_never_fabricate_cross_store_identity(container):

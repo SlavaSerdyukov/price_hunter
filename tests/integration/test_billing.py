@@ -385,10 +385,10 @@ async def test_free_feature_gates_search_quota_and_bounded_history(container):
         user.id, tracker.id, TrackerPatch(target_price=None, notify_on_target=False)
     )
     for _ in range(3):
-        result = await c.search.search("", user.id)
+        result = await c.search.search("", user.id, country="BE")
         assert len(result.products) <= 3
     with pytest.raises(RateLimitExceededError):
-        await c.search.search("", user.id)
+        await c.search.search("", user.id, country="BE")
     async with c.sessions.begin() as s:
         s.add(
             PriceObservation(

@@ -2,7 +2,7 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0–M4A: tracking, Stars subscriptions, discovery and international commerce**. Billing is tested with
+**M0–M4A.1: tracking, Stars subscriptions, discovery and international commerce**. Billing is tested with
 a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
@@ -24,7 +24,8 @@ a simulated Telegram transport; real Stars purchases/renewals/refunds remain man
 - Amazon Creators API adapter with fixture tests, disabled pending access and tracking approval.
 - Versioned authenticated REST endpoints using the same services as the bot.
 - Shared offer refreshes, persisted scheduling, retries, anomaly quarantine and outbox.
-- Durable market-country watches, reviewed provider data policies, official eBay EPN support.
+- Market-scoped offers, comparisons, watches and best-price history; global canonical products.
+- Reviewed provider data policies, official eBay EPN support and authorized search snapshots.
 - Credential/policy-gated Rakuten Product Search, signed outbound links and minimal click records.
 - Optional timestamped ECB reference conversion; native-currency rankings stay authoritative.
 - Durable PostgreSQL state, migrations, Docker, CI, health checks and operator commands.
@@ -33,8 +34,9 @@ a simulated Telegram transport; real Stars purchases/renewals/refunds remain man
 
 ## Compare a product across stores
 
-Send `/search Sony WH-1000XM6` with the mock provider enabled. One comparison card
-shows matching stores, the best fresh confirmed in-stock offer and spread **per currency**.
+Choose Germany in `/settings`, then send `/search Sony WH-1000XM6` with the mock provider
+enabled. One comparison card shows matching stores, the best fresh confirmed in-stock
+offer and spread **per native currency within the selected market**.
 Stale and failed prices remain visible with their age, but cannot be current best.
 **All offers** opens paginated exact-offer tracking; **Track best** creates a canonical
 product watch that can follow a different merchant when it becomes cheapest.
@@ -43,10 +45,13 @@ search configured providers for new matching offers. **History** shows best-pric
 **Refresh prices** schedules a bounded background update. All seven languages are supported.
 See [discovery and freshness operations](docs/discovery.md) for cadences, settings and diagnostics.
 
-Watches and trackers share the plan quota. Choose a market country before creating a watch;
-profile changes never move an existing watch. Unknown shipping/tax stay unknown. Optional
+Watches and trackers share the plan quota. Search/comparison/history/refresh require an
+explicit or saved country. Profile changes never move an existing watch, its history,
+refresh action or notification links. Unknown shipping/tax stay unknown. Optional
 [ECB reference conversion](docs/fx.md) is approximate and never changes native ranking.
 See [M4A configuration and upgrade steps](docs/international-commerce.md).
+See [M4A.1 market and snapshot semantics](docs/m4a1-market-correctness.md) for migration
+of legacy global history and repeat-search behavior.
 For an existing database, stop application services, back up, migrate and run
 `uv run python -m pricehunter.apps.admin catalog-backfill` until zero before restarting.
 

@@ -2,13 +2,21 @@ from datetime import timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import NotificationEvent, Product, ProductWatch, Store, StoreOffer, User
+from pricehunter.db.models import (
+    NotificationEvent,
+    Product,
+    ProductBestState,
+    ProductWatch,
+    Store,
+    StoreOffer,
+    User,
+)
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.comparison import ComparisonOffer, CurrencyComparison
 from pricehunter.domain.errors import (
@@ -59,13 +67,16 @@ class ProductWatchService:
                 return await self._view(session, existing, product)
             if await self.entitlements.stored_count(session, user_id) >= rights.max_trackers:
                 raise SubscriptionLimitReachedError()
-            summary = await self.reader.summary(session, product.id, utcnow(), data.currency)
+            summary = await ComparisonReader(
+                self.settings, permission="tracking_allowed", market_country=market
+            ).summary(session, product.id, utcnow(), data.currency)
             if not summary.groups:
                 if await session.scalar(
                     select(StoreOffer.id)
                     .where(
                         StoreOffer.product_id == product.id,
                         StoreOffer.currency == data.currency,
+                        StoreOffer.market_country == market,
                     )
                     .limit(1)
                 ):
@@ -90,7 +101,11 @@ class ProductWatchService:
         rows = await session.execute(
             select(StoreOffer, Store.provider_type)
             .join(Store)
-            .where(StoreOffer.product_id == watch.product_id, StoreOffer.currency == watch.currency)
+            .where(
+                StoreOffer.product_id == watch.product_id,
+                StoreOffer.currency == watch.currency,
+                StoreOffer.market_country == watch.market_country,
+            )
             .order_by(StoreOffer.id)
             .with_for_update(of=StoreOffer)
         )
@@ -185,7 +200,11 @@ class ProductWatchService:
                         NotificationEvent.status == "pending",
                     )
                 )
-                summary = await self.reader.summary(session, product.id, utcnow(), watch.currency)
+                summary = await ComparisonReader(
+                    self.settings,
+                    permission="tracking_allowed",
+                    market_country=watch.market_country,
+                ).summary(session, product.id, utcnow(), watch.currency)
                 group = summary.groups[0] if summary.groups else None
                 best = group.best_available_offer if group else None
                 watch.best_absence_reason = self.absence(group) if not best else None
@@ -219,16 +238,49 @@ class ProductWatchService:
         return "stale"
 
     async def evaluate(
-        self, session: AsyncSession, product_id: UUID, source_observation_id: UUID | None = None
+        self,
+        session: AsyncSession,
+        product_id: UUID,
+        source_observation_id: UUID | None = None,
+        *,
+        market_country: str | None = None,
     ) -> None:
         """Caller holds the Product lock; observation/state/outbox share its transaction."""
+        if market_country is None:
+            markets = await session.scalars(
+                select(StoreOffer.market_country)
+                .where(StoreOffer.product_id == product_id)
+                .union(
+                    select(ProductWatch.market_country).where(
+                        ProductWatch.product_id == product_id
+                    ),
+                    select(ProductBestState.market_country).where(
+                        ProductBestState.product_id == product_id,
+                        ProductBestState.market_country.is_not(None),
+                    ),
+                )
+            )
+            for market in sorted(markets):
+                await self.evaluate(
+                    session, product_id, source_observation_id, market_country=market
+                )
+            return
         now = utcnow()
-        summary = await self.reader.summary(session, product_id, now)
-        await self.best_prices.record(session, product_id, summary, now, source_observation_id)
+        reader = ComparisonReader(
+            self.settings, permission="tracking_allowed", market_country=market_country
+        )
+        summary = await reader.summary(session, product_id, now)
+        history = await ComparisonReader(
+            self.settings, permission="price_history_allowed", market_country=market_country
+        ).summary(session, product_id, now)
+        await self.best_prices.record(
+            session, product_id, history, now, source_observation_id, market_country=market_country
+        )
         if not await session.scalar(
             select(ProductWatch.id)
             .where(
                 ProductWatch.product_id == product_id,
+                ProductWatch.market_country == market_country,
                 ProductWatch.enabled.is_(True),
             )
             .limit(1)
@@ -239,7 +291,12 @@ class ProductWatchService:
                 select(ProductWatch)
                 .where(
                     ProductWatch.product_id == product_id,
-                    ProductWatch.id.in_(self.entitlements.scheduled_watch_ids(now)),
+                    ProductWatch.market_country == market_country,
+                    ProductWatch.enabled.is_(True),
+                    or_(
+                        ProductWatch.id.in_(self.entitlements.scheduled_watch_ids(now)),
+                        ProductWatch.best_absence_reason == "market_rebuild",
+                    ),
                 )
                 .order_by(ProductWatch.id)
                 .with_for_update()
@@ -264,6 +321,8 @@ class ProductWatchService:
             watch.best_offer_id, watch.best_price = (
                 (best.offer_id, best.price) if best else (None, None)
             )
+            if previous_absence == "market_rebuild":
+                continue
             watch.evaluation_sequence += 1
             if best is None:
                 continue

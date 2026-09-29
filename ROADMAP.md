@@ -1,6 +1,6 @@
 # PriceHunter roadmap
 
-M0, M1, M2, M3A, M3B and M4A are implemented. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
+M0, M1, M2, M3A, M3B, M4A and M4A.1 are implemented. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
 
 ## M0 — Foundation — implemented
 
@@ -86,6 +86,18 @@ See [discovery operations](docs/discovery.md) and [verification](docs/verificati
 - [ ] Operator review/configuration of each real provider's actual data-use agreement before activation.
 
 See [international commerce](docs/international-commerce.md) and [verification](docs/verification.md).
+
+## M4A.1 — Market correctness and snapshot ingestion
+
+- [x] First-class offer market and merchant/external-ID/market uniqueness.
+- [x] Market-scoped search, comparison, watch evaluation/scheduling, history and refresh.
+- [x] Country-preserving Telegram callbacks, redirects and notification validation.
+- [x] Legacy global history preserved separately; scoped baselines rebuilt without alerts.
+- [x] Explicit snapshot capability, identity validation and serialized listing updates.
+- [x] Repeat/stale/concurrent snapshots, current-only aggregates without history permission.
+- [x] M3B → M4A → M4A.1 migration verifier; billing and affiliate/FX gates retained.
+
+See [design and acceptance](docs/m4a1-market-correctness.md). No new networks are added.
 
 ## M4B — Delivery context and reviewed feed onboarding — proposed
 

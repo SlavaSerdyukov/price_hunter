@@ -22,11 +22,13 @@ from pricehunter.domain.discovery import (
     ProductSearchIdentity,
 )
 from pricehunter.domain.errors import ProductNotFoundError, RateLimitExceededError
+from pricehunter.domain.ingestion import IngestionMode, search_ingestion
 from pricehunter.domain.products import ProductOfferData
 from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.services.catalog_resolver import CatalogResolver
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.product_watch_service import ProductWatchService
+from pricehunter.services.snapshot_ingestion import SnapshotUpdater
 
 log = structlog.get_logger()
 
@@ -362,13 +364,28 @@ class ProductDiscoveryService:
                 await self.resolver.lock_evidence(session, incoming)
                 found: set[UUID] = set()
                 for data in incoming:
-                    if data.currency != target.currency or data.provider != target.provider:
+                    if (
+                        data.currency != target.currency
+                        or data.provider != target.provider
+                        or data.country != target.country
+                    ):
                         continue
                     try:
                         async with session.begin_nested():
-                            offer = await self.resolver.resolve(
-                                session, data, expected_product_id=target.product_id
+                            snapshot = (
+                                search_ingestion(self.registry.get(target.provider).capabilities)
+                                == IngestionMode.SEARCH_SNAPSHOT
                             )
+                            offer = await self.resolver.resolve(
+                                session,
+                                data,
+                                expected_product_id=target.product_id,
+                                validate_existing=snapshot,
+                            )
+                            if snapshot:
+                                await SnapshotUpdater().accept(
+                                    session, offer, data, self.settings.data_policy(target.provider)
+                                )
                             found.add(offer.id)
                             log.info(
                                 "discovery_offer_found",
@@ -380,7 +397,9 @@ class ProductDiscoveryService:
                         continue
                 await session.get(Product, target.product_id, with_for_update=True)
                 await session.flush()
-                await self.watches.evaluate(session, target.product_id)
+                await self.watches.evaluate(
+                    session, target.product_id, market_country=target.country
+                )
                 if target.lease_until <= utcnow():
                     raise ExpiredDiscovery()
                 now = utcnow()

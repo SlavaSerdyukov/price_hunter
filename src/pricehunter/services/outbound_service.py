@@ -79,7 +79,9 @@ class OutboundLinkService:
             store.provider_type
         ).display_attribution_required
         try:
-            result.url = self.link(offer, store, surface=surface)
+            result.url = self.link(
+                offer, store, surface=surface, market_country=offer.market_country
+            )
         except PriceHunterError:
             result.url = None
         return result
@@ -170,6 +172,8 @@ class OutboundLinkService:
             offer = await session.get(StoreOffer, offer_id)
             store = await session.get(Store, offer.store_id) if offer else None
             if offer is None or store is None:
+                raise ProductNotFoundError()
+            if market and market != offer.market_country:
                 raise ProductNotFoundError()
             destination, network = self.destination(offer, store)
             session.add(

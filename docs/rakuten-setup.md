@@ -65,12 +65,17 @@ Sale price must be positive and in the retail currency. A lower sale price retai
 retail price as original_price. Invalid UPC is retained only as bounded diagnostic
 metadata. Shared offers never contain per-user affiliate references.
 
-Capabilities are SEARCH_KEYWORD and SEARCH_MODEL. Autonomous discovery, when
+Capabilities are SEARCH_KEYWORD, SEARCH_MODEL and SNAPSHOT_REFRESH. Autonomous discovery, when
 contractually enabled, uses an exact brand/model/MPN phrase and validates returned
 UPC evidence through the existing resolver. No SEARCH_GTIN capability is claimed.
-There is no documented item-refresh endpoint in this adapter. Existing listing
-prices are not reset by repeated search; they expire by freshness/cache policy.
-Search-only cache eviction allows a later result to be ingested anew. Do not promise
+There is no documented item-refresh endpoint in this adapter. Repeated authorized
+search now updates the same market-specific listing's price, link and freshness under
+database locks. Identity conflicts are rejected. Without history permission, aggregates
+represent only the current snapshot and no observations or alerts are created. Identical
+concurrent results cannot duplicate offers/history. This API supplies no source update
+timestamp; acceptance time orders its snapshots. Future feeds can supply actual source
+timestamps, with older/equal versions rejected. Cache eviction still removes expired
+unreferenced search-only content. Do not promise
 continuous Rakuten price alerts or confirmed availability from this API.
 
 Before live enablement, check token acceptance, real partner MID results, returned

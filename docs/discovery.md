@@ -24,7 +24,7 @@ in the future is `failed`, even if the last good price is recent. The last good 
 remains visible. A successful normal refresh clears failure/quarantine as appropriate.
 Stock availability is separate: a fresh out-of-stock listing is not a recommendation.
 Restock alerts require previously confirmed fresh out-of-stock evidence across the
-whole currency group. Unknown or stale stock recovering uses a price-refreshed message.
+whole market/currency group. Unknown or stale stock recovering uses a price-refreshed message.
 
 Only fresh, confirmed in-stock prices can supply `best_available_offer` or spread.
 If EUR 299 is stale and EUR 319 is fresh, current best is EUR 319. With no fresh stock,
@@ -36,9 +36,12 @@ adds [ECB reference displays](fx.md); they do not change native ranking or estab
 shipping/tax/destination guarantee. Reviewed provider cache limits cap freshness.
 
 The reader uses three SQL queries for full summaries, bounded per-currency ranked
-offer bodies, and a separate paginated query. Product/currency indexes support those
-queries. Expiry maintenance uses indexed `ProductBestState.next_evaluation_at`, avoiding
+offer bodies, and a separate paginated query. The product/market/currency index supports
+those filters. Expiry maintenance uses indexed `ProductBestState.next_evaluation_at`, avoiding
 an unbounded scan of offer timestamps. Readers never rely on the sweep to reject stale data.
+Maintenance locks bounded product rows and evaluates only due or missing watched market
+series. Watch summaries are shared by market across users; 100 BE/EUR subscribers do
+not require 100 comparison summaries. Legacy watch baselines rebuild silently.
 
 ## Shared discovery
 
@@ -86,12 +89,17 @@ A listing that disappears between those requests is skipped; other detail failur
 off the target instead of pretending the search was empty.
 
 Every bounded result goes through `CatalogResolver` and must resolve unambiguously
-to the target Product. Wrong currency/provider, explicit conflicts and other products
+to the target Product. Wrong market/currency/provider, explicit conflicts and other products
 are not attached. A transaction locks identifier evidence in deterministic order,
 persists compatible new listings, then evaluates canonical history and all eligible
-watches once. Expiry/fence checks prevent late batches from committing. Replaying a
+watches in the target market once. Expiry/fence checks prevent late batches from committing. Replaying a
 batch cannot duplicate listings, observations, history or logical alerts. Existing
-listings keep their saved price; ordinary refresh owns price updates.
+REFRESH-capable listings keep their saved price; ordinary refresh owns those updates.
+For a SNAPSHOT_REFRESH provider without REFRESH, authorized discovery/search uses a
+separate snapshot updater under product/listing locks. Identity stays immutable; an
+optional actual source timestamp prevents stale versions overwriting newer data.
+Without a source timestamp, serialized acceptance time determines order. Identical
+snapshots renew freshness without duplicated history or accumulated counters.
 
 ## Failure semantics and limits
 
@@ -118,13 +126,13 @@ another request. Provider limits, refresh fencing and anomaly checks still apply
 
 ## History and retention
 
-`ProductBestState` holds current derived state and sequence per currency. Immutable
+`ProductBestState` holds current derived state and sequence per product/market/currency. Immutable
 application-level `BestPriceEvent` rows record only changes: `initial_best`,
 `price_changed`, `merchant_changed`, `became_unavailable`, `restored`. Product row locks
-serialize changes; unique product/currency/sequence prevents duplicate events. Where
+serialize changes; unique product/market/currency/sequence prevents duplicate events. Where
 available, `source_observation_id` refers to the accepted listing observation.
 
-The authenticated `/api/v1/products/{id}/best-price-history?currency=EUR&limit=50`
+The authenticated `/api/v1/products/{id}/best-price-history?country=BE&currency=EUR&limit=50`
 returns chronological points, fresh current best and minimum observed best. The maximum
 is 200 points; Telegram requests ten. History access and duration use the existing plan
 policy (7/90/365 days by default), capped by configured retention when enabled.
@@ -133,9 +141,11 @@ disclosing older timestamps. The minimum uses the entire permitted window, inclu
 its anchor, even when the returned points are limited. History records observations and
 evaluation transitions, not proof of continuous stock or a transaction price.
 
-A bounded sweep every 30 seconds initializes existing watched products and records
-freshness expiry. Legacy history starts at that first evaluation: past canonical best
-prices are not invented. HTTP current-best evaluation remains correct while the worker
+A bounded sweep every 30 seconds initializes missing watched market series and records
+freshness expiry. Pre-M4A.1 global history remains stored separately with NULL market;
+scoped history starts at its first evaluation and never borrows old global points.
+Migrated baselines rebuild without alerts, including watches paused by plan quota, so
+rebuild markers cannot repeatedly occupy maintenance batches. HTTP current-best evaluation remains correct while the worker
 is delayed; event timestamps reflect evaluation time.
 
 `HISTORY_RETENTION_DAYS=0` preserves data. With a positive value, run:
@@ -145,7 +155,7 @@ uv run python -m pricehunter.apps.admin prune-history
 ```
 
 Repeat for bounded batches. Best-price pruning deletes up to 5000 older transitions,
-retaining one pre-window anchor per product/currency and the current state. Pruning
+retaining one pre-window anchor per product/market/currency and the current state. Pruning
 listing observations sets event source references to null. Payments are never pruned.
 
 ## Matching and operator tools
@@ -203,6 +213,8 @@ Amazon remains disabled while approval is pending; fixture tests do not claim li
 Discovery requires reviewed tracking permission; refresh scheduling additionally needs
 refresh permission and a real REFRESH capability. Rakuten uses exact brand/model phrase
 search with returned validated UPC evidence, never an invented GTIN query. It has no
-item refresh capability; search-only offers expire and are evicted under their cache policy.
+item refresh capability. Repeated Product Search results can renew the existing snapshot;
+search-only policy creates no observations or watch alerts, and expired unreferenced
+offers are evicted under their cache policy.
 Pagination and retries consume the shared per-request Rakuten budget. See
 [Rakuten setup](rakuten-setup.md) and [provider policy](international-commerce.md).

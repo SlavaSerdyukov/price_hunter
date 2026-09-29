@@ -51,6 +51,7 @@ class CatalogRepository:
             select(StoreOffer).where(
                 StoreOffer.store_id == store.id,
                 StoreOffer.external_id == data.external_id,
+                StoreOffer.market_country == data.country,
             )
         )
         if existing:
@@ -64,6 +65,8 @@ class CatalogRepository:
                 product_id=product_id,
                 store_id=store.id,
                 external_id=data.external_id,
+                market_country=data.country,
+                source_updated_at=data.source_updated_at,
                 url=data.url,
                 direct_url=data.direct_url,
                 affiliate_url=data.affiliate_url,
@@ -99,7 +102,13 @@ class CatalogRepository:
                 last_checked_at=now,
                 next_check_at=now,
             )
-            .on_conflict_do_nothing(index_elements=[StoreOffer.store_id, StoreOffer.external_id])
+            .on_conflict_do_nothing(
+                index_elements=[
+                    StoreOffer.store_id,
+                    StoreOffer.external_id,
+                    StoreOffer.market_country,
+                ]
+            )
             .returning(StoreOffer.id)
         )
         if inserted and history_allowed:
@@ -119,6 +128,7 @@ class CatalogRepository:
                 select(StoreOffer).where(
                     StoreOffer.store_id == store.id,
                     StoreOffer.external_id == data.external_id,
+                    StoreOffer.market_country == data.country,
                 )
             )
         ).one()

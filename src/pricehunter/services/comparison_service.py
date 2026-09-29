@@ -22,6 +22,7 @@ from pricehunter.domain.freshness import Freshness, OfferFreshnessPolicy
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.fx_service import FxService
+from pricehunter.services.market_context import user_market
 from pricehunter.services.outbound_service import OutboundLinkService
 
 
@@ -37,8 +38,11 @@ class ComparisonSummary:
 class ComparisonReader:
     """Three summary queries regardless of listing count; offer bodies are paginated."""
 
-    def __init__(self, settings: Settings, permission: str | None = None) -> None:
+    def __init__(
+        self, settings: Settings, permission: str | None = None, market_country: str | None = None
+    ) -> None:
         self.permission = permission
+        self.market_country = market_country
         self.settings = settings
         self.outbound = OutboundLinkService(settings)
         base = OfferFreshnessPolicy(settings.offer_freshness_seconds)
@@ -113,6 +117,8 @@ class ComparisonReader:
                 ]
             ),
         ]
+        if self.market_country is not None:
+            filters.append(StoreOffer.market_country == self.market_country)
         if currency:
             filters.append(StoreOffer.currency == currency)
         return filters
@@ -127,14 +133,14 @@ class ComparisonReader:
         )
         policy = self.settings.data_policy(store.provider_type)
         try:
-            url = self.outbound.link(offer, store)
+            url = self.outbound.link(offer, store, market_country=offer.market_country)
         except PriceHunterError:
             url = None
         return ComparisonOffer(
             offer_id=offer.id,
             store=store.name,
             store_slug=store.slug,
-            store_country=offer.metadata_json.get("market_country", store.country),
+            store_country=offer.market_country,
             title=offer.title,
             price=offer.price,
             currency=offer.currency,
@@ -319,13 +325,21 @@ class ComparisonService:
         page: int = 0,
         size: int = 10,
         market_country: str | None = None,
+        permission: str | None = None,
     ) -> ComparisonProduct:
         (await self.entitlements.for_user(user_id)).entitlements.require(Feature.COMPARISON_SEARCH)
         async with self.sessions() as session:
-            result = await self.build(session, product_id, page=page, size=size)
+            market = await user_market(session, user_id, market_country)
+            result = await self.build(
+                session,
+                product_id,
+                page=page,
+                size=size,
+                market_country=market,
+                permission=permission,
+            )
             user = await session.get(User, user_id)
             if user:
-                result.market_country = market_country or user.country_code
                 result.preferred_currency = user.preferred_currency
                 snapshot = await self.fx.snapshot(session)
                 if snapshot:
@@ -364,20 +378,33 @@ class ComparisonService:
             return result
 
     async def build(
-        self, session: AsyncSession, product_id: UUID, *, page: int = 0, size: int = 10
+        self,
+        session: AsyncSession,
+        product_id: UUID,
+        *,
+        page: int = 0,
+        size: int = 10,
+        market_country: str | None = None,
+        permission: str | None = None,
     ) -> ComparisonProduct:
         product = await session.get(Product, product_id)
         if product is None:
             raise ProductNotFoundError()
         now = utcnow()
-        summary = await self.reader.summary(session, product_id, now)
+        reader = ComparisonReader(
+            self.reader.settings, permission=permission, market_country=market_country
+        )
+        summary = await reader.summary(session, product_id, now)
         groups = summary.groups
         size, page = min(max(size, 1), 50), max(page, 0)
-        offers = await self.reader.offers(session, product_id, now, page=page, size=size)
+        offers = await reader.offers(session, product_id, now, page=page, size=size)
         discoveries = list(
             await session.scalars(
                 select(ProductDiscovery)
-                .where(ProductDiscovery.product_id == product_id)
+                .where(
+                    ProductDiscovery.product_id == product_id,
+                    *([ProductDiscovery.country == market_country] if market_country else []),
+                )
                 .order_by(
                     ProductDiscovery.provider, ProductDiscovery.country, ProductDiscovery.currency
                 )
@@ -386,6 +413,7 @@ class ComparisonService:
         )
         return ComparisonProduct(
             id=product.id,
+            market_country=market_country,
             canonical_name=product.canonical_name,
             brand=product.brand,
             gtin=product.gtin,
