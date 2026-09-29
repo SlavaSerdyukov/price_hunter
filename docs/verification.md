@@ -561,3 +561,80 @@ retaining its original price/link. The design is recorded in
     that evidence. Hosted CI for these new changes has not been run; this record
     does not claim a commit, push, merge or deployment. Apply normal branch CI and
     the documented provider-policy configuration before deploying M4A.
+
+## M4B commerce feeds — 2026-09-29
+
+Implemented on `feat/m4b-commerce-feeds`, from merged main
+`e9dde18de3d805aaaa971e534677ced766bc13ae` (M4A/M4A.1, PR #3). The full unchanged baseline
+passed **513 tests with 90.10% coverage**. Seven new architecture/acceptance cases failed
+before implementation. [The design](m4b-design.md) preceded network adapters.
+
+1. **Architecture.** Removed the unused AffiliateProvider product hierarchy. FeedSource
+   streams normalized FeedProductData into separate staging; one FeedStoreProvider per
+   network queries staging and sends selected ProductOfferData through the existing
+   CatalogResolver and SnapshotUpdater. Actual merchant Stores remain customer-visible.
+2. **Schema.** Revisions `ff5e1c895ca6` and `431e7de33df9` add MerchantProgram,
+   MerchantFeedItem, FeedPendingItem, FeedSyncState, optional StoreOffer program context
+   and identifier/full-text indexes. Program uniqueness is network/advertiser/market;
+   Store identity is stable network/advertiser. Cross-network merging is not attempted.
+3. **Policy.** Central PolicyResolver supplies SQL EXISTS and object checks for individual
+   programs. Catalog, tracking, history, background refresh, affiliate, attribution and
+   cache rules remain independent. Revocation is checked again under the snapshot lock.
+   Direct eBay/WooCommerce/Amazon/Rakuten policies need no program rows. BE/DE sharing
+   a Store may use different approved direct-link domains.
+4. **Sync.** SKIP LOCKED claims, leases, heartbeat, fencing, bounded batches, backoff and
+   persistent generations protect retries and lost queues. Failed/partial/changed-source
+   attempts leave current data untouched. Completion preserves staging/listing IDs;
+   disappearance expires offers without inventing stock or deleting canonical history.
+   Restart replays acquisition from the beginning; compressed byte-range resume is not
+   claimed. Dry runs check source access/version and keep deduplication on temporary disk.
+5. **Awin.** Documented legacy CSV/gzip download and feed-list adapter implemented and
+   fixture-tested. Normalization covers electronics, fashion sizes/colors/parents,
+   identifiers, sale/original price, delivery, stock/unknown, missing fields, malformed
+   rows, duplicate rows and affiliate-only links. See [source audit](awin-setup.md).
+6. **TradeDoubler.** Official productFeeds/productsUnlimited/lastUpdated adapter implemented
+   and fixture-tested for authentication, pagination/completeness, currency/merchant,
+   prices/identifiers/links, variants, malformed rows, versions and HTTP failures. Sale
+   semantics not established by the audited format stay absent; upstream historical
+   prices are not imported as observations. See [source audit](tradedoubler-setup.md).
+7. **Large feeds.** Synthetic **1,000 and 100,000 row** CSV streams are consumed lazily
+   with at most one yielded row ahead. Database tests import/replay both sizes in batches
+   of 500, keep canonical Product empty until selection, preserve staging IDs and verify
+   indexed GTIN/MPN lookup. The initial import query bound is fewer than six queries per
+   batch plus 40; no wall-clock or production-throughput guarantee is asserted. Explicit
+   staging statistics prevent a quadratic replay plan after rapid bulk ingestion.
+8. **Validation.** Final suite: **568 passed, no skips, 90.46% statement coverage**;
+   the 85% gate is unchanged and the feed engine is included. Tests use dedicated
+   PostgreSQL `pricehunter_test`, Redis DB 15 and fake retailer/Telegram transports.
+   Ruff lint/format (184 Python files), strict
+   mypy (110 source files), frozen/offline lock verification, Alembic upgrade/check and
+   the disposable migration verifier pass. The verifier preserves pre-existing IDs and
+   columns across users, billing/payments, catalog/identifiers, observations, trackers,
+   watches, discoveries, best states/history, outbox, FX and outbound clicks. Populated
+   merchant programs protect downgrade; explicit synthetic cleanup permits the complete
+   downgrade/re-upgrade/schema comparison. Local documentation links and diff whitespace
+   checks pass. An offline wheel build includes both adapters, feed services and CLI;
+   local `.env` is absent from the package. The only test warning remains ARQ's upstream
+   Redis `close()` deprecation.
+9. **Operator configuration.** Defaults keep both networks disabled. Activation needs a
+   network secret, approved/reviewed merchant-program rows, numeric advertiser/feed IDs,
+   market/currency/domain and explicit FEED_PROGRAM_IDS. Startup fails usefully for missing
+   credentials/programs. Run program-check and feed-sync --dry-run before importing live
+   data; no production secret or real account is needed for tests.
+10. **Onboarding targets.** The generic mechanism is ready for approved advertisers that
+    supply the audited formats. Coolblue, MediaMarkt, Samsung, Decathlon, adidas, ABOUT YOU,
+    Fnac, Conrad and Zalando Lounge are prospective targets only. Their actual networks,
+    program access and fields need confirmation. The [matrix](merchant-programs.md) marks
+    every real target **not configured**; only synthetic programs are fixture-tested.
+11. **Live gaps.** Credentials, advertiser approvals, cache/history/tracking/attribution
+    agreements, real completeness/cadence, affiliate links and commission eligibility
+    have not been verified. TradeDoubler's unchanged-download quota and pagination quota
+    accounting need account-specific confirmation. Shared pacing is an application limit,
+    not a promise of network quota. No new network was enabled, `.env` changed, application
+    database migrated or running service restarted. Amazon approval remains unchanged.
+    Hosted CI, commit/push/merge and deployment are not claimed by this local record.
+12. **Recommended M4C.** Onboard a small approved BE/DE pilot with evidence for prices,
+    variants, completeness, cadence and attribution. Then add explicit destination/postal
+    context and documented delivery/tax fields, comparing delivered cost only when all
+    required components are known. Preserve native rankings, deterministic matching and
+    billing; scraping, ML matching, new frontend and new payment providers remain separate.

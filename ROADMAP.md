@@ -1,6 +1,6 @@
 # PriceHunter roadmap
 
-M0, M1, M2, M3A, M3B, M4A and M4A.1 are implemented. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
+M0, M1, M2, M3A, M3B, M4A, M4A.1 and M4B are implemented. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
 
 ## M0 — Foundation — implemented
 
@@ -99,11 +99,26 @@ See [international commerce](docs/international-commerce.md) and [verification](
 
 See [design and acceptance](docs/m4a1-market-correctness.md). No new networks are added.
 
-## M4B — Delivery context and reviewed feed onboarding — proposed
+## M4B — Commerce feed engine, Awin and TradeDoubler — implemented
 
+- [x] One StoreProvider catalog pipeline; bounded FeedSource acquisition and separate staging.
+- [x] Stable merchant identities, market programs and central per-merchant policy resolution.
+- [x] Leased/fenced generational sync, safe restart/replay, dry runs and bounded retention.
+- [x] Indexed GTIN/MPN/brand-model/text search and shared autonomous discovery.
+- [x] Existing snapshot semantics, variant separation and native market/currency comparison.
+- [x] Credential-gated Awin CSV/gzip and TradeDoubler paginated adapters; fixture tests.
+- [x] Operator CLI, 1k/100k streaming/batched replay and migration preservation checks.
+- [ ] Real network credentials, advertiser approvals, rights review and live price/link verification.
+
+See [feed operations](docs/commerce-feeds.md), [onboarding matrix](docs/merchant-programs.md)
+and [verification](docs/verification.md). Named onboarding targets are not live integrations.
+
+## M4C — Approved merchant pilot and delivery context — proposed
+
+- Onboard a small approved BE/DE merchant set; verify real feed completeness, quotas,
+  identifiers, variants, update cadence, permissions and affiliate attribution.
 - Explicit delivery country/postal input and documented shipping/tax/stock by destination.
 - Missing-cost semantics and separately labeled delivered-cost comparison when complete.
-- Authorized Awin/CJ feeds with identifier/fashion-variant provenance and contract retention.
 - Preserve native currency groups and deterministic matching; no automatic product merge.
 
 ## M5 — Platform

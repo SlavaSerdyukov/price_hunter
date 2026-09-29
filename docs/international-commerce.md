@@ -74,7 +74,7 @@ for permanent price history or Telegram alerts.
 - Tracking requires catalog and history permission because this implementation
   retains baselines and price aggregates. Tracking without history permission is
   deliberately rejected, rather than pretending those stored baselines are transient.
-- Refresh also needs permission and the adapter's real REFRESH capability.
+- Direct item refresh also needs permission and the adapter's real REFRESH capability.
 - Affiliate permission and active network configuration control outbound selection.
 - Attribution text appears on comparison offers when configured.
 - Cache lifetime caps display and recommendation freshness. A periodic bounded job
@@ -122,7 +122,7 @@ by bounded maintenance; IDs/settings remain, and rebuild sends no price-change a
 New events have a real market and independent sequence. Downgrade refuses scoped history,
 source-versioned snapshots or listing identities that cannot fit the former schema.
 
-The existing migration-verifier command now covers M3A → real M3B → M4A → M4A.1:
+The existing migration-verifier command now covers M3A → real M3B → M4A → M4A.1 → M4B:
 
 ```bash
 uv run python scripts/verify_m3b_migration.py
@@ -134,11 +134,28 @@ must point at a dedicated database ending `_test`. The application database is n
 See [Rakuten setup](rakuten-setup.md), [affiliate links](affiliate-links.md),
 [reference FX](fx.md), and the executed [verification record](verification.md).
 
-## M4B boundary
+## M4B merchant feeds
 
-Next scope: confirmed delivery country/postal input, documented shipping/tax fields,
-availability by destination, explicit missing-cost semantics and a separately
-labeled delivered-cost comparison when every required component is known. Add
-reviewed Awin/CJ feed onboarding with identifier/variant/stock provenance and contract
-retention. Keep native groups, deterministic matching and billing unchanged. Automatic
-product merge, frontend/Mini App/mobile, new payment methods and ML matching remain separate.
+[Awin](awin-setup.md) and [TradeDoubler](tradedoubler-setup.md) now share the existing
+catalog pipeline through a [bounded feed engine](commerce-feeds.md). Network identity
+records acquisition and affiliate metadata; Store remains the actual merchant. Programs
+are unique by network/advertiser/market and bind stable network/advertiser Store identities.
+Their approved domains may differ by market without changing the Store ID.
+
+PolicyResolver combines operational network enablement with the current merchant's
+reviewed permissions. Comparison, discovery, snapshots, history, retention and outbound
+links use that policy. SQL uses indexed program relationships/EXISTS rather than one OR
+per merchant. Existing direct providers retain their configuration policies unchanged.
+Background feed materialization requires refresh permission; catalog-only programs can
+update on explicit search. Revocation cannot silently inherit another advertiser's rights.
+
+Revisions `ff5e1c895ca6` and `431e7de33df9` add merchant programs, current/pending staging,
+leased sync state, nullable offer/program association and search indexes. Existing data and
+IDs, including FX and click records, are preserved. Downgrade refuses populated programs;
+export/reconcile merchant data before considering a downgrade. Canonical history is not
+cascaded away by staging cleanup.
+
+Both integrations remain disabled by default. See [onboarding](merchant-programs.md);
+fixtures do not establish advertiser approval, live access or attribution. Proposed M4C
+starts with an approved merchant pilot, then destination input and documented shipping/tax
+semantics. Unknown costs stay unknown; native ranking and billing remain unchanged.

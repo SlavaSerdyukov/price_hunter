@@ -66,6 +66,8 @@ class CatalogRepository:
                 store_id=store.id,
                 external_id=data.external_id,
                 market_country=data.country,
+                merchant_program_id=data.merchant_program_id,
+                feed_generation=data.feed_generation,
                 source_updated_at=data.source_updated_at,
                 url=data.url,
                 direct_url=data.direct_url,

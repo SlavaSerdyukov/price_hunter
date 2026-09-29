@@ -9,17 +9,25 @@ from uuid import UUID
 
 from sqlalchemy import select, update
 
+from pricehunter.apps import feed_admin
 from pricehunter.core.config import get_settings
 from pricehunter.core.container import Container
 from pricehunter.core.security import new_api_key, token_digest
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import APIKey, NotificationEvent, User
+from pricehunter.domain.feeds import FeedError
 from pricehunter.services.catalog_diagnostics import CatalogDiagnostics
 
 
 async def run(args: argparse.Namespace) -> None:
     container = Container(get_settings())
     try:
+        if args.command in feed_admin.COMMANDS:
+            try:
+                await feed_admin.run(container, args)
+            except FeedError as exc:
+                raise SystemExit(f"Feed operation failed: {exc.code}") from None
+            return
         if args.command in ("create-api-user", "issue-api-key"):
             key = new_api_key()
             async with container.sessions.begin() as session:
@@ -114,6 +122,7 @@ async def run(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    feed_admin.add_commands(commands)
     create = commands.add_parser("create-api-user", help="Create an API-only account and key")
     create.add_argument("--label", default="local")
     issue = commands.add_parser("issue-api-key", help="Issue a key for an existing Telegram user")

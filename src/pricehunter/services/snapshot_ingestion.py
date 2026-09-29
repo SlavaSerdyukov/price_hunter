@@ -29,6 +29,7 @@ class SnapshotUpdater:
         if offer.source_updated_at is not None and (
             data.source_updated_at is None or data.source_updated_at <= offer.source_updated_at
         ):
+            offer.feed_generation = max(offer.feed_generation, data.feed_generation)
             return False
         now = utcnow()
         if data.source_updated_at is not None and data.source_updated_at > now:
@@ -70,5 +71,7 @@ class SnapshotUpdater:
         offer.metadata_json = data.metadata
         offer.source_updated_at = data.source_updated_at
         offer.last_checked_at = now
+        offer.catalog_active = True
+        offer.feed_generation = max(offer.feed_generation, data.feed_generation)
         await session.flush()
         return True

@@ -20,6 +20,7 @@ from pricehunter.services.catalog_resolver import CatalogResolver
 from pricehunter.services.comparison_service import ComparisonService
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.outbound_service import OutboundLinkService
+from pricehunter.services.policy_resolver import PolicyResolver
 from pricehunter.services.product_watch_service import ProductWatchService
 from pricehunter.services.snapshot_ingestion import SnapshotUpdater
 
@@ -48,16 +49,26 @@ class ProductService:
         return await self.persist(data)
 
     async def persist(
-        self, data: ProductOfferData, *, mode: IngestionMode = IngestionMode.DISCOVERY
+        self,
+        data: ProductOfferData,
+        *,
+        mode: IngestionMode = IngestionMode.DISCOVERY,
+        require_refresh_permission: bool = False,
     ) -> OfferView:
         async with self.sessions.begin() as session:
             snapshot = mode == IngestionMode.SEARCH_SNAPSHOT
             if snapshot and search_ingestion(self.registry.get(data.provider).capabilities) != mode:
                 raise ValueError("Provider cannot accept search snapshots")
             offer = await self.resolver.resolve(session, data, validate_existing=snapshot)
+            policy = await PolicyResolver(self.settings).incoming(session, data)
+            if require_refresh_permission:
+                policy.require("refresh_allowed")
             if snapshot:
                 await SnapshotUpdater().accept(
-                    session, offer, data, self.settings.data_policy(data.provider)
+                    session,
+                    offer,
+                    data,
+                    policy,
                 )
             await session.flush()
             # Resolver locks the canonical product for new listings. Re-evaluation is idempotent.
@@ -92,7 +103,7 @@ class ProductService:
             offer = await CatalogRepository(session).get_offer(offer_id)
             store = await session.get(Store, offer.store_id)
             assert store is not None
-            self.settings.data_policy(store.provider_type).require("price_history_allowed")
+            PolicyResolver(self.settings).offer(offer, store).require("price_history_allowed")
             tracker = await session.scalar(
                 select(Tracker).where(
                     Tracker.user_id == user_id,

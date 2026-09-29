@@ -15,6 +15,7 @@ async def main() -> None:
         raise RuntimeError("Webhook mode is served by the API; do not also start polling")
     container = Container(settings)
     try:
+        await container.validate_feeds()
         bot = create_bot(container)
         dispatcher = create_dispatcher(container)
         try:

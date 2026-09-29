@@ -24,6 +24,7 @@ from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.fx_service import FxService
 from pricehunter.services.market_context import user_market
 from pricehunter.services.outbound_service import OutboundLinkService
+from pricehunter.services.policy_resolver import PolicyResolver
 
 
 @dataclass
@@ -75,7 +76,7 @@ class ComparisonReader:
         )
 
     def freshness_expression(self, now: datetime) -> ColumnElement[str]:
-        ttl = self.ttl_expression()
+        ttl = PolicyResolver(self.settings).ttl(self.ttl_expression())
         return case(
             (
                 or_(
@@ -100,21 +101,9 @@ class ComparisonReader:
             StoreOffer.product_id == product_id,
             Store.active.is_(True),
             Store.supported.is_(True),
-            or_(
-                *[
-                    and_(
-                        Store.provider_type == name,
-                        StoreOffer.last_checked_at
-                        > utcnow() - timedelta(seconds=policy.max_cache_seconds),
-                    )
-                    for name, policy in {
-                        "mock": self.settings.data_policy("mock"),
-                        **self.settings.provider_data_policies,
-                    }.items()
-                    if policy.reviewed
-                    and policy.catalog_persistence_allowed
-                    and (self.permission is None or getattr(policy, self.permission))
-                ]
+            StoreOffer.catalog_active.is_(True),
+            PolicyResolver(self.settings).allowed(
+                self.permission or "catalog_persistence_allowed", now=utcnow()
             ),
         ]
         if self.market_country is not None:
@@ -124,14 +113,17 @@ class ComparisonReader:
         return filters
 
     def view(self, offer: StoreOffer, store: Store, now: datetime) -> ComparisonOffer:
-        freshness = self.policy.classify(
+        effective = PolicyResolver(self.settings).offer(offer, store)
+        freshness = OfferFreshnessPolicy(
+            {"default": min(self.policy.ttl(store.provider_type), effective.max_cache_seconds)}
+        ).classify(
             store.provider_type,
             offer.last_checked_at,
             now,
             failures=offer.failure_count,
             quarantined=offer.suspicious_price is not None,
         )
-        policy = self.settings.data_policy(store.provider_type)
+        policy = PolicyResolver(self.settings).offer(offer, store)
         try:
             url = self.outbound.link(offer, store, market_country=offer.market_country)
         except PriceHunterError:
@@ -194,7 +186,15 @@ class ComparisonReader:
                     func.min(StoreOffer.match_confidence),
                     func.min(
                         StoreOffer.last_checked_at
-                        + func.make_interval(0, 0, 0, 0, 0, 0, self.ttl_expression())
+                        + func.make_interval(
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            PolicyResolver(self.settings).ttl(self.ttl_expression()),
+                        )
                     ).filter(freshness == Freshness.FRESH),
                 )
                 .select_from(StoreOffer)

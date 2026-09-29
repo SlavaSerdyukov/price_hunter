@@ -28,6 +28,7 @@ from pricehunter.domain.subscriptions import Plan
 from pricehunter.providers.base import OfferReference
 from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.policy_resolver import PolicyResolver
 from pricehunter.services.product_watch_service import ProductWatchService
 
 log = structlog.get_logger()
@@ -188,8 +189,8 @@ class PriceCheckService:
             )
             provider_name = store.provider_type
         try:
-            self.settings.data_policy(provider_name).require("refresh_allowed")
-            self.settings.data_policy(provider_name).require("tracking_allowed")
+            PolicyResolver(self.settings).offer(offer, store).require("refresh_allowed")
+            PolicyResolver(self.settings).offer(offer, store).require("tracking_allowed")
             provider = self.registry.get(provider_name)
             if Capability.REFRESH not in provider.capabilities:
                 return False
@@ -256,7 +257,7 @@ class PriceCheckService:
                 return False  # A stale worker can never overwrite a new owner's result.
             store = await session.get(Store, offer.store_id)
             assert store is not None
-            policy = self.settings.data_policy(store.provider_type)
+            policy = PolicyResolver(self.settings).offer(offer, store)
             policy.require("refresh_allowed")
             policy.require("tracking_allowed")
             if (data.external_id, data.store_slug, data.provider, data.country) != (

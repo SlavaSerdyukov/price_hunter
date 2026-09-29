@@ -2,7 +2,7 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0–M4A.1: tracking, Stars subscriptions, discovery and international commerce**. Billing is tested with
+**M0–M4B: tracking, Stars subscriptions, discovery, international commerce and merchant feeds**. Billing is tested with
 a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
@@ -27,6 +27,8 @@ a simulated Telegram transport; real Stars purchases/renewals/refunds remain man
 - Market-scoped offers, comparisons, watches and best-price history; global canonical products.
 - Reviewed provider data policies, official eBay EPN support and authorized search snapshots.
 - Credential/policy-gated Rakuten Product Search, signed outbound links and minimal click records.
+- Awin CSV/gzip and TradeDoubler feed adapters, disabled until credentials/programs are configured.
+- Merchant-specific permissions, bounded generational sync and indexed local feed search.
 - Optional timestamped ECB reference conversion; native-currency rankings stay authoritative.
 - Durable PostgreSQL state, migrations, Docker, CI, health checks and operator commands.
 - Free/Pro/Power entitlements; recurring Stars checkout, expiry, upgrades, cancellation,
@@ -150,6 +152,19 @@ For clothing, send a [Hemptees product link](https://hemptees.be/product/short-s
 and choose a size/color in the bot. Amazon remains disabled pending API access and a
 separate tracking agreement; see [Amazon setup](docs/amazon-setup.md).
 
+## Merchant feeds: Awin and TradeDoubler
+
+[The feed engine](docs/commerce-feeds.md) imports approved merchant catalogs into separate
+PostgreSQL staging. Search and shared watch discovery select relevant items for the
+existing canonical catalog. The customer sees the merchant name, not the network name.
+Each merchant/market has its own reviewed catalog, tracking, history and affiliate rights.
+
+Both networks default disabled and are fixture-tested; no Awin/TradeDoubler merchant is
+claimed live. Start with [merchant onboarding](docs/merchant-programs.md), then configure
+[Awin](docs/awin-setup.md) or [TradeDoubler](docs/tradedoubler-setup.md), approved program
+UUIDs in `FEED_PROGRAM_IDS`, and run `feed-sync PROGRAM_UUID --dry-run`. Secrets stay in
+local environment configuration. Existing direct providers require no MerchantProgram.
+
 ## Architecture
 
 ```mermaid
@@ -162,6 +177,8 @@ flowchart TD
     Services --> DB[(PostgreSQL)]
     Services --> Redis[(Redis: rate limits, FSM, queue)]
     Providers --> Retailers[Official retailer APIs]
+    FeedSources[FeedSource / approved network feeds] --> Staging[(MerchantFeedItem staging)]
+    Staging --> Providers
     DB --> Outbox[Notification outbox]
     Outbox --> Telegram[Telegram sender]
 ```

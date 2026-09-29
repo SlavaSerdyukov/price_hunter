@@ -7,6 +7,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Any
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import (
     AwareDatetime,
@@ -62,6 +63,8 @@ class ProductOfferData(BaseModel):
     source_updated_at: AwareDatetime | None = None
     external_id: str = Field(min_length=1, max_length=200)
     external_merchant_id: str | None = Field(default=None, max_length=100)
+    merchant_program_id: UUID | None = None
+    feed_generation: int = Field(default=0, ge=0)
     url: str = Field(default="", max_length=2048)
     direct_url: str | None = Field(default=None, max_length=2048)
     affiliate_url: str | None = Field(default=None, max_length=2048)

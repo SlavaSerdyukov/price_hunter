@@ -21,6 +21,7 @@ from pricehunter.domain.products import (
     normalized_variant,
     trade_id,
 )
+from pricehunter.services.policy_resolver import PolicyResolver
 
 
 def stored_evidence(product: Product, offer: StoreOffer, store: Store) -> ProductOfferData:
@@ -115,7 +116,7 @@ class CatalogResolver:
     ) -> StoreOffer:
         if validate_existing and data.source_updated_at and data.source_updated_at > utcnow():
             raise DiscoveryMismatch()
-        policy = self.settings.data_policy(data.provider)
+        policy = await PolicyResolver(self.settings).incoming(session, data)
         policy.require("catalog_persistence_allowed")
         signals = identity_signals(data)
         await self.lock_evidence(session, [data])
@@ -131,6 +132,8 @@ class CatalogResolver:
             )
         )
         if existing:
+            if existing.merchant_program_id != data.merchant_program_id:
+                raise DiscoveryMismatch()
             if expected_product_id and existing.product_id != expected_product_id:
                 raise DiscoveryMismatch()
             if validate_existing:

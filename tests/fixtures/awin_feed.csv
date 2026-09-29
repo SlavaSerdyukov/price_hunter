@@ -1,0 +1,18 @@
+merchant_id,merchant_product_id,product_name,search_price,currency,aw_deep_link,merchant_deep_link,merchant_image_url,brand_name,product_model,ean,upc,product_GTIN,mpn,colour,size,material,pattern,parent_product_id,product_price_old,rrp_price,delivery_cost,in_stock,stock_quantity,last_updated,description,merchant_category
+101,sony,Sony WH-1000XM6,329.00,EUR,https://www.awin1.com/cread.php?awinmid=101&ued=https%3A%2F%2Fexample.com%2Fp,https://example.com/p,https://example.com/image.jpg,Sony,WH-1000XM6,4548736162563,,,WH1000XM6,black,,,,,349.00,399.00,4.99,1,2,2026-01-01T10:00:00Z,"Line one
+Line two",Electronics
+101,shoe-42-black,Runner shoe,329.00,EUR,https://www.awin1.com/cread.php?awinmid=101&ued=https%3A%2F%2Fexample.com%2Fp,https://example.com/p,https://example.com/image.jpg,Example,Runner,,,,RUNNER,black,42,cotton,plain,runner,349.00,399.00,4.99,1,2,2026-01-01T10:00:00Z,"Line one
+Line two",Electronics
+101,shoe-43-black,Runner shoe,329.00,EUR,https://www.awin1.com/cread.php?awinmid=101&ued=https%3A%2F%2Fexample.com%2Fp,https://example.com/p,https://example.com/image.jpg,Example,Runner,,,,RUNNER,black,43,cotton,plain,runner,349.00,399.00,4.99,1,2,2026-01-01T10:00:00Z,"Line one
+Line two",Electronics
+101,shoe-42-white,Runner shoe,329.00,EUR,https://www.awin1.com/cread.php?awinmid=101&ued=https%3A%2F%2Fexample.com%2Fp,https://example.com/p,https://example.com/image.jpg,Example,Runner,,,,RUNNER,white,42,cotton,plain,runner,349.00,399.00,4.99,1,2,2026-01-01T10:00:00Z,"Line one
+Line two",Electronics
+101,upc,Sony WH-1000XM6,329.00,EUR,https://www.awin1.com/cread.php?awinmid=101&ued=https%3A%2F%2Fexample.com%2Fp,,,Sony,WH-1000XM6,,012345678905,,WH1000XM6,black,,,,,349.00,399.00,4.99,,,,"Line one
+Line two",Electronics
+101,minimal,Sony WH-1000XM6,329.00,EUR,https://www.awin1.com/cread.php?awinmid=101&ued=https%3A%2F%2Fexample.com%2Fp,,,,,,,,,,,,,,,,,,,,,
+101,bad-money,Sony WH-1000XM6,oops,EUR,https://www.awin1.com/cread.php?awinmid=101&ued=https%3A%2F%2Fexample.com%2Fp,https://example.com/p,https://example.com/image.jpg,Sony,WH-1000XM6,4548736162563,,,WH1000XM6,black,,,,,349.00,399.00,4.99,1,2,2026-01-01T10:00:00Z,"Line one
+Line two",Electronics
+101,bad-gtin,Sony WH-1000XM6,329.00,EUR,https://www.awin1.com/cread.php?awinmid=101&ued=https%3A%2F%2Fexample.com%2Fp,https://example.com/p,https://example.com/image.jpg,Sony,WH-1000XM6,1234567890123,,,WH1000XM6,black,,,,,349.00,399.00,4.99,1,2,2026-01-01T10:00:00Z,"Line one
+Line two",Electronics
+101,sony,Sony WH-1000XM6,329.00,EUR,https://www.awin1.com/cread.php?awinmid=101&ued=https%3A%2F%2Fexample.com%2Fp,https://example.com/p,https://example.com/image.jpg,Sony,WH-1000XM6,4548736162563,,,WH1000XM6,black,,,,,349.00,399.00,4.99,1,2,2026-01-01T10:00:00Z,"Line one
+Line two",Electronics

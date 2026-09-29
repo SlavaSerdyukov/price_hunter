@@ -15,6 +15,7 @@ from pricehunter.domain.errors import PriceHunterError
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.outbound_service import OutboundLinkService
+from pricehunter.services.policy_resolver import PolicyResolver
 
 
 @dataclass(frozen=True)
@@ -128,7 +129,7 @@ class NotificationService:
                 event.status = "cancelled"
                 return None
             try:
-                policy = self.settings.data_policy(store.provider_type)
+                policy = PolicyResolver(self.settings).offer(offer, store)
                 policy.require("tracking_allowed")
                 if event.event_type == "historical_low":
                     policy.require("price_history_allowed")
