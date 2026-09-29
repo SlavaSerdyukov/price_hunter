@@ -22,6 +22,7 @@ from pricehunter.providers.http import ProviderHTTP
 
 MARKETPLACES = {
     "US": ("ebay.com", "EBAY_US"),
+    "CA": ("ebay.ca", "EBAY_CA"),
     "DE": ("ebay.de", "EBAY_DE"),
     "GB": ("ebay.co.uk", "EBAY_GB"),
     "FR": ("ebay.fr", "EBAY_FR"),
@@ -93,6 +94,9 @@ class EbayBrowseProvider(StoreProvider):
         countries: list[str],
         *,
         belgium_locale: str = "nl-BE",
+        epn_campaign_id: str = "",
+        delivery_country: str | None = None,
+        delivery_postal_code: str = "",
     ) -> None:
         self.http = http
         self.client_id = client_id
@@ -100,6 +104,15 @@ class EbayBrowseProvider(StoreProvider):
         if belgium_locale not in ("nl-BE", "fr-BE"):
             raise ValueError("Unsupported Belgian locale")
         self.belgium_locale = belgium_locale
+        self.epn_campaign_id = epn_campaign_id
+        self.delivery_country = delivery_country
+        self.delivery_postal_code = delivery_postal_code
+        if epn_campaign_id and not re.fullmatch(r"[0-9]{10}", epn_campaign_id):
+            raise ValueError("Invalid EPN campaign ID")
+        if delivery_country and not re.fullmatch(r"[A-Z]{2}", delivery_country):
+            raise ValueError("Invalid delivery country")
+        if not re.fullmatch(r"[A-Za-z0-9 -]{0,20}", delivery_postal_code):
+            raise ValueError("Invalid delivery postal code")
         self.markets = {c: MARKETPLACES[c] for c in countries if c in MARKETPLACES}
         self.discovery_countries = frozenset(self.markets)
         self.domains = {h for domain, _ in self.markets.values() for h in (domain, "www." + domain)}
@@ -154,6 +167,16 @@ class EbayBrowseProvider(StoreProvider):
         }
         if country == "BE":
             headers["Accept-Language"] = locale or self.belgium_locale
+        context = []
+        if self.epn_campaign_id:
+            context.append(f"affiliateCampaignId={self.epn_campaign_id}")
+        if self.delivery_country and self.delivery_postal_code:
+            location = quote(
+                f"country={self.delivery_country},zip={self.delivery_postal_code}", safe=""
+            )
+            context.append(f"contextualLocation={location}")
+        if context:
+            headers["X-EBAY-C-ENDUSERCTX"] = ",".join(context)
         return headers
 
     async def _request(
@@ -259,6 +282,11 @@ class EbayBrowseProvider(StoreProvider):
                 country=country,
                 external_id=str(data["itemId"]),
                 url=url,
+                direct_url=url,
+                affiliate_url=data.get("itemAffiliateWebUrl") if self.epn_campaign_id else None,
+                affiliate_network="ebay_epn"
+                if self.epn_campaign_id and data.get("itemAffiliateWebUrl")
+                else None,
                 title=title,
                 price=amount,
                 currency=currency,

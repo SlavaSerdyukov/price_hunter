@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from pricehunter.bot.keyboards import (
     Action,
     button,
+    country_keyboard,
     main_menu,
     offer_keyboard,
     settings_keyboard,
@@ -69,7 +70,7 @@ async def show_offer(message: Message, offer: OfferView, language: str) -> None:
         language,
         "card",
         title=offer.title,
-        store=urlsplit(offer.url).hostname,
+        store=offer.store or urlsplit(offer.url or "").hostname or "—",
         price=money(offer.price, offer.currency, language),
         minimum=money(offer.minimum_price, offer.currency, language),
         availability=tr(language, offer.availability),
@@ -78,6 +79,8 @@ async def show_offer(message: Message, offer: OfferView, language: str) -> None:
         text += tr(
             language, "original", price=money(offer.original_price, offer.currency, language)
         )
+    if offer.attribution:
+        text += "\n" + tr(language, "provider_attribution", attribution=offer.attribution)
     keyboard = offer_keyboard(language, offer.id, offer.url)
     if offer.image_url and offer.image_url.startswith("https://"):
         try:
@@ -114,6 +117,11 @@ async def show_my(message: Message, container: Container, user: User, page: int 
                     if tracker.enabled
                     else "inactive",
                 ),
+            )
+            + (
+                "\n" + tr(language, "provider_attribution", attribution=offer.attribution)
+                if offer.attribution
+                else ""
             ),
             reply_markup=tracker_keyboard(language, tracker.id, offer.id, tracker.enabled),
         )
@@ -143,6 +151,12 @@ async def show_settings(message: Message, user: User) -> None:
 
 
 async def run_search(message: Message, query: str, container: Container, user: User) -> None:
+    if user.country_code is None:
+        await message.answer(
+            tr(user.language_code, "country_required"),
+            reply_markup=country_keyboard(user.language_code),
+        )
+        return
     results = await container.search.search(query[:200], user.id, country=user.country_code)
     language = user.language_code
     if results.unavailable_providers:
@@ -178,7 +192,11 @@ def build_router() -> Router:
     @router.message(Command("help"))
     async def help_command(message: Message, language: str) -> None:
         await message.answer(
-            tr(language, "help") + "\n" + tr(language, "stores_hint"),
+            tr(language, "help")
+            + "\n"
+            + tr(language, "stores_hint")
+            + "\n\n"
+            + tr(language, "affiliate_disclosure"),
             reply_markup=main_menu(language),
         )
 
@@ -303,10 +321,16 @@ def build_router() -> Router:
         elif action == "lang":
             user = await container.users.settings(user.id, UserSettingsPatch(language_code=value))
             await show_settings(message, user)
+        elif action == "country":
+            user = await container.users.settings(user.id, UserSettingsPatch(country_code=value))
+            await show_settings(message, user)
         elif action == "setting" and value in ("country", "currency", "timezone"):
             await state.set_state(Conversation.setting)
             await state.update_data(setting=value)
-            await message.answer(tr(language, value + "_prompt"))
+            await message.answer(
+                tr(language, value + "_prompt"),
+                reply_markup=country_keyboard(language) if value == "country" else None,
+            )
         elif action in ("track", "otarget"):
             if action == "otarget":
                 (await container.entitlements.for_user(user.id)).entitlements.require(

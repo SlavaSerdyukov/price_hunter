@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from babel.dates import format_datetime
 
-from pricehunter.bot.keyboards import Action, button
+from pricehunter.bot.keyboards import Action, button, country_keyboard
 from pricehunter.core.container import Container
 from pricehunter.db.models import User
 from pricehunter.domain.comparison import ComparisonOffer, ComparisonProduct
@@ -45,7 +45,7 @@ def age_text(seconds: int, language: str) -> str:
 
 
 def offer_line(offer: ComparisonOffer, language: str) -> str:
-    return (
+    text = (
         tr(
             language,
             "comparison_offer",
@@ -58,6 +58,18 @@ def offer_line(offer: ComparisonOffer, language: str) -> str:
         + tr(language, f"freshness_{offer.freshness}", age=age_text(offer.age_seconds, language))
     )
 
+    if offer.reference_price is not None and offer.reference_currency:
+        text += "\n" + tr(
+            language,
+            "fx_reference",
+            price=money(offer.reference_price, offer.reference_currency, language),
+            source=offer.fx_source or "ECB",
+            date=offer.fx_effective_date,
+        )
+    if offer.attribution:
+        text += "\n" + tr(language, "provider_attribution", attribution=offer.attribution)
+    return text
+
 
 async def show_comparison(message: Message, product: ComparisonProduct, language: str) -> None:
     lines = [
@@ -68,6 +80,8 @@ async def show_comparison(message: Message, product: ComparisonProduct, language
             count=product.store_count,
         )
     ]
+    if product.market_country:
+        lines.append(tr(language, "market_context", country=product.market_country))
     rows = []
     for group in product.currency_groups[:4]:
         best = group.best_available_offer
@@ -79,11 +93,23 @@ async def show_comparison(message: Message, product: ComparisonProduct, language
             )
             rows.append(
                 [
-                    InlineKeyboardButton(
-                        text=tr(language, "best_offer", currency=group.currency),
-                        url=best.url,
+                    *(
+                        [
+                            InlineKeyboardButton(
+                                text=tr(language, "best_offer", currency=group.currency),
+                                url=best.url,
+                            )
+                        ]
+                        if best.url
+                        else []
                     ),
-                    button(language, "watch_best", "watch", f"{product.id.hex}_{group.currency}"),
+                    button(
+                        language,
+                        "watch_best",
+                        "watch",
+                        f"{product.id.hex}_{group.currency}"
+                        + (f"_{product.market_country}" if product.market_country else ""),
+                    ),
                 ]
             )
         else:
@@ -94,7 +120,15 @@ async def show_comparison(message: Message, product: ComparisonProduct, language
                 + offer_line(group.cheapest_known_offer, language)
             )
             rows.append(
-                [button(language, "watch_best", "watch", f"{product.id.hex}_{group.currency}")]
+                [
+                    button(
+                        language,
+                        "watch_best",
+                        "watch",
+                        f"{product.id.hex}_{group.currency}"
+                        + (f"_{product.market_country}" if product.market_country else ""),
+                    )
+                ]
             )
         rows.append(
             [
@@ -102,7 +136,8 @@ async def show_comparison(message: Message, product: ComparisonProduct, language
                     language,
                     "best_price_history",
                     "besthist",
-                    f"{product.id.hex}_{group.currency}",
+                    f"{product.id.hex}_{group.currency}"
+                    + (f"_{product.market_country}" if product.market_country else ""),
                     currency=group.currency,
                 )
             ]
@@ -121,20 +156,47 @@ async def show_comparison(message: Message, product: ComparisonProduct, language
     if any(d.status == "backed_off" for d in product.discovery):
         lines.append(tr(language, "discovery_partial"))
     lines.append(tr(language, "comparison_price_note"))
-    rows.append([button(language, "refresh_prices", "refreshcmp", product.id.hex)])
     rows.append(
         [
-            button(language, "all_offers", "offers", f"{product.id.hex}_0"),
-            button(language, "comparison_details", "details", product.id.hex),
+            button(
+                language,
+                "refresh_prices",
+                "refreshcmp",
+                product.id.hex + (f"_{product.market_country}" if product.market_country else ""),
+            )
+        ]
+    )
+    rows.append(
+        [
+            button(
+                language,
+                "all_offers",
+                "offers",
+                f"{product.id.hex}_0"
+                + (f"_{product.market_country}" if product.market_country else ""),
+            ),
+            button(
+                language,
+                "comparison_details",
+                "details",
+                product.id.hex + (f"_{product.market_country}" if product.market_country else ""),
+            ),
         ]
     )
     await answer_sections(message, lines, rows)
 
 
 async def show_offers(
-    message: Message, container: Container, user: User, product_id: UUID, page: int
+    message: Message,
+    container: Container,
+    user: User,
+    product_id: UUID,
+    page: int,
+    market_country: str | None = None,
 ) -> None:
-    product = await container.products.comparisons.get(product_id, user.id, page=page, size=5)
+    product = await container.products.comparisons.get(
+        product_id, user.id, page=page, size=5, market_country=market_country
+    )
     language = user.language_code
     lines = [
         tr(
@@ -149,20 +211,63 @@ async def show_offers(
         lines.append(f"{index}. " + offer_line(offer, language))
         rows.append(
             [
-                InlineKeyboardButton(text=f"{index}. {tr(language, 'open_store')}", url=offer.url),
+                *(
+                    [
+                        InlineKeyboardButton(
+                            text=f"{index}. {tr(language, 'open_store')}", url=offer.url
+                        )
+                    ]
+                    if offer.url
+                    else []
+                ),
                 button(language, "track", "track", offer.offer_id.hex),
             ]
         )
     navigation = []
     if page:
-        navigation.append(button(language, "back", "offers", f"{product_id.hex}_{page - 1}"))
+        navigation.append(
+            button(
+                language,
+                "back",
+                "offers",
+                f"{product_id.hex}_{page - 1}"
+                + (f"_{product.market_country}" if product.market_country else ""),
+            )
+        )
     if (page + 1) * 5 < product.offer_count:
-        navigation.append(button(language, "next", "offers", f"{product_id.hex}_{page + 1}"))
+        navigation.append(
+            button(
+                language,
+                "next",
+                "offers",
+                f"{product_id.hex}_{page + 1}"
+                + (f"_{product.market_country}" if product.market_country else ""),
+            )
+        )
     if navigation:
         rows.append(navigation)
     for currency in sorted({offer.currency for offer in product.offers}):
-        rows.append([button(language, "watch_best", "watch", f"{product_id.hex}_{currency}")])
-    rows.append([button(language, "compare_stores", "compare", product_id.hex)])
+        rows.append(
+            [
+                button(
+                    language,
+                    "watch_best",
+                    "watch",
+                    f"{product_id.hex}_{currency}"
+                    + (f"_{product.market_country}" if product.market_country else ""),
+                )
+            ]
+        )
+    rows.append(
+        [
+            button(
+                language,
+                "compare_stores",
+                "compare",
+                product_id.hex + (f"_{product.market_country}" if product.market_country else ""),
+            )
+        ]
+    )
     await answer_sections(message, lines, rows)
 
 
@@ -178,6 +283,7 @@ async def show_watches(message: Message, container: Container, user: User, page:
                 language,
                 "watch_card",
                 title=watch.canonical_name[:180],
+                market_country=watch.market_country,
                 currency=watch.currency,
                 status=tr(
                     language,
@@ -190,13 +296,13 @@ async def show_watches(message: Message, container: Container, user: User, page:
             ),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [button(language, "compare_stores", "compare", watch.product_id.hex)],
+                    [button(language, "compare_stores", "wcompare", watch.id.hex)],
                     [
                         button(
                             language,
                             "best_price_history",
                             "besthist",
-                            f"{watch.product_id.hex}_{watch.currency}",
+                            f"{watch.product_id.hex}_{watch.currency}_{watch.market_country}",
                             currency=watch.currency,
                         )
                     ],
@@ -225,9 +331,17 @@ async def show_watches(message: Message, container: Container, user: User, page:
 
 
 async def show_best_history(
-    message: Message, container: Container, user: User, product_id: UUID, currency: str
+    message: Message,
+    container: Container,
+    user: User,
+    product_id: UUID,
+    currency: str,
+    *,
+    market_country: str | None = None,
 ) -> None:
-    history = await container.best_prices.history(product_id, user.id, currency, limit=10)
+    history = await container.best_prices.history(
+        product_id, user.id, currency, limit=10, market_country=market_country
+    )
     language = user.language_code
     best = history.current_best
     current = (
@@ -237,6 +351,7 @@ async def show_best_history(
     )
     lines = [
         tr(language, "best_history_title", title=history.canonical_name[:180], currency=currency),
+        tr(language, "market_context", country=history.market_country),
         tr(language, "best_history_current", current=current),
         tr(
             language,
@@ -262,8 +377,17 @@ async def show_best_history(
         )
     if not history.points:
         lines.append(tr(language, "best_history_empty"))
-    rows = [[button(language, "compare_stores", "compare", product_id.hex)]]
-    if best:
+    rows = [
+        [
+            button(
+                language,
+                "compare_stores",
+                "compare",
+                f"{product_id.hex}_{history.market_country}",
+            )
+        ]
+    ]
+    if best and best.url:
         rows.append(
             [InlineKeyboardButton(text=tr(language, "best_offer", currency=currency), url=best.url)]
         )
@@ -286,9 +410,11 @@ def build_comparison_router() -> Router:
             F.action.in_(
                 {
                     "compare",
+                    "wcompare",
                     "offers",
                     "details",
                     "watch",
+                    "wmarket",
                     "watches",
                     "wpause",
                     "wresume",
@@ -313,8 +439,19 @@ def build_comparison_router() -> Router:
         await query.answer()
         await state.clear()
         action, value = callback_data.action, callback_data.value
-        if action == "besthist":
-            product_id, currency = value.split("_", 1)
+        if action == "wcompare":
+            watch = await container.watches.get(user.id, UUID(value))
+            product = await container.products.comparisons.get(
+                watch.product_id,
+                user.id,
+                market_country=watch.market_country,
+                permission="tracking_allowed",
+            )
+            await show_comparison(query.message, product, language)
+        elif action == "besthist":
+            parts = value.split("_")
+            product_id, currency = parts[:2]
+            market = parts[2] if len(parts) == 3 else None
             if (
                 len(currency) != 3
                 or not currency.isascii()
@@ -322,9 +459,14 @@ def build_comparison_router() -> Router:
                 or not currency.isupper()
             ):
                 raise ValueError("Invalid currency")
-            await show_best_history(query.message, container, user, UUID(product_id), currency)
+            await show_best_history(
+                query.message, container, user, UUID(product_id), currency, market_country=market
+            )
         elif action == "refreshcmp":
-            accepted = await container.comparison_operations.request_refresh(UUID(value), user.id)
+            parts = value.split("_")
+            accepted = await container.comparison_operations.request_refresh(
+                UUID(parts[0]), user.id, market_country=parts[1] if len(parts) == 2 else None
+            )
             await query.message.answer(tr(language, "refresh_queued", count=accepted.queued_count))
         elif action == "watches":
             await show_watches(
@@ -347,10 +489,21 @@ def build_comparison_router() -> Router:
                     else "resumed",
                 )
             )
-        elif action == "watch":
-            product_id, currency = value.split("_", 1)
+        elif action in ("watch", "wmarket"):
+            parts = value.split("_")
+            product_id, currency = parts[:2]
+            market = parts[2] if len(parts) == 3 else user.country_code
+            if not market:
+                await query.message.answer(
+                    tr(language, "country_required"),
+                    reply_markup=country_keyboard(
+                        language, action="wmarket", prefix=f"{product_id}_{currency}_"
+                    ),
+                )
+                return
             await container.watches.create(
-                user.id, WatchCreate(product_id=UUID(product_id), currency=currency)
+                user.id,
+                WatchCreate(product_id=UUID(product_id), currency=currency, market_country=market),
             )
             await query.message.answer(
                 tr(language, "watch_created", currency=currency),
@@ -361,12 +514,22 @@ def build_comparison_router() -> Router:
                 ),
             )
         elif action == "offers":
-            product_id, page = value.split("_", 1)
+            parts = value.split("_")
+            product_id, page = parts[:2]
+            market = parts[2] if len(parts) == 3 else None
             await show_offers(
-                query.message, container, user, UUID(product_id), min(max(int(page), 0), 10000)
+                query.message,
+                container,
+                user,
+                UUID(product_id),
+                min(max(int(page), 0), 10000),
+                market_country=market,
             )
         else:
-            product = await container.products.product(UUID(value), user.id)
+            parts = value.split("_")
+            product = await container.products.comparisons.get(
+                UUID(parts[0]), user.id, market_country=parts[1] if len(parts) == 2 else None
+            )
             await show_comparison(query.message, product, language)
             if action == "details":
                 await query.message.answer(

@@ -21,6 +21,7 @@ from pricehunter.db.models import (
     Tracker,
 )
 from pricehunter.db.session import SessionFactory
+from pricehunter.domain.discovery import Capability
 from pricehunter.domain.pricing import TrackerRules, anomaly_reason, evaluate_rules
 from pricehunter.domain.products import ProductOfferData
 from pricehunter.domain.subscriptions import Plan
@@ -94,6 +95,7 @@ class PriceCheckService:
                 .where(
                     ProductWatch.product_id == StoreOffer.product_id,
                     ProductWatch.currency == StoreOffer.currency,
+                    ProductWatch.market_country == StoreOffer.market_country,
                     ProductWatch.id.in_(eligible_watches),
                 )
                 .correlate(StoreOffer)
@@ -110,6 +112,15 @@ class PriceCheckService:
                     .where(
                         StoreOffer.next_check_at <= now,
                         Store.active.is_(True),
+                        Store.provider_type.in_(
+                            [
+                                p.name
+                                for p in self.registry.providers.values()
+                                if Capability.REFRESH in p.capabilities
+                                and self.settings.data_policy(p.name).tracking_allowed
+                                and self.settings.data_policy(p.name).refresh_allowed
+                            ]
+                        ),
                         Store.supported.is_(True),
                         or_(
                             StoreOffer.refresh_requested_at > now - timedelta(minutes=5),
@@ -128,6 +139,7 @@ class PriceCheckService:
                             exists().where(
                                 ProductWatch.product_id == StoreOffer.product_id,
                                 ProductWatch.currency == StoreOffer.currency,
+                                ProductWatch.market_country == StoreOffer.market_country,
                                 ProductWatch.id.in_(eligible_watches),
                             ),
                         ),
@@ -176,7 +188,11 @@ class PriceCheckService:
             )
             provider_name = store.provider_type
         try:
+            self.settings.data_policy(provider_name).require("refresh_allowed")
+            self.settings.data_policy(provider_name).require("tracking_allowed")
             provider = self.registry.get(provider_name)
+            if Capability.REFRESH not in provider.capabilities:
+                return False
             async with self.limiter.provider(provider_name):
                 data = await provider.refresh_offer(reference)
             return await self.accept(claim, data)
@@ -213,7 +229,9 @@ class PriceCheckService:
                 offer.next_check_at = utcnow() + timedelta(seconds=delay)
                 offer.lease_token, offer.lease_until = None, None
                 await session.flush()
-                await self.watches.evaluate(session, product_id)
+                await self.watches.evaluate(
+                    session, product_id, market_country=offer.market_country
+                )
 
     async def accept(self, claim: RefreshClaim, data: ProductOfferData) -> bool:
         now = utcnow()
@@ -238,10 +256,14 @@ class PriceCheckService:
                 return False  # A stale worker can never overwrite a new owner's result.
             store = await session.get(Store, offer.store_id)
             assert store is not None
-            if (data.external_id, data.store_slug, data.provider) != (
+            policy = self.settings.data_policy(store.provider_type)
+            policy.require("refresh_allowed")
+            policy.require("tracking_allowed")
+            if (data.external_id, data.store_slug, data.provider, data.country) != (
                 offer.external_id,
                 store.slug,
                 store.provider_type,
+                offer.market_country,
             ):
                 raise ValueError("Provider changed listing identity")
             trackers = list(
@@ -265,6 +287,7 @@ class PriceCheckService:
                     select(ProductWatch).where(
                         ProductWatch.product_id == product_id,
                         ProductWatch.currency == offer.currency,
+                        ProductWatch.market_country == offer.market_country,
                         ProductWatch.id.in_(self.entitlements.scheduled_watch_ids(now)),
                     )
                 )
@@ -298,32 +321,44 @@ class PriceCheckService:
                 offer.next_check_at = now + timedelta(seconds=min(interval, 300))
                 log.warning("observation_quarantined", store_offer_id=str(offer.id), reason=reason)
                 await session.flush()
-                await self.watches.evaluate(session, product_id)
+                await self.watches.evaluate(
+                    session, product_id, market_country=offer.market_country
+                )
                 return False
             previous, previous_availability = offer.price, offer.availability
             minimum = offer.minimum_price
-            observation_id = uuid4()
-            await session.execute(
-                insert(PriceObservation)
-                .values(
-                    id=observation_id,
-                    store_offer_id=offer.id,
-                    refresh_key=str(claim.token),
-                    price=data.price,
-                    currency=data.currency,
-                    availability=data.availability,
-                    checked_at=now,
+            observation_id = uuid4() if policy.price_history_allowed else None
+            if policy.price_history_allowed:
+                await session.execute(
+                    insert(PriceObservation)
+                    .values(
+                        id=observation_id,
+                        store_offer_id=offer.id,
+                        refresh_key=str(claim.token),
+                        price=data.price,
+                        currency=data.currency,
+                        availability=data.availability,
+                        checked_at=now,
+                    )
+                    .on_conflict_do_nothing(index_elements=[PriceObservation.refresh_key])
                 )
-                .on_conflict_do_nothing(index_elements=[PriceObservation.refresh_key])
-            )
             offer.price, offer.availability = data.price, data.availability
             offer.title, offer.image_url = data.title, data.image_url
             offer.original_price = data.original_price
+            offer.direct_url, offer.affiliate_url = data.direct_url, data.affiliate_url
+            offer.affiliate_network, offer.affiliate_metadata = (
+                data.affiliate_network,
+                data.affiliate_metadata,
+            )
+            offer.url = data.url
             offer.last_checked_at = now
             offer.minimum_price = min(minimum, data.price)
             offer.maximum_price = max(offer.maximum_price, data.price)
             offer.total_price += data.price
             offer.observation_count += 1
+            if not policy.price_history_allowed:
+                offer.minimum_price = offer.maximum_price = offer.total_price = data.price
+                offer.observation_count = 1
             offer.refresh_sequence += 1
             offer.failure_count = 0
             offer.refresh_requested_at = None
@@ -393,7 +428,9 @@ class PriceCheckService:
                     event_values,
                 )
             await session.flush()
-            await self.watches.evaluate(session, product_id, observation_id)
+            await self.watches.evaluate(
+                session, product_id, observation_id, market_country=offer.market_country
+            )
             return True
 
     async def prune_history(self, *, before: datetime, batch_size: int = 5000) -> int:

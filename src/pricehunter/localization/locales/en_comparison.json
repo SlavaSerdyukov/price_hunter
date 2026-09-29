@@ -14,7 +14,7 @@
   "compare_stores": "📊 Compare stores",
   "my_watches": "🔔 My price watches",
   "watches_empty": "No best-price watches yet. Search for a product and choose Track best.",
-  "watch_card": "<b>{title}</b>\nBest-price watch · {currency}\n{status}",
+  "watch_card": "<b>{title}</b>\nBest-price watch · {currency}\n{status}\nMarket: {market_country}",
   "watch_created": "Watching the best available offer in {currency}. The merchant can change. Manage it in /watches.",
   "merchant_became_cheapest": "Another merchant is now cheapest",
   "new_best_price": "New best price",
@@ -44,5 +44,11 @@
   "best_history_merchant_changed": "Merchant changed",
   "best_history_became_unavailable": "No current offer",
   "best_history_restored": "Current offer restored",
-  "best_history_window_start": "At start of window"
+  "best_history_window_start": "At start of window",
+  "market_context": "Market: {country} · catalog context; delivery depends on the store.",
+  "country_required": "Choose a market country before creating this watch.",
+  "provider_policy": "This provider has not been approved for this use yet.",
+  "affiliate_disclosure": "Some store links are affiliate links. PriceHunter may receive a commission; commissions never affect ranking.",
+  "fx_reference": "≈ {price} · {source} reference, {date}",
+  "provider_attribution": "{attribution}"
 }

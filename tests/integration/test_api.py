@@ -25,8 +25,12 @@ async def test_api_language_preference_persists(container, language):
         assert await container.users.language(111) == language
 
 
-async def api_client(container, telegram_id):
+async def api_client(container, telegram_id, *, country="BE"):
     user = await container.users.telegram(telegram_id)
+    if country is not None:
+        from pricehunter.schemas.api import UserSettingsPatch
+
+        await container.users.settings(user.id, UserSettingsPatch(country_code=country))
     token = f"ph_test_only_known_key_{telegram_id}_123456789"
     async with container.sessions.begin() as session:
         session.add(APIKey(user_id=user.id, digest=token_digest(token), label="test"))

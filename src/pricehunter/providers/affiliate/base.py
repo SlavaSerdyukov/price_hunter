@@ -7,7 +7,7 @@ from pricehunter.domain.products import ProductOfferData
 
 @dataclass(frozen=True)
 class AffiliateLink:
-    direct_url: str
+    direct_url: str | None
     affiliate_url: str
     network: str
     click_id: str | None = None

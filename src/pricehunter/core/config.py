@@ -4,6 +4,9 @@ from typing import Annotated, Literal
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pricehunter.domain.markets import CountryCode
+from pricehunter.domain.provider_policy import SYNTHETIC_POLICY, ProviderDataPolicy
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -25,6 +28,28 @@ class Settings(BaseSettings):
     ebay_client_secret: SecretStr = SecretStr("")
     ebay_marketplaces: list[str] = ["BE", "DE", "FR", "NL", "IT", "ES", "AT", "IE", "PL"]
     ebay_belgium_locale: Literal["nl-BE", "fr-BE"] = "nl-BE"
+    ebay_epn_campaign_id: str = Field(default="", pattern=r"^(?:[0-9]{10})?$")
+    ebay_delivery_country: CountryCode | None = None
+    ebay_delivery_postal_code: str = Field(default="", max_length=20, pattern=r"^[A-Za-z0-9 -]*$")
+    provider_data_policies: dict[str, ProviderDataPolicy] = {}
+    rakuten_enabled: bool = False
+    rakuten_client_id: SecretStr = SecretStr("")
+    rakuten_client_secret: SecretStr = SecretStr("")
+    rakuten_account_id: SecretStr = SecretStr("")
+    # Reviewed advertiser MIDs by catalog market; Product Search has no documented NID filter.
+    rakuten_advertisers: dict[
+        CountryCode, list[Annotated[str, Field(pattern=r"^[0-9]{1,20}$")]]
+    ] = {}
+    rakuten_page_size: int = Field(20, ge=1, le=100)
+    rakuten_max_pages: int = Field(2, ge=1, le=5)
+    rakuten_max_results: int = Field(50, ge=1, le=100)
+    public_base_url: str = ""
+    redirect_signing_secret: SecretStr = SecretStr("")
+    redirect_ttl_seconds: int = Field(86400, ge=60, le=2592000)
+    outbound_click_retention_days: int = Field(30, ge=1, le=365)
+    fx_enabled: bool = False
+    fx_refresh_seconds: int = Field(21600, ge=3600, le=86400)
+    fx_max_age_days: int = Field(7, ge=1, le=30)
     woocommerce_stores: list[
         Literal["pine64_eu", "raspberrypi_dk", "hemptees_be", "westernshop_be"]
     ] = []
@@ -89,6 +114,7 @@ class Settings(BaseSettings):
     user_requests_per_minute: int = Field(10, ge=1)
     provider_requests_per_minute: int = Field(60, ge=1)
     provider_rate_limits: dict[str, Annotated[int, Field(ge=1)]] = {
+        "rakuten": 20,
         "woocommerce_pine64_eu": 10,
         "woocommerce_raspberrypi_dk": 10,
         "woocommerce_hemptees_be": 5,
@@ -123,6 +149,11 @@ class Settings(BaseSettings):
     discovery_suppression_seconds: int = Field(3600, ge=60)
     comparison_refresh_limit: int = Field(20, ge=1, le=100)
     support_contact: str = "Contact the bot administrator for support."
+
+    def data_policy(self, provider: str) -> ProviderDataPolicy:
+        if provider == "mock":
+            return SYNTHETIC_POLICY
+        return self.provider_data_policies.get(provider, ProviderDataPolicy())
 
     @model_validator(mode="after")
     def production_safety(self) -> "Settings":

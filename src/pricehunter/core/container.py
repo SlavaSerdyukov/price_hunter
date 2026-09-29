@@ -9,6 +9,7 @@ from pricehunter.core.network import PublicHTTPTransport
 from pricehunter.db.session import SessionFactory, create_sessions
 from pricehunter.domain.subscriptions import Plan, PlanEntitlements, SubscriptionPolicy
 from pricehunter.payments.stars import TelegramStarsPaymentProvider
+from pricehunter.providers.affiliate.rakuten import RakutenProvider, RakutenTokenManager
 from pricehunter.providers.amazon import AmazonCreatorsProvider
 from pricehunter.providers.base import StoreProvider
 from pricehunter.providers.ebay import EbayBrowseProvider
@@ -23,6 +24,8 @@ from pricehunter.services.billing_service import BillingService
 from pricehunter.services.comparison_operations import ComparisonOperations
 from pricehunter.services.discovery_service import ProductDiscoveryService
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.fx_service import FxService
+from pricehunter.services.outbound_service import OutboundLinkService, validate_redirect_settings
 from pricehunter.services.price_check_service import PriceCheckService
 from pricehunter.services.product_service import ProductService
 from pricehunter.services.product_watch_service import ProductWatchService
@@ -44,7 +47,10 @@ class Container:
         registry: ProviderRegistry | None = None,
     ) -> None:
         self.settings = settings
+        validate_redirect_settings(settings)
+        self.outbound = OutboundLinkService(settings)
         self.sessions = sessions or create_sessions(settings)
+        self.fx = FxService(self.sessions, settings)
         self.redis = (
             redis
             if redis is not None
@@ -80,6 +86,9 @@ class Container:
                     settings.ebay_client_secret.get_secret_value(),
                     settings.ebay_marketplaces,
                     belgium_locale=settings.ebay_belgium_locale,
+                    epn_campaign_id=settings.ebay_epn_campaign_id,
+                    delivery_country=settings.ebay_delivery_country,
+                    delivery_postal_code=settings.ebay_delivery_postal_code,
                 )
             )
         for shop in dict.fromkeys(settings.woocommerce_stores):
@@ -108,6 +117,36 @@ class Container:
                     partner_tag=settings.amazon_partner_tag,
                 )
             )
+        if settings.rakuten_enabled:
+            settings.data_policy("rakuten").require("affiliate_allowed")
+            credentials = [
+                settings.rakuten_client_id,
+                settings.rakuten_client_secret,
+                settings.rakuten_account_id,
+            ]
+            if (
+                not all(c.get_secret_value().strip() for c in credentials)
+                or not settings.rakuten_advertisers
+            ):
+                raise ValueError("Rakuten requires credentials and reviewed market advertisers")
+            http = ProviderHTTP(
+                self.http,
+                timeout=settings.provider_timeout_seconds,
+                max_bytes=settings.max_response_bytes,
+            )
+            providers.append(
+                RakutenProvider(
+                    http,
+                    RakutenTokenManager(http, *(c.get_secret_value() for c in credentials)),
+                    self.limiter,
+                    settings.rakuten_advertisers,
+                    page_size=settings.rakuten_page_size,
+                    max_pages=settings.rakuten_max_pages,
+                    max_results=settings.rakuten_max_results,
+                )
+            )
+        for provider in providers:
+            settings.data_policy(provider.name).require("catalog_persistence_allowed")
         self.registry = registry or ProviderRegistry(providers)
         self.policy = SubscriptionPolicy(
             {
@@ -153,7 +192,7 @@ class Container:
         self.discovery = ProductDiscoveryService(
             self.sessions, self.registry, self.limiter, settings, self.entitlements
         )
-        self.trackers = TrackingService(self.sessions, self.entitlements, settings)
+        self.trackers = TrackingService(self.sessions, self.entitlements, settings, self.registry)
         self.search = SearchService(self.registry, self.limiter, self.entitlements, self.products)
         self.price_checks = PriceCheckService(
             self.sessions, self.registry, self.limiter, settings, self.entitlements

@@ -52,6 +52,15 @@ class ProductNotFoundError(PriceHunterError):
     status_code = 404
 
 
+class CountryRequiredError(PriceHunterError):
+    code = "country_required"
+
+
+class ProviderPolicyError(PriceHunterError):
+    code = "provider_policy"
+    status_code = 403
+
+
 class RateLimitExceededError(PriceHunterError):
     code = "rate_limit"
     status_code = 429

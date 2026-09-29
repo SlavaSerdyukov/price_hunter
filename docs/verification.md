@@ -420,3 +420,144 @@ M3A `6da2c03`, **337 passing tests, 88.51% coverage**. Work remains on
   Seven packaged locales, `.env.example` and all local README/roadmap/docs links passed
   independently of the working tree. No local `.env` or development-only source path
   was required for this package verification.
+
+## M4A international commerce — 2026-09-28
+
+Implemented on `feat/m4a-international-commerce`. The pre-change audit and design
+are in [m4a-design.md](m4a-design.md); operating instructions are in
+[international-commerce.md](international-commerce.md).
+
+1. **M3B baseline.** PR #2 was merged as `0d6d493` and
+   [main CI passed](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/35608647734)
+   before implementation. The local baseline was **399 passed, 89.41% coverage**,
+   with lint, formatting, strict typing, schema comparison and migration verification
+   passing. No M4A hosted CI execution or deployment is claimed by this local report.
+2. **Schema.** Revision `2c125500eaf6` adds required watch market, market-aware watch
+   uniqueness, merchant external ID, affiliate metadata, nullable direct URL, optional
+   delivery fields, minimal OutboundClick and Decimal FxRate tables. Billing schema
+   and services were not redesigned. Downgrade refuses incompatible M4A data.
+3. **Market migration.** The extended `scripts/verify_m3b_migration.py` successfully
+   upgraded a real M3B-shaped scratch database, preserving all pre-existing columns
+   and IDs in users/products/identifiers/stores/offers/observations/trackers/watches/
+   discoveries/best states/history/outbox/subscriptions/payments. Existing watches
+   inherit saved DE or legacy BE; new country-less accounts receive `country_required`.
+   Tests verify BE/EUR and DE/EUR coexistence, separate discovery targets, unchanged
+   watch country after profile edits, and country-preserving Telegram notification links.
+4. **eBay EPN.** Fake HTTP exercises optional campaign context, returned affiliate
+   URL persistence, direct fallback without campaign, explicit country/postal context
+   and Belgian destination aliases. No per-user affiliate reference is sent or stored.
+   Existing live Browse access does not establish live EPN attribution or data-use rights.
+5. **Rakuten.** Fixture tests cover documented token form, cached concurrent renewal,
+   one authentication retry, safe bounded XML, pagination, shared concurrent request
+   limiting, MID merchant identity, market-scoped listing identity, Decimal sale rules,
+   UPC validation, malformed-item isolation and partial provider failure. Stock stays
+   unknown; SEARCH_MODEL does not claim GTIN filtering or item refresh. Reviewed
+   search-only results create no history and expire through bounded cache eviction.
+6. **Outbound links.** API/Telegram cards, comparisons, trackers and notifications use
+   the central policy selector. Signed redirects resolve current server-side offers;
+   tests reject tampered/expired tokens, unknown offers, inactive stores, unsafe
+   schemes/hosts and query-injected destinations. Commission metadata does not alter
+   native-price ranking or notification decisions. Configured attribution is rendered.
+7. **Clicks and privacy.** A successful redirect appends a minimal event; rejected
+   redirects append none. Schema assertions exclude Telegram/account IDs, IP, UA and
+   other user metadata. Retention and foreign-key detachment are tested. Analytics
+   have no public read endpoint; proxy logging remains a deployment responsibility.
+8. **Reference FX.** ECB snapshots persist atomically with source, effective date and
+   fetch timestamp. Tests cover Decimal direct/inverse/cross conversion, same and
+   unsupported currencies, weekend reuse, stale cutoff, invalid rates/XML, shared
+   fetch/cadence and failure backoff. Approximate display amounts leave native prices,
+   per-currency best offers, alerts and Stars billing unchanged.
+9. **Final checks.** **497 tests passed, no skips, 89.86% statement coverage**; the 85%
+   gate is unchanged. Ruff lint and formatting (156 Python files), strict mypy
+   (96 source files), `alembic upgrade head`, `alembic check`, migration preservation /
+   guarded downgrade / re-upgrade, and local README/roadmap/docs links all passed.
+   Tests use dedicated PostgreSQL `pricehunter_test` and Redis DB 15. All seven bot
+   languages remain covered. The sole warning is the existing upstream ARQ call to
+   deprecated Redis `close()`. Retailer and Telegram test transports sent no messages,
+   made no purchases and spent no Stars.
+10. **Live verification and remaining gates.** A read-only request through the real
+    public HTTP transport successfully parsed official ECB daily XML at
+    `2026-09-28T11:19:55.421921+00:00`: 29 currencies, effective date **2026-09-25**.
+    It wrote no database data. Rakuten and EPN remain fixture-tested, credential/policy-
+    gated: live token/account/MID access, campaign attribution, actual returned links,
+    display requirements and commission eligibility still need account-specific checks.
+    Amazon retains its existing approval gate. The running local application remains
+    M3B; this work did not modify its `.env`, migrate its database or restart its services.
+    Configure reviewed policies for enabled real sources before an M4A upgrade.
+11. **Proposed M4B scope.** Add explicit delivery country/postal input, documented
+    shipping/tax and destination availability, unknown-cost semantics and separately
+    labeled delivered-cost comparison only when required components are known. Add
+    reviewed Awin/CJ feed onboarding with identifier, variant, stock and retention
+    provenance. Keep native ranking, deterministic matching and existing billing;
+    automatic merge, frontend/Mini App/mobile, new checkout methods and ML matching
+    remain outside that scope.
+
+## M4A.1 market correctness and snapshot ingestion — 2026-09-29
+
+Implemented on `feat/m4a-international-commerce`, starting at
+`6297346194226e628c92cf668d1e2a2c78cc9791`. The unchanged baseline passed
+**497 tests with 89.86% coverage**. Before implementation, two new regressions
+reproduced BE comparison selecting a cheaper DE offer and repeated Rakuten search
+retaining its original price/link. The design is recorded in
+[m4a1-market-correctness.md](m4a1-market-correctness.md).
+
+1. **Market schema.** Required `StoreOffer.market_country` comes directly from
+   `ProductOfferData.country`. Listing uniqueness is merchant/external ID/market;
+   the product/market/currency index supports comparison and refresh queries.
+   `ProductBestState` and `BestPriceEvent` series include market. Product stays
+   global, and Store stays a merchant identity with a legacy/primary country.
+2. **Legacy history.** All pre-existing global best events retain their IDs and
+   values with NULL market. They are excluded from market-specific history; no
+   historical market is inferred from the winning offer. Old best-state rows remain
+   inactive with NULL market. Bounded maintenance silently rebuilds enabled watch
+   baselines, including watches paused by quota; repeated maintenance is idempotent
+   and emits no migration notifications.
+3. **Comparison.** Search, product details, offers, best history and manual refresh
+   resolve explicit country, then saved country, otherwise `country_required`.
+   CountryCode validation rejects unsupported codes. BE → DE → BE search retains
+   one canonical Product and returns only the requested market each time. Native
+   currency ranking and display-only FX conversion remain unchanged.
+4. **Watches and notifications.** Creation, evaluation, scheduling, worker demand,
+   history and refresh use product/market/currency. The exact acceptance scenario
+   passes: BE 329/340 and DE 299/315 baseline separately; DE 289 affects only DE,
+   then BE 300 affects only BE. One hundred watchers share a tracking summary and
+   a history summary per market. Delivery cancels mismatched watch/offer markets.
+   Seven-language Telegram callbacks and outbound links preserve the originating
+   market after profile changes. Exact-offer tracking and billing remain covered.
+5. **Snapshot architecture.** `SNAPSHOT_REFRESH` capability selects explicit
+   `SEARCH_SNAPSHOT` ingestion. CatalogResolver validates and locks identity;
+   SnapshotUpdater handles mutable listing fields under those locks. Generic search
+   from REFRESH-capable providers cannot overwrite worker-owned state. Real source
+   timestamps reject stale/replayed/future versions; providers without timestamps
+   use serialized acceptance time. No provider-name condition chooses ingestion.
+6. **Repeated Rakuten search.** Adapter fixtures verify 349/link A → 299/link B on
+   the same StoreOffer, advancing freshness without duplicate products/listings,
+   observations or tracking notifications. Concurrent replay is idempotent for
+   historical side effects. Search-only aggregates reflect only the current value;
+   an explicitly history-authorized snapshot provider records changed observations.
+   Catalog, tracking and history permissions remain independently market-scoped.
+7. **Migrations.** Revision `b7c21a48d903` backfills a valid metadata market, otherwise
+   Store.country, then enforces non-null offer market and country format. The scratch
+   verifier passes M3A → real M3B → M4A → M4A.1, preserving pre-existing IDs and data
+   across catalog, tracking, history, outbox and billing, except documented derived
+   baseline/state rebuild markers. Guarded downgrade, explicit removal of incompatible
+   synthetic test data, re-upgrade and Alembic schema comparison all pass.
+8. **Final checks.** **513 tests passed, no skips, 90.08% statement coverage** against
+   dedicated PostgreSQL `pricehunter_test` and Redis DB 15; the coverage gate remains
+   85%. All required `uv run` gates passed: Ruff lint, Ruff format check (162 Python
+   files), strict mypy (99 source files), `alembic upgrade head`, `alembic check`,
+   `python scripts/verify_m3b_migration.py`, and the full coverage suite. Offline lock
+   verification, `git diff --check`, and local README/roadmap/docs links also pass.
+   The sole warning remains ARQ's upstream deprecated Redis `close()` call.
+9. **Limitations.** Unversioned upstream responses cannot prove their remote source
+   order; the accepted ingestion order is authoritative. Legacy global history stays
+   preserved but absent from scoped user history. Live Rakuten account/MID access and
+   EPN attribution remain subject to existing credential and policy gates; Amazon
+   approval is unchanged. No new merchant integrations or M2 redesign were introduced.
+   Tests used retailer/Telegram fixtures, sent no messages and spent no Stars. The
+   running M3B application, its database and `.env` were not changed by this task.
+10. **Merge readiness.** Both reported correctness gaps are closed and all local
+    CI-equivalent checks pass. The implementation is ready for review and merge on
+    that evidence. Hosted CI for these new changes has not been run; this record
+    does not claim a commit, push, merge or deployment. Apply normal branch CI and
+    the documented provider-policy configuration before deploying M4A.

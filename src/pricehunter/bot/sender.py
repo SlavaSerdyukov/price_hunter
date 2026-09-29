@@ -38,7 +38,21 @@ class TelegramNotificationSender:
                 else "—",
                 previous_store=delivery.previous_store[:60],
             )
-            rows.append([button(language, "compare_stores", "compare", delivery.product_id.hex)])
+            rows.append(
+                [
+                    button(
+                        language,
+                        "compare_stores",
+                        "compare",
+                        delivery.product_id.hex
+                        + (f"_{delivery.market_country}" if delivery.market_country else ""),
+                    )
+                ]
+            )
+        if delivery.market_country:
+            text += "\n" + tr(language, "market_context", country=delivery.market_country)
+        if delivery.attribution:
+            text += "\n" + tr(language, "provider_attribution", attribution=delivery.attribution)
         try:
             message = await self.bot.send_message(
                 delivery.telegram_id,

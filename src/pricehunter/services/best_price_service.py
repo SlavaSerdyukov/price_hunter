@@ -4,18 +4,26 @@ from uuid import UUID
 
 import structlog
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import BestPriceEvent, Product, ProductBestState
+from pricehunter.db.models import (
+    BestPriceEvent,
+    Product,
+    ProductBestState,
+    ProductWatch,
+    Store,
+    StoreOffer,
+)
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.comparison import ComparisonOffer
 from pricehunter.domain.errors import ProductNotFoundError
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.services.comparison_service import ComparisonReader, ComparisonSummary
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.market_context import user_market
 
 
 class BestHistoryPoint(BaseModel):
@@ -29,6 +37,7 @@ class BestHistoryPoint(BaseModel):
 class BestHistory(BaseModel):
     product_id: UUID
     canonical_name: str
+    market_country: str
     currency: str
     current_best: ComparisonOffer | None
     minimum: Decimal | None
@@ -41,7 +50,7 @@ class BestPriceService:
         self, sessions: SessionFactory, entitlements: EntitlementService, settings: Settings
     ) -> None:
         self.sessions, self.entitlements, self.settings = sessions, entitlements, settings
-        self.reader = ComparisonReader(settings)
+        self.reader = ComparisonReader(settings, permission="price_history_allowed")
 
     async def record(
         self,
@@ -50,21 +59,42 @@ class BestPriceService:
         summary: ComparisonSummary,
         now: datetime,
         source_observation_id: UUID | None = None,
+        *,
+        market_country: str,
     ) -> None:
         """Caller holds the Product lock. State and events share the observation transaction."""
         states = {
             s.currency: s
             for s in await session.scalars(
-                select(ProductBestState).where(ProductBestState.product_id == product_id)
+                select(ProductBestState).where(
+                    ProductBestState.product_id == product_id,
+                    ProductBestState.market_country == market_country,
+                )
             )
         }
         groups = {g.currency: g for g in summary.groups}
-        for currency in sorted(states.keys() | groups.keys()):
+        watched = set(
+            await session.scalars(
+                select(ProductWatch.currency).where(
+                    ProductWatch.product_id == product_id,
+                    ProductWatch.market_country == market_country,
+                    ProductWatch.enabled.is_(True),
+                )
+            )
+        )
+        for currency in sorted(states.keys() | groups.keys() | watched):
             best = groups[currency].best_available_offer if currency in groups else None
+            if best and not self.settings.data_policy(best.provider).price_history_allowed:
+                continue
             state = states.get(currency)
             is_new = state is None
             if state is None:
-                state = ProductBestState(product_id=product_id, currency=currency, sequence=0)
+                state = ProductBestState(
+                    product_id=product_id,
+                    market_country=market_country,
+                    currency=currency,
+                    sequence=0,
+                )
                 session.add(state)
             state.next_evaluation_at = summary.next_expiry
             current = (best.offer_id, best.price) if best else (None, None)
@@ -87,6 +117,7 @@ class BestPriceService:
             session.add(
                 BestPriceEvent(
                     product_id=product_id,
+                    market_country=market_country,
                     currency=currency,
                     sequence=state.sequence,
                     store_offer_id=state.store_offer_id,
@@ -108,7 +139,13 @@ class BestPriceService:
             )
 
     async def history(
-        self, product_id: UUID, user_id: UUID, currency: str, limit: int = 50
+        self,
+        product_id: UUID,
+        user_id: UUID,
+        currency: str,
+        limit: int = 50,
+        *,
+        market_country: str | None = None,
     ) -> BestHistory:
         rights = (await self.entitlements.for_user(user_id)).entitlements
         rights.require(Feature.HISTORY)
@@ -116,12 +153,36 @@ class BestPriceService:
         now = utcnow()
         cutoff = now - timedelta(days=days)
         async with self.sessions() as session:
+            market = await user_market(session, user_id, market_country)
+            reader = ComparisonReader(
+                self.settings, permission="price_history_allowed", market_country=market
+            )
             product = await session.get(Product, product_id)
             if product is None:
                 raise ProductNotFoundError()
             conditions = [
                 BestPriceEvent.product_id == product_id,
                 BestPriceEvent.currency == currency,
+                BestPriceEvent.market_country == market,
+                or_(
+                    BestPriceEvent.store_offer_id.is_(None),
+                    BestPriceEvent.store_offer_id.in_(
+                        select(StoreOffer.id)
+                        .join(Store)
+                        .where(
+                            Store.provider_type.in_(
+                                [
+                                    name
+                                    for name, policy in {
+                                        "mock": self.settings.data_policy("mock"),
+                                        **self.settings.provider_data_policies,
+                                    }.items()
+                                    if policy.price_history_allowed
+                                ]
+                            )
+                        )
+                    ),
+                ),
             ]
             recent = list(
                 await session.scalars(
@@ -165,7 +226,7 @@ class BestPriceService:
                         event_type="window_start",
                     ),
                 )
-            summary = await self.reader.summary(session, product_id, now, currency)
+            summary = await reader.summary(session, product_id, now, currency)
             best = summary.groups[0].best_available_offer if summary.groups else None
             values = [
                 v
@@ -175,6 +236,7 @@ class BestPriceService:
             return BestHistory(
                 product_id=product_id,
                 canonical_name=product.canonical_name,
+                market_country=market,
                 currency=currency,
                 current_best=best,
                 minimum=min(values) if values else None,
@@ -194,7 +256,11 @@ class BestPriceService:
                     BestPriceEvent.id,
                     func.row_number()
                     .over(
-                        partition_by=(BestPriceEvent.product_id, BestPriceEvent.currency),
+                        partition_by=(
+                            BestPriceEvent.product_id,
+                            BestPriceEvent.market_country,
+                            BestPriceEvent.currency,
+                        ),
                         order_by=BestPriceEvent.sequence.desc(),
                     )
                     .label("position"),

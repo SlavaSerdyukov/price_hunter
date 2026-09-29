@@ -22,7 +22,7 @@ from pricehunter.services.catalog_diagnostics import CatalogDiagnostics
 from pricehunter.services.comparison_service import ComparisonReader
 from tests.integration.test_api import api_client
 from tests.integration.test_comparison import accept_price, event_types, persist, setup_watch
-from tests.support import grant_plan
+from tests.support import grant_plan, market_user
 
 pytestmark = pytest.mark.integration
 
@@ -90,7 +90,8 @@ async def test_stale_failed_and_currency_groups_never_supply_current_best(contai
         await session.execute(
             update(StoreOffer).where(StoreOffer.id == b.id).values(failure_count=1)
         )
-    product = await container.products.product(a.product_id, user.id)
+    async with container.sessions() as session:
+        product = await container.products.comparisons.build(session, a.product_id)
     groups = {g.currency: g for g in product.currency_groups}
     assert product.best_available_offer is None
     assert groups["EUR"].best_available_offer is None and groups["EUR"].price_spread is None
@@ -165,7 +166,7 @@ async def test_legacy_watch_backfill_is_idempotent_and_failure_removes_recommend
 
 
 async def test_bounded_manual_refresh_uses_existing_scheduler_without_watch(container):
-    user = await container.users.telegram(111)
+    user = await market_user(container, 111)
     a = await persist(container, "sony-a")
     b = await persist(container, "sony-b")
     container.settings.comparison_refresh_limit = 1
@@ -194,7 +195,7 @@ async def test_bounded_manual_refresh_uses_existing_scheduler_without_watch(cont
 
 
 async def test_refresh_api_history_limits_unknown_products_and_auth(container):
-    client = await api_client(container, 111)
+    client = await api_client(container, 111, country="DE")
     a = await persist(container, "sony-a")
     async with client:
         root = f"/api/v1/products/{a.product_id}"
@@ -221,7 +222,11 @@ async def test_refresh_api_history_limits_unknown_products_and_auth(container):
         ).status_code == 404
         assert (await client.post(f"/api/v1/products/{uuid4()}/refresh")).status_code == 404
         reply = await client.post(root + "/refresh")
-        assert reply.status_code == 202 and reply.json() == {"accepted": True, "queued_count": 0}
+        assert reply.status_code == 202 and reply.json() == {
+            "accepted": True,
+            "queued_count": 0,
+            "market_country": "DE",
+        }
         assert (await client.post(root + "/refresh")).status_code == 429
 
 
@@ -250,7 +255,7 @@ async def test_history_per_currency_bounds_plan_duration_and_retention_anchor(co
     await grant_plan(container, user.id)
     paid = await container.best_prices.history(a.product_id, user.id, "EUR")
     assert paid.retention_days == 90 and len(paid.points) == 3
-    usd = await container.best_prices.history(a.product_id, user.id, "USD")
+    usd = await container.best_prices.history(a.product_id, user.id, "USD", market_country="US")
     assert len(usd.points) == 1 and usd.minimum == 80
     empty = await container.best_prices.history(a.product_id, user.id, "JPY")
     assert empty.current_best is None and empty.points == [] and empty.minimum is None
@@ -318,6 +323,7 @@ async def test_large_comparison_has_bounded_queries_and_pagination(container, si
                     "product_id": a.product_id,
                     "store_id": stored.store_id,
                     "external_id": f"load_{i}",
+                    "market_country": "DE",
                     "url": a.url,
                     "direct_url": stored.direct_url,
                     "title": "Load fixture",

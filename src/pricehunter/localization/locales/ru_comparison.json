@@ -14,7 +14,7 @@
   "compare_stores": "📊 Сравнить магазины",
   "my_watches": "🔔 Слежение за лучшей ценой",
   "watches_empty": "Пока нет слежения за лучшей ценой. Найдите товар и нажмите «Следить за лучшей ценой».",
-  "watch_card": "<b>{title}</b>\nСлежение за лучшей ценой · {currency}\n{status}",
+  "watch_card": "<b>{title}</b>\nСлежение за лучшей ценой · {currency}\n{status}\nРынок: {market_country}",
   "watch_created": "Слежу за лучшим предложением в наличии в {currency}. Магазин может меняться. Управление: /watches.",
   "merchant_became_cheapest": "Другой магазин теперь дешевле",
   "new_best_price": "Новая лучшая цена",
@@ -44,5 +44,11 @@
   "best_history_merchant_changed": "Сменился магазин",
   "best_history_became_unavailable": "Нет текущего предложения",
   "best_history_restored": "Текущее предложение восстановлено",
-  "best_history_window_start": "На начало периода"
+  "best_history_window_start": "На начало периода",
+  "market_context": "Рынок: {country} · каталог; возможность доставки уточняйте у магазина.",
+  "country_required": "Выберите страну рынка перед созданием наблюдения.",
+  "provider_policy": "Для этого провайдера такое использование пока не разрешено.",
+  "affiliate_disclosure": "Некоторые ссылки на магазины — партнёрские. PriceHunter может получать комиссию; она не влияет на порядок предложений.",
+  "fx_reference": "≈ {price} · справочный курс {source}, {date}",
+  "provider_attribution": "{attribution}"
 }

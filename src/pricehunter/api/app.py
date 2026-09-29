@@ -8,7 +8,7 @@ import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.types import Update
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import text
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -65,6 +65,17 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     async def internal_error(request: Request, exc: Exception) -> JSONResponse:
         structlog.get_logger().error("api_request_failed", error_type=type(exc).__name__)
         return JSONResponse(status_code=500, content={"error": "unexpected_error"})
+
+    @app.get("/r/{token}", include_in_schema=False)
+    async def outbound_redirect(token: str, request: Request) -> RedirectResponse:
+        if request.query_params:
+            raise HTTPException(status_code=404)
+        destination = await resources.outbound.redirect(resources.sessions, token)
+        return RedirectResponse(
+            destination,
+            status_code=302,
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        )
 
     @app.get("/health/live")
     async def live() -> dict[str, str]:

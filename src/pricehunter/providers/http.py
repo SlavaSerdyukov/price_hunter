@@ -86,7 +86,7 @@ class ProviderHTTP:
         except (ValueError, httpx.HTTPError):
             return ()
 
-    async def _read_json(
+    async def bytes(
         self,
         method: str,
         url: str,
@@ -97,7 +97,7 @@ class ProviderHTTP:
         data: dict[str, str] | None = None,
         json_body: dict[str, Any] | None = None,
         auth: httpx.BasicAuth | None = None,
-    ) -> dict[str, Any] | list[Any]:
+    ) -> bytes:
         validate_url(url, domains)
         try:
             async with asyncio.timeout(self.timeout):
@@ -134,10 +134,37 @@ class ProviderHTTP:
                         payload.extend(chunk)
                         if len(payload) > self.max_bytes:
                             raise ProviderUnavailableError()
-                    result = json.loads(payload, parse_float=Decimal)
-                    if not isinstance(result, (dict, list)):
-                        raise ProviderUnavailableError()
-                    return result
+                    return bytes(payload)
         except (httpx.HTTPError, TimeoutError, ValueError) as exc:
             # Do not include URLs, query parameters, response bodies or token values.
             raise ProviderUnavailableError() from exc
+
+    async def _read_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        domains: set[str],
+        headers: dict[str, str] | None = None,
+        params: dict[str, str] | None = None,
+        data: dict[str, str] | None = None,
+        json_body: dict[str, Any] | None = None,
+        auth: httpx.BasicAuth | None = None,
+    ) -> dict[str, Any] | list[Any]:
+        payload = await self.bytes(
+            method,
+            url,
+            domains=domains,
+            headers=headers,
+            params=params,
+            data=data,
+            json_body=json_body,
+            auth=auth,
+        )
+        try:
+            result = json.loads(payload, parse_float=Decimal)
+        except (ValueError, UnicodeError) as exc:
+            raise ProviderUnavailableError() from exc
+        if not isinstance(result, (dict, list)):
+            raise ProviderUnavailableError()
+        return result

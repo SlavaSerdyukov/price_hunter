@@ -10,6 +10,7 @@ class Capability(StrEnum):
     SEARCH_ASIN = "search_asin"
     SEARCH_DETAILS = "search_details"
     REFRESH = "refresh"
+    SNAPSHOT_REFRESH = "snapshot_refresh"
     VARIANTS = "variants"
 
 

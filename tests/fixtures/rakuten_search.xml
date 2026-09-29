@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<result>
+  <TotalMatches>2</TotalMatches><TotalPages>2</TotalPages><PageNumber>1</PageNumber>
+  <item>
+    <mid>12345</mid><merchantname>Fixture Clothing</merchantname><linkid>90001</linkid>
+    <sku>merchant-sku-1</sku><productname>Fixture cotton shirt</productname>
+    <price currency="EUR">49.99</price><saleprice currency="EUR">39.95</saleprice>
+    <upccode>036000291452</upccode><category><primary>Clothing</primary></category>
+    <description><short>A fixture description</short></description>
+    <linkurl>https://click.linksynergy.com/link?id=fixture&amp;mid=12345&amp;murl=https%3A%2F%2Fmerchant.example%2Fshirt</linkurl>
+    <imageurl>https://merchant.example/shirt.png</imageurl>
+  </item>
+</result>

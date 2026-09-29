@@ -8,6 +8,8 @@ from sqlalchemy import exists, select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pricehunter.core.config import Settings
+from pricehunter.db.base import utcnow
 from pricehunter.db.models import Product, ProductIdentifier, Store, StoreOffer
 from pricehunter.db.repositories.catalog import CatalogRepository
 from pricehunter.domain.discovery import DiscoveryMismatch
@@ -31,9 +33,12 @@ def stored_evidence(product: Product, offer: StoreOffer, store: Store) -> Produc
         store_slug=store.slug,
         store_name=store.name,
         store_domain=store.domain,
-        country=store.country,
+        country=offer.market_country,
         external_id=offer.external_id,
         url=offer.url,
+        direct_url=offer.direct_url,
+        affiliate_url=offer.affiliate_url,
+        affiliate_network=offer.affiliate_network,
         title=offer.title,
         price=offer.price,
         currency=offer.currency,
@@ -44,6 +49,9 @@ def stored_evidence(product: Product, offer: StoreOffer, store: Store) -> Produc
 
 class CatalogResolver:
     """One persistence/matching path for URL resolution and provider search results."""
+
+    def __init__(self, settings: Settings | None = None) -> None:
+        self.settings = settings or Settings(_env_file=None)
 
     @staticmethod
     def _confidence(data: ProductOfferData) -> Decimal:
@@ -80,7 +88,16 @@ class CatalogResolver:
     async def lock_evidence(
         self, session: AsyncSession, offers: Iterable[ProductOfferData]
     ) -> None:
-        signals = sorted({signal for offer in offers for signal in identity_signals(offer)})
+        signals = sorted(
+            {
+                signal
+                for offer in offers
+                for signal in [
+                    *identity_signals(offer),
+                    ("listing", f"{offer.store_slug}:{offer.external_id}"),
+                ]
+            }
+        )
         for kind, value in signals:
             digest = hashlib.sha256(f"catalog:{kind}:{value}".encode()).digest()
             await session.execute(
@@ -94,7 +111,12 @@ class CatalogResolver:
         data: ProductOfferData,
         *,
         expected_product_id: UUID | None = None,
+        validate_existing: bool = False,
     ) -> StoreOffer:
+        if validate_existing and data.source_updated_at and data.source_updated_at > utcnow():
+            raise DiscoveryMismatch()
+        policy = self.settings.data_policy(data.provider)
+        policy.require("catalog_persistence_allowed")
         signals = identity_signals(data)
         await self.lock_evidence(session, [data])
         existing = await session.scalar(
@@ -103,6 +125,7 @@ class CatalogResolver:
             .where(
                 Store.slug == data.store_slug,
                 StoreOffer.external_id == data.external_id,
+                StoreOffer.market_country == data.country,
                 Store.active.is_(True),
                 Store.supported.is_(True),
             )
@@ -110,6 +133,21 @@ class CatalogResolver:
         if existing:
             if expected_product_id and existing.product_id != expected_product_id:
                 raise DiscoveryMismatch()
+            if validate_existing:
+                product = await session.get(Product, existing.product_id, with_for_update=True)
+                assert product is not None
+                await session.refresh(existing, with_for_update=True)
+                store = await session.get(Store, existing.store_id)
+                assert store is not None
+                old = stored_evidence(product, existing, store)
+                identity_fields = {"brand", "model", "mpn", "gtin", "ean", "upc", "asin", "variant"}
+                match = ProductMatcher().match(data, old)
+                if data.provider != store.provider_type or (
+                    not match.matched
+                    and data.model_dump(include=identity_fields)
+                    != old.model_dump(include=identity_fields)
+                ):
+                    raise DiscoveryMismatch()
             # Preserve the historical listing's identity and price. Refreshes own prices.
             return existing
         candidates = list(
@@ -171,7 +209,7 @@ class CatalogResolver:
             key = identity_key(data)
             if await session.scalar(select(Product.id).where(Product.identity_key == key)):
                 key = hashlib.sha256(
-                    f"{key}:{data.store_slug}:{data.external_id}".encode()
+                    f"{key}:{data.store_slug}:{data.external_id}:{data.country}".encode()
                 ).hexdigest()
             product = Product(
                 id=uuid4(),
@@ -190,7 +228,9 @@ class CatalogResolver:
             await session.flush()
             confidence = self._confidence(data)
         await self._index(session, product.id, data)
-        offer = await CatalogRepository(session).save_resolved(data, product.id, confidence)
+        offer = await CatalogRepository(session).save_resolved(
+            data, product.id, confidence, history_allowed=policy.price_history_allowed
+        )
         structlog.get_logger().info(
             "canonical_offer_added",
             product_id=str(product.id),

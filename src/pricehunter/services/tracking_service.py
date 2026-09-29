@@ -8,10 +8,17 @@ from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import NotificationEvent, Store, StoreOffer, Tracker, User
 from pricehunter.db.session import SessionFactory
-from pricehunter.domain.errors import ProductNotFoundError, SubscriptionLimitReachedError
+from pricehunter.domain.discovery import Capability
+from pricehunter.domain.errors import (
+    ProductNotFoundError,
+    ProviderPolicyError,
+    SubscriptionLimitReachedError,
+)
 from pricehunter.domain.subscriptions import Feature
+from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.schemas.api import OfferView, TrackerCreate, TrackerPatch, TrackerView
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.outbound_service import OutboundLinkService
 
 
 def tracker_view(tracker: Tracker, offer: StoreOffer) -> TrackerView:
@@ -31,8 +38,10 @@ class TrackingService:
         sessions: SessionFactory,
         entitlements: EntitlementService,
         settings: Settings,
+        registry: ProviderRegistry,
     ) -> None:
         self.sessions, self.entitlements, self.settings = sessions, entitlements, settings
+        self.registry = registry
 
     async def create(self, user_id: UUID, data: TrackerCreate) -> TrackerView:
         async with self.sessions.begin() as session:
@@ -49,6 +58,12 @@ class TrackingService:
             )
             if offer is None:
                 raise ProductNotFoundError()
+            store = await session.get(Store, offer.store_id)
+            assert store is not None
+            self.settings.data_policy(store.provider_type).require("tracking_allowed")
+            self.settings.data_policy(store.provider_type).require("refresh_allowed")
+            if Capability.REFRESH not in self.registry.get(store.provider_type).capabilities:
+                raise ProviderPolicyError()
             existing = await session.scalar(
                 select(Tracker).where(
                     Tracker.user_id == user_id,
@@ -95,7 +110,7 @@ class TrackingService:
             views = [tracker_view(tracker, offer) for tracker, offer in records]
             limits = (await self.entitlements.for_user(user_id, session=session)).entitlements
             stores = {
-                store.id: store.provider_type
+                store.id: store
                 for store in await session.scalars(
                     select(Store).where(Store.id.in_([offer.store_id for _, offer in records]))
                 )
@@ -109,10 +124,18 @@ class TrackingService:
                 )
             )
             for view, (_, offer) in zip(views, records, strict=True):
-                view.scheduled = view.id in allowed
+                view.offer = OutboundLinkService(self.settings).offer_view(
+                    offer, stores[offer.store_id]
+                )
+                view.scheduled = (
+                    view.id in allowed
+                    and self.settings.data_policy(
+                        stores[offer.store_id].provider_type
+                    ).tracking_allowed
+                )
                 view.check_interval_seconds = (
                     self.settings.mock_check_interval_seconds
-                    if stores[offer.store_id] == "mock"
+                    if stores[offer.store_id].provider_type == "mock"
                     else limits.check_interval_seconds
                 )
             return views
@@ -184,6 +207,11 @@ class TrackingService:
         )
         limits = (await self.entitlements.for_user(tracker.user_id, session=session)).entitlements
         store = await session.get(Store, offer.store_id)
+        if store:
+            view.offer = OutboundLinkService(self.settings).offer_view(offer, store)
+            view.scheduled = (
+                view.scheduled and self.settings.data_policy(store.provider_type).tracking_allowed
+            )
         view.check_interval_seconds = (
             self.settings.mock_check_interval_seconds
             if store and store.provider_type == "mock"

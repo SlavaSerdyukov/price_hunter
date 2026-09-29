@@ -6,10 +6,11 @@ from sqlalchemy import func, select
 from pricehunter.core.config import Settings
 from pricehunter.core.limits import RateLimiter
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import PriceObservation, Product, Tracker
+from pricehunter.db.models import PriceObservation, Product, Store, Tracker
 from pricehunter.db.repositories.catalog import CatalogRepository
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.comparison import ComparisonProduct
+from pricehunter.domain.ingestion import IngestionMode, search_ingestion
 from pricehunter.domain.pricing import percentage_change
 from pricehunter.domain.products import ProductOfferData
 from pricehunter.domain.subscriptions import Feature
@@ -18,7 +19,9 @@ from pricehunter.schemas.api import HistoryView, ObservationView, OfferView
 from pricehunter.services.catalog_resolver import CatalogResolver
 from pricehunter.services.comparison_service import ComparisonService
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.outbound_service import OutboundLinkService
 from pricehunter.services.product_watch_service import ProductWatchService
+from pricehunter.services.snapshot_ingestion import SnapshotUpdater
 
 
 class ProductService:
@@ -32,7 +35,8 @@ class ProductService:
     ) -> None:
         self.sessions, self.registry = sessions, registry
         self.limiter, self.settings, self.entitlements = limiter, settings, entitlements
-        self.resolver = CatalogResolver()
+        self.outbound = OutboundLinkService(settings)
+        self.resolver = CatalogResolver(settings)
         self.watches = ProductWatchService(sessions, entitlements, settings)
         self.comparisons = ComparisonService(sessions, entitlements, settings)
 
@@ -43,21 +47,39 @@ class ProductService:
             data = await provider.resolve_url(url)
         return await self.persist(data)
 
-    async def persist(self, data: ProductOfferData) -> OfferView:
+    async def persist(
+        self, data: ProductOfferData, *, mode: IngestionMode = IngestionMode.DISCOVERY
+    ) -> OfferView:
         async with self.sessions.begin() as session:
-            offer = await self.resolver.resolve(session, data)
+            snapshot = mode == IngestionMode.SEARCH_SNAPSHOT
+            if snapshot and search_ingestion(self.registry.get(data.provider).capabilities) != mode:
+                raise ValueError("Provider cannot accept search snapshots")
+            offer = await self.resolver.resolve(session, data, validate_existing=snapshot)
+            if snapshot:
+                await SnapshotUpdater().accept(
+                    session, offer, data, self.settings.data_policy(data.provider)
+                )
             await session.flush()
             # Resolver locks the canonical product for new listings. Re-evaluation is idempotent.
             await session.get(Product, offer.product_id, with_for_update=True)
-            await self.watches.evaluate(session, offer.product_id)
-            return OfferView.model_validate(offer)
+            await self.watches.evaluate(
+                session, offer.product_id, market_country=offer.market_country
+            )
+            store = await session.get(Store, offer.store_id)
+            assert store is not None
+            return self.outbound.offer_view(offer, store)
 
     async def offer(self, offer_id: UUID) -> OfferView:
         async with self.sessions() as session:
-            return OfferView.model_validate(await CatalogRepository(session).get_offer(offer_id))
+            offer = await CatalogRepository(session).get_offer(offer_id)
+            store = await session.get(Store, offer.store_id)
+            assert store is not None
+            return self.outbound.offer_view(offer, store)
 
-    async def product(self, product_id: UUID, user_id: UUID) -> ComparisonProduct:
-        return await self.comparisons.get(product_id, user_id)
+    async def product(
+        self, product_id: UUID, user_id: UUID, *, market_country: str | None = None
+    ) -> ComparisonProduct:
+        return await self.comparisons.get(product_id, user_id, market_country=market_country)
 
     async def history(self, offer_id: UUID, user_id: UUID, limit: int = 100) -> HistoryView:
         limits = (await self.entitlements.for_user(user_id)).entitlements
@@ -68,6 +90,9 @@ class ProductService:
         cutoff = utcnow() - timedelta(days=days)
         async with self.sessions() as session:
             offer = await CatalogRepository(session).get_offer(offer_id)
+            store = await session.get(Store, offer.store_id)
+            assert store is not None
+            self.settings.data_policy(store.provider_type).require("price_history_allowed")
             tracker = await session.scalar(
                 select(Tracker).where(
                     Tracker.user_id == user_id,
