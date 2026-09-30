@@ -648,7 +648,8 @@ passed; the failure was `test_search_persists_comparisons_and_api_returns_all_st
 Its exact JSON comparison included `age_seconds` measured separately for each request.
 A local reproduction with a real 1.05-second boundary between requests fails the same
 assertion. The corrected test keeps every stable field strict and separately verifies
-nonnegative, current and monotonic ages. Hosted green/merge readiness is not yet claimed.
+nonnegative, current and monotonic ages. That failed hosted result is superseded by the
+verified M4B.1 run recorded below.
 
 M4B.1 implementation separates completed-feed presence from content version advancement.
 Equal/older source versions retain current content while confirmed presence advances.
@@ -674,5 +675,15 @@ records. Dedicated PostgreSQL `pricehunter_test`, Redis DB 15 and fixture transp
 were used; the only warning is the existing upstream ARQ Redis `close()` deprecation.
 Offline lock, documentation links and diff whitespace checks also passed.
 
-The corrected branch still awaits its new hosted GitHub Actions run. Local success
-alone does not establish hosted green or merge readiness.
+**Verified hosted result:** [GitHub Actions run 36679699753](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/36679699753)
+completed with **success** for commit `56b6563ae07447ef5d1a841bcea6f76f7540fb11`
+on `feat/m4b-commerce-feeds`. The hosted log reports **583 passed, no skips, 90.53%
+statement coverage** and the same single upstream ARQ warning. Dependency installation,
+Ruff lint/format, strict mypy, Alembic upgrade/check and the migration verifier all passed.
+The hosted coverage is recorded separately from the local 90.51% measurement.
+
+This result was fetched from the completed run/job and its actual logs before this
+verification record was updated. M4B.1 closes the pagination and feed-revalidation issues;
+M4B is merge-ready on this CI evidence. This statement does not claim a merge, deployment
+or real merchant activation. The subsequent documentation-only update leaves the tested
+implementation unchanged and goes through the same hosted Checks workflow.
