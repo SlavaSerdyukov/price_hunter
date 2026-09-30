@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -25,7 +25,7 @@ from pricehunter.schemas.api import TrackerCreate
 from pricehunter.schemas.watches import WatchCreate, WatchPatch
 from pricehunter.services.notification_service import NotificationService
 from tests.integration.test_api import api_client
-from tests.support import grant_plan, market_user
+from tests.support import comparison_semantics, grant_plan, market_user
 
 pytestmark = pytest.mark.integration
 
@@ -85,23 +85,9 @@ async def test_search_persists_comparisons_and_api_returns_all_stores(container)
         assert response.status_code == 200
         payload = response.json()
 
-        def stable(value):
-            if isinstance(value, list):
-                return [stable(item) for item in value]
-            if not isinstance(value, dict):
-                return value
-            if "age_seconds" in value:
-                age = value["age_seconds"]
-                checked = datetime.fromisoformat(value["last_checked_at"])
-                assert isinstance(age, int) and age >= 0
-                assert max(0, int((before - checked).total_seconds())) <= age
-                assert age <= max(0, int((after - checked).total_seconds()))
-                assert age >= previous_ages.get(value["offer_id"], 0)
-                previous_ages[value["offer_id"]] = age
-            # Every other field, including freshness and last_checked_at, stays strict.
-            return {key: stable(item) for key, item in value.items() if key != "age_seconds"}
-
-        return payload, stable(payload)
+        return payload, comparison_semantics(
+            payload, started_at=before, finished_at=after, previous_ages=previous_ages
+        )
 
     async with client:
         result = await client.get("/api/v1/search", params={"q": "Sony WH-1000XM6"})
@@ -444,10 +430,24 @@ async def test_search_provider_order_partial_failures_and_persistence_errors(con
 
     container.registry.providers = {"mock": FixtureProvider(), "failed": FailedProvider()}
     user = await market_user(container, 111)
+    previous_ages = {}
+    before = utcnow()
     first = await container.search.search("Sony WH1000XM6", user.id)
+    first_semantics = comparison_semantics(
+        first, started_at=before, finished_at=utcnow(), previous_ages=previous_ages
+    )
+    await asyncio.sleep(1.05)
     container.registry.providers = dict(reversed(container.registry.providers.items()))
+    before = utcnow()
     second = await container.search.search("Sony WH1000XM6", user.id)
-    assert first == second and first.products[0].store_count == 2
+    assert (
+        comparison_semantics(
+            second, started_at=before, finished_at=utcnow(), previous_ages=previous_ages
+        )
+        == first_semantics
+    )
+    assert first.products[0].store_count == 2
+    assert second.products[0].offers[0].age_seconds > first.products[0].offers[0].age_seconds
     assert first.unavailable_providers == ["failed"]
     async with container.sessions.begin() as session:
         await session.execute(update(Store).where(Store.name == "Demo Alpha").values(active=False))

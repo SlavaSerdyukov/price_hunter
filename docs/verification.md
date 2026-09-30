@@ -683,7 +683,20 @@ Ruff lint/format, strict mypy, Alembic upgrade/check and the migration verifier 
 The hosted coverage is recorded separately from the local 90.51% measurement.
 
 This result was fetched from the completed run/job and its actual logs before this
-verification record was updated. M4B.1 closes the pagination and feed-revalidation issues;
-M4B is merge-ready on this CI evidence. This statement does not claim a merge, deployment
-or real merchant activation. The subsequent documentation-only update leaves the tested
-implementation unchanged and goes through the same hosted Checks workflow.
+verification record was updated. M4B.1 addresses the pagination and feed-revalidation issues.
+The subsequent documentation-only commit `89e4bca` exposed another timing-dependent
+assertion in [run 36681050214](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/36681050214):
+**582 passed, 1 failed, 90.47% coverage**. The failed provider-order test also compared
+complete SearchResult objects across separate calls; the log diff differs in age_seconds.
+The first successful run is historical evidence, not the current merge-readiness decision.
+
+The follow-up applies a shared test-only semantic comparison helper to pagination,
+provider-order/partial-failure search and 100/500/1000-offer load pagination. Every field
+except age_seconds stays strict; ages are separately bounded by each request's actual
+time and checked for monotonicity. Real second-boundary delays exercise all three
+scenarios. Production API/time behavior and query-count assertions are unchanged.
+Follow-up local verification passed: Ruff lint/format, mypy, Alembic upgrade/check,
+the complete migration verifier and **583 tests with 90.51% coverage**. Both tests
+that previously failed in hosted CI also passed **10 consecutive repetitions each**
+with real second-boundary delays. The corrected hosted run is pending; merge readiness
+awaits that result.
