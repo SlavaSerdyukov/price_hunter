@@ -698,5 +698,13 @@ scenarios. Production API/time behavior and query-count assertions are unchanged
 Follow-up local verification passed: Ruff lint/format, mypy, Alembic upgrade/check,
 the complete migration verifier and **583 tests with 90.51% coverage**. Both tests
 that previously failed in hosted CI also passed **10 consecutive repetitions each**
-with real second-boundary delays. The corrected hosted run is pending; merge readiness
-awaits that result.
+with real second-boundary delays.
+
+**Verified follow-up hosted result:** [GitHub Actions run 36714978262](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/36714978262)
+completed with **success** for commit `4d6881afadc12f8e2e067e4c11e5c2ac22692a34`
+on `feat/m4b-commerce-feeds`. Actual hosted logs report **583 passed, no skips, 90.51%
+statement coverage** and the single upstream ARQ warning. All required lint, format,
+typing, Alembic and migration-verifier steps passed. This result was recorded only
+after fetching the completed run and its logs. M4B is merge-ready on this evidence;
+the documentation-only commit recording it must also pass the same Checks workflow.
+No merge, deployment or live merchant activation is claimed.
