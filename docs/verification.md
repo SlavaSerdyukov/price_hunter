@@ -603,7 +603,7 @@ before implementation. [The design](m4b-design.md) preceded network adapters.
    indexed GTIN/MPN lookup. The initial import query bound is fewer than six queries per
    batch plus 40; no wall-clock or production-throughput guarantee is asserted. Explicit
    staging statistics prevent a quadratic replay plan after rapid bulk ingestion.
-8. **Validation.** Final suite: **568 passed, no skips, 90.46% statement coverage**;
+8. **Local validation only.** Local suite: **568 passed, no skips, 90.46% statement coverage**;
    the 85% gate is unchanged and the feed engine is included. Tests use dedicated
    PostgreSQL `pricehunter_test`, Redis DB 15 and fake retailer/Telegram transports.
    Ruff lint/format (184 Python files), strict
@@ -638,3 +638,41 @@ before implementation. [The design](m4b-design.md) preceded network adapters.
     context and documented delivery/tax fields, comparing delivered cost only when all
     required components are known. Preserve native rankings, deterministic matching and
     billing; scraping, ML matching, new frontend and new payment providers remain separate.
+
+## M4B.1 CI and feed revalidation — 2026-09-30
+
+Starting commit: `6ccbc18d8096096a3a749f986cf1f1a35a330f79`. The earlier M4B figures
+above describe local verification only. [Hosted run 36637252541](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/36637252541)
+failed: **567 passed, 1 failed, 90.46% coverage**. All lint, typing and migration steps
+passed; the failure was `test_search_persists_comparisons_and_api_returns_all_stores`.
+Its exact JSON comparison included `age_seconds` measured separately for each request.
+A local reproduction with a real 1.05-second boundary between requests fails the same
+assertion. The corrected test keeps every stable field strict and separately verifies
+nonnegative, current and monotonic ages. Hosted green/merge readiness is not yet claimed.
+
+M4B.1 implementation separates completed-feed presence from content version advancement.
+Equal/older source versions retain current content while confirmed presence advances.
+Unchanged feed versions use model B: a full download is mandatory at the merchant cache
+deadline, with next sync capped by that deadline. Evicting active cache rows reschedules
+the program immediately; cleanup respects active leases and completion lock order.
+Explicit FeedRevalidationContext is verified against the current completed generation,
+program policy and exact staged payload. It restores catalog activity using the recorded
+confirmation time, without fake observations; ordinary stale snapshots remain rejected.
+
+The original pagination failure was reproduced locally. Its corrected test passed
+**10 consecutive runs**, each crossing a real second boundary. Of the first ten new feed
+regressions, seven failed before implementation; existing generic stale-version protections
+passed. Additional tests cover incomplete/forged generation evidence, partial sync, active
+leases and inactive cleanup. There are **15 new feed regression cases** in total.
+
+Final local verification: **583 passed, no skips, 90.51% statement coverage**. The 85%
+gate and coverage scope are unchanged. Required `uv run` checks passed: Ruff lint,
+Ruff format (185 Python files), strict mypy (110 source files), Alembic upgrade/check,
+the disposable migration verifier and the full coverage suite. No schema migration
+was needed; the existing migration chain still preserves catalog/history/billing/FX/click
+records. Dedicated PostgreSQL `pricehunter_test`, Redis DB 15 and fixture transports
+were used; the only warning is the existing upstream ARQ Redis `close()` deprecation.
+Offline lock, documentation links and diff whitespace checks also passed.
+
+The corrected branch still awaits its new hosted GitHub Actions run. Local success
+alone does not establish hosted green or merge readiness.

@@ -27,7 +27,11 @@ Retry resumes the durable workflow by restarting/replaying acquisition, not by g
 an HTTP byte-range cursor inside a compressed file. Completed generations survive worker
 restarts. Materialized listings catch up in bounded batches through the M4A.1 snapshot
 path. Background updates require refresh permission checked in the locked transaction;
-catalog-only updates happen on explicit search. Expired staging cannot renew a snapshot.
+catalog-only updates happen on explicit search. Expired staging cannot renew a snapshot. FeedRevalidationContext is constructed from
+the approved program and current active row of the last completed generation, under
+the program lock. It also verifies that incoming data exactly matches normalized staging.
+Search/discovery and background materialization pass this explicit context to SnapshotUpdater.
+The updater has no network-name conditions.
 Disappearance expires a listing without inventing stock or price observations and
 without deleting Product, StoreOffer, watches, trackers or history.
 
@@ -61,7 +65,33 @@ Retention removes old abandoned pending rows and inactive staging in bounded bat
 Expired catalog-only staging also respects the reviewed cache limit; protected canonical
 history remains separate. An unchanged source version skips downloading only while all
 expected current rows remain cached. Cache eviction forces reacquisition on the next sync.
-Unchanged versions do not renew freshness or fabricate price observations.
+An unchanged version check by itself does not renew presence. M4B.1 uses **model B**:
+skip downloading only while the previous full generation and all expected active rows
+remain within the merchant cache limit. At expiry (including equality), download the full
+feed again even if its version did not change. Next sync is capped by that expiry; a
+successful skip cannot push the deadline later. This consumes full-download quota, so
+operators must reconcile their permitted cache duration with actual network limits.
+
+Active cache eviction makes the affected program immediately due in the same transaction.
+Retention takes sync-state locks before deleting rows, skips active leases and rechecks
+eligibility after locking. Cleanup of old inactive rows does not trigger another download.
+The existing scheduler cadence still applies; this removes the multi-hour interval gap.
+
+## Content versions and presence revalidation
+
+`MerchantFeedItem.seen_at` means presence confirmed by a successfully completed full
+generation. It advances along with generation/active state for every accepted present row,
+even if fingerprint or `source_updated_at` is equal or older. Product data, fingerprint
+and search-index fields only advance when content is eligible: equal/older real source
+versions cannot overwrite newer content. Failed/partial generations confirm nothing.
+
+An authoritative materialization can reactivate an identical StoreOffer and set its
+`last_checked_at` to that confirmed `seen_at`, retaining the newer content timestamp and
+price. This adds no PriceObservation and no price-drop event for an unchanged price.
+Replaying the same current generation retains the same confirmation time; copied generation
+IDs with altered payloads, obsolete generations and incomplete generations are rejected.
+Generic SEARCH_SNAPSHOT inputs without that verified context still reject stale/equal
+source versions without renewal. Acquisition time and content version are separate clocks.
 
 ```sh
 uv run python -m pricehunter.apps.admin merchant-programs

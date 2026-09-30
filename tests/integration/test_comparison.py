@@ -1,5 +1,5 @@
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -76,6 +76,33 @@ async def test_conflicting_identifiers_variants_and_weak_bridges_stay_separate(c
 
 async def test_search_persists_comparisons_and_api_returns_all_stores(container):
     client = await api_client(container, 111, country="DE")
+    previous_ages = {}
+
+    async def comparison(url, **kwargs):
+        before = utcnow()
+        response = await client.get(url, **kwargs)
+        after = utcnow()
+        assert response.status_code == 200
+        payload = response.json()
+
+        def stable(value):
+            if isinstance(value, list):
+                return [stable(item) for item in value]
+            if not isinstance(value, dict):
+                return value
+            if "age_seconds" in value:
+                age = value["age_seconds"]
+                checked = datetime.fromisoformat(value["last_checked_at"])
+                assert isinstance(age, int) and age >= 0
+                assert max(0, int((before - checked).total_seconds())) <= age
+                assert age <= max(0, int((after - checked).total_seconds()))
+                assert age >= previous_ages.get(value["offer_id"], 0)
+                previous_ages[value["offer_id"]] = age
+            # Every other field, including freshness and last_checked_at, stays strict.
+            return {key: stable(item) for key, item in value.items() if key != "age_seconds"}
+
+        return payload, stable(payload)
+
     async with client:
         result = await client.get("/api/v1/search", params={"q": "Sony WH-1000XM6"})
         assert result.status_code == 200
@@ -90,18 +117,34 @@ async def test_search_persists_comparisons_and_api_returns_all_stores(container)
         assert Decimal(eur["best_available_offer"]["price"]) == 329
         assert Decimal(eur["price_spread"]) == 16
         assert Decimal(eur["cheapest_known_offer"]["price"]) == 90
-        loaded = (await client.get(f"/api/v1/products/{product['id']}")).json()
+        loaded, summary = await comparison(f"/api/v1/products/{product['id']}")
         assert loaded["offer_count"] == 4
-        pages = [
-            (
-                await client.get(
-                    f"/api/v1/products/{product['id']}/offers", params={"page": p, "size": 2}
-                )
-            ).json()
+        # Exercise the second boundary between independently timed API responses.
+        await asyncio.sleep(1.05)
+        responses = [
+            await comparison(
+                f"/api/v1/products/{product['id']}/offers", params={"page": p, "size": 2}
+            )
             for p in range(3)
         ]
+        pages = [stable for _, stable in responses]
         assert [len(p["offers"]) for p in pages] == [2, 2, 0]
-        assert all(p["currency_groups"] == loaded["currency_groups"] for p in pages)
+        assert all(p["currency_groups"] == summary["currency_groups"] for p in pages)
+        assert [o for page in pages for o in page["offers"]] == summary["offers"]
+        assert all(
+            (p["offer_count"], p["store_count"], p["currencies"], p["price_spread"])
+            == (
+                summary["offer_count"],
+                summary["store_count"],
+                summary["currencies"],
+                summary["price_spread"],
+            )
+            for p in pages
+        )
+        assert (
+            responses[0][0]["best_available_offer"]["age_seconds"]
+            > loaded["best_available_offer"]["age_seconds"]
+        )
         assert all(
             o["shipping_price"] is None and o["tax_included"] is None and o["total_price"] is None
             for o in loaded["offers"]

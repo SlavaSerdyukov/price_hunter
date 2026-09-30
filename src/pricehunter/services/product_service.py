@@ -69,6 +69,9 @@ class ProductService:
                     offer,
                     data,
                     policy,
+                    revalidation=await PolicyResolver(self.settings).snapshot_context(
+                        session, data
+                    ),
                 )
             await session.flush()
             # Resolver locks the canonical product for new listings. Re-evaluation is idempotent.

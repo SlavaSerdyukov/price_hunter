@@ -399,6 +399,9 @@ class ProductDiscoveryService:
                                     offer,
                                     data,
                                     await PolicyResolver(self.settings).incoming(session, data),
+                                    revalidation=await PolicyResolver(
+                                        self.settings
+                                    ).snapshot_context(session, data),
                                 )
                             found.add(offer.id)
                             log.info(

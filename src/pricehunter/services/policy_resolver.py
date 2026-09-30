@@ -8,9 +8,16 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import MerchantFeedItem, MerchantProgram, Store, StoreOffer
+from pricehunter.db.models import (
+    FeedSyncState,
+    MerchantFeedItem,
+    MerchantProgram,
+    Store,
+    StoreOffer,
+)
 from pricehunter.domain.errors import ProviderPolicyError
-from pricehunter.domain.feeds import FEED_NETWORKS, merchant_slug
+from pricehunter.domain.feeds import FEED_NETWORKS, FeedProductData, merchant_slug
+from pricehunter.domain.ingestion import FeedRevalidationContext
 from pricehunter.domain.products import ProductOfferData
 from pricehunter.domain.provider_policy import ProviderDataPolicy
 
@@ -86,6 +93,50 @@ class PolicyResolver:
         if current is None:
             raise ProviderPolicyError()
         return policy
+
+    async def snapshot_context(
+        self, session: AsyncSession, data: ProductOfferData
+    ) -> FeedRevalidationContext | None:
+        if data.merchant_program_id is None:
+            return None
+        # Locks the program against policy edits and generation publication until commit.
+        await self.incoming(session, data)
+        program = await session.get(MerchantProgram, data.merchant_program_id)
+        assert program is not None
+        item = await session.scalar(
+            select(MerchantFeedItem)
+            .join(
+                FeedSyncState,
+                FeedSyncState.merchant_program_id == MerchantFeedItem.merchant_program_id,
+            )
+            .where(
+                MerchantFeedItem.merchant_program_id == program.id,
+                MerchantFeedItem.external_id == data.external_id,
+                MerchantFeedItem.active.is_(True),
+                MerchantFeedItem.feed_generation == data.feed_generation,
+                MerchantFeedItem.feed_generation == FeedSyncState.generation,
+                FeedSyncState.generation > 0,
+                MerchantFeedItem.seen_at <= FeedSyncState.last_success_at,
+                MerchantFeedItem.seen_at <= utcnow(),
+            )
+        )
+        if item is None:
+            raise ProviderPolicyError()
+        authoritative = FeedProductData.model_validate(item.data).offer(
+            program_id=program.id,
+            network=program.network,
+            merchant_id=program.external_merchant_id,
+            name=program.display_name,
+            domain=program.domain,
+            market=program.market_country,
+            generation=item.feed_generation,
+        )
+        if data != authoritative:
+            # A copied generation ID cannot turn altered/stale search data into evidence.
+            raise ProviderPolicyError()
+        return FeedRevalidationContext(
+            program.id, item.external_id, item.feed_generation, item.seen_at
+        )
 
     def program_filter(self, permission: str) -> ColumnElement[bool]:
         p = MerchantProgram

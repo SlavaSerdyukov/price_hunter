@@ -3,7 +3,7 @@ import sqlite3
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -42,6 +42,13 @@ class FeedSyncService:
         self, sessions: SessionFactory, settings: Settings, products: ProductService
     ) -> None:
         self.sessions, self.settings, self.products = sessions, settings, products
+
+    def _next_sync_at(self, program: MerchantProgram, confirmed_at: datetime) -> datetime:
+        ttl = PolicyResolver(self.settings).program(program).max_cache_seconds
+        return min(
+            utcnow() + timedelta(seconds=self.settings.feed_sync_seconds),
+            confirmed_at + timedelta(seconds=ttl),
+        )
 
     async def claim(self, program_id: UUID | None = None) -> tuple[UUID, UUID] | None:
         async with self.sessions.begin() as session:
@@ -135,19 +142,29 @@ class FeedSyncService:
                 version = await source.source_version(program)
                 async with self.sessions() as session:
                     state = await session.get(FeedSyncState, program_id)
+                    current_program = await session.get(MerchantProgram, program_id)
+                    cutoff = utcnow() - timedelta(
+                        seconds=PolicyResolver(self.settings)
+                        .program(current_program)
+                        .max_cache_seconds
+                    )
                     unchanged = bool(
                         version
                         and state
                         and state.source_version == version
                         and state.last_success_at
+                        and state.last_success_at > cutoff
                     )
                     if unchanged:
+                        assert state is not None
                         retained = await session.scalar(
                             select(func.count())
                             .select_from(MerchantFeedItem)
                             .where(
                                 MerchantFeedItem.merchant_program_id == program_id,
                                 MerchantFeedItem.active.is_(True),
+                                MerchantFeedItem.feed_generation == state.generation,
+                                MerchantFeedItem.seen_at > cutoff,
                             )
                         )
                         unchanged = retained == state.row_count if state else False
@@ -172,9 +189,9 @@ class FeedSyncService:
                     state = await self._fence(session, program_id, token)
                     state.status, state.lease_token, state.lease_until = "complete", None, None
                     state.failure_count, state.error_code = 0, None
-                    state.next_sync_at = utcnow() + timedelta(
-                        seconds=self.settings.feed_sync_seconds
-                    )
+                    current_program = await session.get(MerchantProgram, program_id)
+                    assert current_program is not None and state.last_success_at is not None
+                    state.next_sync_at = self._next_sync_at(current_program, state.last_success_at)
                 return FeedReport.model_validate(state.report)
             await self._complete(program, token, version, report)
             log.info("feed_generation_completed", rows=report.valid_rows)
@@ -341,18 +358,21 @@ class FeedSyncService:
             newer = or_(
                 old_version.is_(None), and_(new_version.is_not(None), new_version > old_version)
             )
+            content_changed = and_(newer, item.fingerprint != stmt.excluded.fingerprint)
             await session.execute(
                 stmt.on_conflict_do_update(
                     index_elements=[item.merchant_program_id, item.external_id],
                     set_={
                         **{
                             field: case(
-                                (newer, getattr(stmt.excluded, field)), else_=getattr(item, field)
+                                (content_changed, getattr(stmt.excluded, field)),
+                                else_=getattr(item, field),
                             )
                             for field in fields[2:]
                         },
                         "feed_generation": generation,
-                        "seen_at": case((newer, literal(now)), else_=item.seen_at),
+                        # Presence is confirmed by the completed feed even if content is older.
+                        "seen_at": now,
                         "active": True,
                     },
                 )
@@ -367,7 +387,9 @@ class FeedSyncService:
                 None,
             )
             state.lease_token = state.lease_until = None
-            state.next_sync_at = now + timedelta(seconds=self.settings.feed_sync_seconds)
+            current_program = await session.get(MerchantProgram, program.id)
+            assert current_program is not None
+            state.next_sync_at = self._next_sync_at(current_program, now)
             await session.execute(delete(p).where(*pending))
 
     async def _dry_run(self, program: MerchantProgram, source: FeedSource) -> FeedReport:
@@ -470,23 +492,52 @@ class FeedSyncService:
                     0, 0, 0, 0, 0, 0, p.policy_data["max_cache_seconds"].as_integer()
                 ),
             )
-            removed = await session.scalars(
-                delete(MerchantFeedItem)
-                .where(
-                    MerchantFeedItem.id.in_(
-                        select(MerchantFeedItem.id)
-                        .where(
-                            or_(
-                                and_(
-                                    MerchantFeedItem.active.is_(False),
-                                    MerchantFeedItem.seen_at < cutoff,
-                                ),
-                                cache_expired,
-                            )
-                        )
-                        .limit(self.settings.feed_batch_size)
-                    )
-                )
-                .returning(MerchantFeedItem.id)
+            eligible = or_(
+                and_(MerchantFeedItem.active.is_(False), MerchantFeedItem.seen_at < cutoff),
+                cache_expired,
             )
-            return len(removed.all())
+            candidates = (
+                await session.execute(
+                    select(MerchantFeedItem.id, MerchantFeedItem.merchant_program_id)
+                    .where(eligible)
+                    .limit(self.settings.feed_batch_size)
+                )
+            ).all()
+            if not candidates:
+                return 0
+            # Same State -> Item order as completion; skip programs being published/fetched.
+            locked_programs = list(
+                await session.scalars(
+                    select(FeedSyncState.merchant_program_id)
+                    .where(
+                        FeedSyncState.merchant_program_id.in_(
+                            {r.merchant_program_id for r in candidates}
+                        ),
+                        or_(
+                            FeedSyncState.lease_until.is_(None),
+                            FeedSyncState.lease_until <= utcnow(),
+                        ),
+                    )
+                    .order_by(FeedSyncState.merchant_program_id)
+                    .with_for_update(skip_locked=True)
+                )
+            )
+            removed = (
+                await session.execute(
+                    delete(MerchantFeedItem)
+                    .where(
+                        MerchantFeedItem.id.in_([r.id for r in candidates]),
+                        MerchantFeedItem.merchant_program_id.in_(locked_programs),
+                        eligible,
+                    )
+                    .returning(MerchantFeedItem.merchant_program_id, MerchantFeedItem.active)
+                )
+            ).all()
+            reacquire = {program_id for program_id, active in removed if active}
+            if reacquire:
+                await session.execute(
+                    update(FeedSyncState)
+                    .where(FeedSyncState.merchant_program_id.in_(reacquire))
+                    .values(next_sync_at=func.least(FeedSyncState.next_sync_at, utcnow()))
+                )
+            return len(removed)
