@@ -85,6 +85,10 @@ Old migrations are unchanged. Downgrade requires export of audit history, then e
 feed/history safeguards still apply. Administrative fixture TRUNCATE is used only by the
 isolated test/verifier cleanup, never by merchant lifecycle operations.
 
+Apply `uv run alembic upgrade head` to the intended application database before starting
+updated API/bot/worker services. Automated verification upgrades only disposable test
+databases; it does not migrate or deploy your running application.
+
 ## Next milestone
 
 M4D should begin with a small explicitly approved BE/DE merchant pilot: verify account

@@ -98,7 +98,7 @@ uv run python -m pricehunter.apps.admin merchant-programs
 uv run python -m pricehunter.apps.admin feed-list awin
 uv run python -m pricehunter.apps.admin merchant-program-check PROGRAM_UUID
 uv run python -m pricehunter.apps.admin feed-sync PROGRAM_UUID --dry-run
-uv run python -m pricehunter.apps.admin feed-sync PROGRAM_UUID
+uv run python -m pricehunter.apps.admin feed-sync PROGRAM_UUID --confirm
 uv run python -m pricehunter.apps.admin feed-status PROGRAM_UUID
 uv run python -m pricehunter.apps.admin feed-diagnostics PROGRAM_UUID
 uv run python -m pricehunter.apps.admin feed-search PROGRAM_UUID "Sony WH-1000XM6"

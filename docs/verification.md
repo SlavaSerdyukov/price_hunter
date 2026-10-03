@@ -748,3 +748,13 @@ Real Awin/TradeDoubler/CJ credentials, merchant approvals, contract reviews and 
 verification remain operator work. No real network activation, `.env` change, Amazon change,
 shipping/tax ranking, automatic merge, deployment or frontend is claimed. Hosted results
 are recorded below only after inspecting the completed run and actual job logs.
+
+**Verified hosted implementation result:** [GitHub Actions run 37122515480](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37122515480)
+completed with **success** for commit `0ed3dd8732edfeced4af894a0d46b2d1061646fb`
+on `feat/m4c-coverage-engine`. Actual job logs report **620 passed, no skips, 90.45%
+statement coverage** and the existing single upstream ARQ test warning. Dependency
+installation, Ruff lint/format, strict mypy, Alembic upgrade/check and the complete
+migration verifier all passed. The hosted measurement is separate from local 90.42%.
+This record was written only after fetching the completed run and its job logs. The
+subsequent documentation commit must also pass the unchanged Checks workflow before
+final merge-readiness is reported; no merge or deployment is performed by this task.
