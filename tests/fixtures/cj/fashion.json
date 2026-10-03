@@ -1,0 +1,49 @@
+{
+  "__typename": "Shopping",
+  "id": "shirt-blue-m",
+  "adId": "501",
+  "advertiserId": "101",
+  "advertiserCountry": "DE",
+  "title": "Cotton shirt",
+  "description": "Wireless headphones",
+  "brand": "Example",
+  "mpn": "SHIRT1",
+  "gtin": null,
+  "price": {
+    "amount": "349.00",
+    "currency": "EUR"
+  },
+  "salePrice": {
+    "amount": "319.00",
+    "currency": "EUR"
+  },
+  "salePriceEffectiveDateStart": "2026-01-01T00:00:00Z",
+  "salePriceEffectiveDateEnd": "2099-01-01T00:00:00Z",
+  "imageLink": "https://example.com/sony.jpg",
+  "link": "https://example.com/sony",
+  "linkCode": {
+    "clickUrl": "https://www.kqzyfj.com/click-100-501"
+  },
+  "availability": "IN_STOCK",
+  "targetCountry": "BE",
+  "serviceableAreas": "BE,DE",
+  "lastUpdated": "2026-10-01T10:00:00Z",
+  "isDeleted": false,
+  "productType": [
+    "Clothing"
+  ],
+  "shipping": {
+    "country": "BE",
+    "price": {
+      "amount": "4.99",
+      "currency": "EUR"
+    }
+  },
+  "itemGroupId": "shirt",
+  "size": "M",
+  "color": "Blue",
+  "material": "Cotton",
+  "pattern": "Plain",
+  "sizeType": "Regular",
+  "sizeSystem": "EU"
+}

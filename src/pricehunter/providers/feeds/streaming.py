@@ -192,6 +192,9 @@ class FeedHTTP:
         params: dict[str, str] | None = None,
         gzip: bool = False,
         total_timeout: int | None = None,
+        method: str = "GET",
+        headers: dict[str, str] | None = None,
+        json: dict[str, Any] | None = None,
     ) -> AsyncIterator[bytes]:
         validate_url(url, domains)
         limit = self.limiter.settings.provider_rate_limits.get(
@@ -209,11 +212,12 @@ class FeedHTTP:
             async with (
                 asyncio.timeout(total_timeout),
                 self.client.stream(
-                    "GET",
+                    method,
                     url,
                     params=params,
                     follow_redirects=False,
-                    headers={"Accept-Encoding": "identity"},
+                    headers={**(headers or {}), "Accept-Encoding": "identity"},
+                    json=json,
                     timeout=self.timeout,
                 ) as response,
             ):
@@ -234,11 +238,26 @@ class FeedHTTP:
             raise FeedError("transport_error") from None
 
     async def json(
-        self, network: str, url: str, *, domains: set[str], params: dict[str, str] | None = None
+        self,
+        network: str,
+        url: str,
+        *,
+        domains: set[str],
+        params: dict[str, str] | None = None,
+        method: str = "GET",
+        headers: dict[str, str] | None = None,
+        json: dict[str, Any] | None = None,
     ) -> Any:
         payload = bytearray()
         async for chunk in self.stream(
-            network, url, domains=domains, params=params, total_timeout=self.timeout
+            network,
+            url,
+            domains=domains,
+            params=params,
+            total_timeout=self.timeout,
+            method=method,
+            headers=headers,
+            json=json,
         ):
             payload.extend(chunk)
             if len(payload) > 4_000_000:

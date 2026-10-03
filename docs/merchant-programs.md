@@ -4,50 +4,64 @@ Review each network/advertiser/market independently. Account/feed visibility is 
 persistent tracking/history grant. Stable Store identity uses network + advertiser ID;
 market-specific programs may share it. Cross-network merchant identities remain separate.
 
-## Onboarding
+## Onboarding and updates
 
-1. Confirm network membership, advertiser approval, feed ID, market, currency, merchant
-   domain, affiliate hosts, attribution and actual data rights.
-2. Import a reviewed JSON program through the local admin CLI. Keep secrets in `.env`,
-   never in program data, feed references or review references.
-3. Add returned program UUIDs to FEED_PROGRAM_IDS, configure the network secret and enable
-   the network. Startup requires active approved programs for each enabled network.
-4. Run merchant-program-check and feed-sync --dry-run. Inspect real identifiers, variants,
-   prices and links, then sync. Verify attribution separately from price parsing.
-5. Record live verification with evidence/date; do not infer it from fixtures.
+1. Keep the network disabled. Configure approved account credentials locally, then run
+   `merchant-candidates NETWORK` (Awin, TradeDoubler or CJ). Visibility is informational.
+2. Generate `merchant-program-template NETWORK ADVERTISER_ID --feed-id FEED_ID` into a
+   local JSON file. It has active=false, approved=false and a fail-closed policy. Correct
+   the REVIEW_REQUIRED domain and verify market, currency, merchant/feed IDs and name.
+   Remote advertiser country is not a grant to sell or track in that market.
+3. Import with --dry-run, then --confirm. Generic re-import returns the existing identity
+   without overwriting review, approval, policy, active state or feed reference.
+4. Write a separate policy JSON based on the actual signed/approved contract. Specify
+   reviewed=true and a meaningful non-secret review_reference, permitted catalog/history/
+   tracking/refresh/affiliate use, attribution and cache age. Run merchant-program-review
+   with current expected version, reason, --dry-run, then --confirm. This deliberate
+   operation records review **and approval**; it does not activate the merchant.
+5. Activate with current expected version/reason/confirmation. Add the program UUID to
+   FEED_PROGRAM_IDS and enable its network only after credentials and approvals are ready.
+   Startup requires active reviewed programs for each enabled network.
+6. Inspect merchant-program-check and feed-sync --dry-run. Confirm the live sync separately,
+   then verify completeness, variants, native prices, real destinations and attribution.
+   Record date/evidence; fixtures do not prove live access or merchant permission.
 
-This disabled example is illustrative, not a real advertiser:
-
-```json
-{
-  "network": "awin",
-  "external_merchant_id": "12345",
-  "external_feed_id": "67890",
-  "market_country": "BE",
-  "display_name": "Approved merchant name",
-  "domain": "example.com",
-  "currency": "EUR",
-  "feed_language": "en",
-  "active": false,
-  "approved": false,
-  "policy": {
-    "reviewed": false,
-    "review_reference": "",
-    "catalog_persistence_allowed": false,
-    "price_history_allowed": false,
-    "tracking_allowed": false,
-    "refresh_allowed": false,
-    "affiliate_allowed": false,
-    "affiliate_required": false,
-    "max_cache_seconds": 3600,
-    "display_attribution_required": null
-  }
-}
-```
+Use your actual identifiers and current version; the following names are placeholders:
 
 ```sh
-uv run python -m pricehunter.apps.admin merchant-program-import reviewed-program.json
+uv run python -m pricehunter.apps.admin merchant-candidates cj
+uv run python -m pricehunter.apps.admin merchant-program-template cj ADVERTISER_ID --feed-id FEED_ID > pending-program.json
+uv run python -m pricehunter.apps.admin merchant-program-import pending-program.json --dry-run
+uv run python -m pricehunter.apps.admin merchant-program-import pending-program.json --confirm
+uv run python -m pricehunter.apps.admin merchant-program-review PROGRAM_UUID --expected-version 1 --policy-file reviewed-policy.json --reason "Contract reviewed" --dry-run
+uv run python -m pricehunter.apps.admin merchant-program-review PROGRAM_UUID --expected-version 1 --policy-file reviewed-policy.json --reason "Contract reviewed" --confirm
+uv run python -m pricehunter.apps.admin merchant-program-activate PROGRAM_UUID --expected-version 2 --reason "Approved pilot" --confirm
+uv run python -m pricehunter.apps.admin feed-sync PROGRAM_UUID --dry-run
+uv run python -m pricehunter.apps.admin feed-sync PROGRAM_UUID --confirm
+uv run python -m pricehunter.apps.admin merchant-program-history PROGRAM_UUID
 ```
+
+Each successful change increments version and appends an audit entry; stale versions
+return version_conflict without mutation. --dry-run checks input/current version without
+changing state. Every mutating CLI command displays its planned action and requires
+--confirm to apply. Never put credentials in program/policy files or review reasons.
+
+Additional explicit operations:
+
+- merchant-program-policy: --policy-file, --expected-version, --reason, --confirm.
+- merchant-program-disable: expected version/reason/confirm; retains Store, offers,
+  observations, canonical products, trackers, watches and price events. It revokes
+  eligibility, cancels in-flight ownership and invalidates cached staging presence.
+- merchant-program-metadata: --display-name plus version/reason/confirmation. The
+  customer-visible Store name is updated; shared market programs retain their own labels.
+- merchant-program-feed-reference: --feed-id plus version/reason/confirmation. A changed
+  feed clears approval/policy and staging eligibility and requires another review.
+
+Policy revocation immediately affects comparison, tracking, outbound and refresh through
+PolicyResolver; retained history is never deleted. Disabling affiliate use leaves price
+ranking unchanged and allows the reviewed direct URL fallback. Tracking revocation stops
+future watch selection. Catalog revocation hides offers interactively. Re-activation after
+disable does not revive cached listings: a successful complete feed must reconfirm presence.
 
 Tracking requires history rights because watch baselines retain prices. Catalog-only
 merchants may appear interactively without observations or watch recommendations. Feeds

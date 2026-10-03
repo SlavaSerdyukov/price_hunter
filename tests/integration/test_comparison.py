@@ -452,7 +452,8 @@ async def test_search_provider_order_partial_failures_and_persistence_errors(con
     async with container.sessions.begin() as session:
         await session.execute(update(Store).where(Store.name == "Demo Alpha").values(active=False))
     third = await container.search.search("Sony WH1000XM6", user.id)
-    assert third.unavailable_providers == ["failed", "mock"]
+    assert third.unavailable_providers == ["failed"]
+    assert next(o for o in third.provider_outcomes if o.provider == "mock").status == "PARTIAL"
     assert all(o.store != "Demo Alpha" for p in third.products for o in p.offers)
 
 

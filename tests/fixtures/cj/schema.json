@@ -1,0 +1,1681 @@
+{
+  "source": "https://production-doc-pipeline-assets-store-assetsstore-1q89u4n9t6xlw.s3.amazonaws.com/docs/api/graphql/public/Product%20Feed.json",
+  "sha256": "b82502490627c863331ae408c86026eebcba0af8b5fb52f914a85ebbfb41a360",
+  "audited_at": "2026-10-03",
+  "types": {
+    "AmountWithCurrency": {
+      "kind": "OBJECT",
+      "fields": {
+        "amount": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "DecimalNumber",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "currency": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        }
+      }
+    },
+    "LinkCode": {
+      "kind": "OBJECT",
+      "fields": {
+        "html": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "LinkType",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "clickUrl": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "imageUrl": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        }
+      }
+    },
+    "Product": {
+      "kind": "INTERFACE",
+      "fields": {
+        "additionalImageLink": {
+          "type": {
+            "kind": "LIST",
+            "name": null,
+            "ofType": {
+              "kind": "NON_NULL",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          "args": {}
+        },
+        "adId": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "ID",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "advertiserCountry": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "advertiserId": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "ID",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "advertiserName": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "brand": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "catalogId": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "ID",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "customLabel0": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "customLabel1": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "customLabel2": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "customLabel3": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "customLabel4": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "description": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "id": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "ID",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "imageLink": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "isDeleted": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "Boolean",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "itemListId": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "ID",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "itemListName": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "lastUpdated": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "Instant",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "link": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "linkCode": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "LinkCode",
+            "ofType": null
+          },
+          "args": {
+            "pid": {
+              "kind": "NON_NULL",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "ID",
+                "ofType": null
+              }
+            },
+            "shopperId": {
+              "kind": "SCALAR",
+              "name": "ID",
+              "ofType": null
+            }
+          }
+        },
+        "mobileLink": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "price": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "OBJECT",
+              "name": "AmountWithCurrency",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "salePrice": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "AmountWithCurrency",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "salePriceEffectiveDateEnd": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "Instant",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "salePriceEffectiveDateStart": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "Instant",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "serviceableAreas": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "shipping": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "Shipping",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "sourceFeedType": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "targetCountry": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "title": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        }
+      }
+    },
+    "ProductFeed": {
+      "kind": "OBJECT",
+      "fields": {
+        "adId": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "ID",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "advertiserId": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "advertiserName": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "advertiserCountry": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "sourceFeedType": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "currency": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "language": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "feedName": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "lastUpdated": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "Instant",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "productCount": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "Int",
+            "ofType": null
+          },
+          "args": {}
+        }
+      }
+    },
+    "Products": {
+      "kind": "OBJECT",
+      "fields": {
+        "resultList": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "INTERFACE",
+                  "name": "Product",
+                  "ofType": null
+                }
+              }
+            }
+          },
+          "args": {}
+        },
+        "totalCount": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "limit": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "count": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "nextPage": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        }
+      }
+    },
+    "Query": {
+      "kind": "OBJECT",
+      "fields": {
+        "products": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "OBJECT",
+              "name": "Products",
+              "ofType": null
+            }
+          },
+          "args": {
+            "companyId": {
+              "kind": "NON_NULL",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "ID",
+                "ofType": null
+              }
+            },
+            "adIds": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "ID",
+                  "ofType": null
+                }
+              }
+            },
+            "keywords": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              }
+            },
+            "partnerIds": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "ID",
+                  "ofType": null
+                }
+              }
+            },
+            "partnerStatus": {
+              "kind": "ENUM",
+              "name": "PartnerStatus",
+              "ofType": null
+            },
+            "excludePartnerIds": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "ID",
+                  "ofType": null
+                }
+              }
+            },
+            "offset": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            },
+            "limit": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            },
+            "productIds": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "ID",
+                  "ofType": null
+                }
+              }
+            },
+            "excludeProductIds": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "ID",
+                  "ofType": null
+                }
+              }
+            },
+            "advertiserCountries": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              }
+            },
+            "highPrice": {
+              "kind": "SCALAR",
+              "name": "Float",
+              "ofType": null
+            },
+            "lowPrice": {
+              "kind": "SCALAR",
+              "name": "Float",
+              "ofType": null
+            },
+            "currency": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            },
+            "itemListId": {
+              "kind": "SCALAR",
+              "name": "ID",
+              "ofType": null
+            },
+            "itemListIds": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "ID",
+                  "ofType": null
+                }
+              }
+            },
+            "includeDeletedProducts": {
+              "kind": "SCALAR",
+              "name": "Boolean",
+              "ofType": null
+            },
+            "serviceableAreas": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              }
+            },
+            "excludeServiceableAreas": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "String",
+                  "ofType": null
+                }
+              }
+            },
+            "availability": {
+              "kind": "ENUM",
+              "name": "Availability",
+              "ofType": null
+            },
+            "sortBy": {
+              "kind": "ENUM",
+              "name": "SortBy",
+              "ofType": null
+            },
+            "sortOrder": {
+              "kind": "ENUM",
+              "name": "SortOrder",
+              "ofType": null
+            },
+            "page": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          }
+        },
+        "shoppingProductFeeds": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "OBJECT",
+              "name": "ShoppingProductFeeds",
+              "ofType": null
+            }
+          },
+          "args": {
+            "companyId": {
+              "kind": "NON_NULL",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "ID",
+                "ofType": null
+              }
+            },
+            "partnerIds": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "SCALAR",
+                  "name": "ID",
+                  "ofType": null
+                }
+              }
+            },
+            "advertiserCountry": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            },
+            "offset": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            },
+            "limit": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          }
+        }
+      }
+    },
+    "Shipping": {
+      "kind": "OBJECT",
+      "fields": {
+        "price": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "OBJECT",
+              "name": "ShippingAmountWithCurrency",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "service": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "locationGroupName": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "region": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "postalCode": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "locationId": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "ID",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "country": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "minimumHandlingTime": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "maximumHandlingTime": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "minimumTransitTime": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "maximumTransitTime": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        }
+      }
+    },
+    "ShippingAmountWithCurrency": {
+      "kind": "OBJECT",
+      "fields": {
+        "amount": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "DecimalNumber",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "currency": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        }
+      }
+    },
+    "Shopping": {
+      "kind": "OBJECT",
+      "fields": {
+        "additionalImageLink": {
+          "type": {
+            "kind": "LIST",
+            "name": null,
+            "ofType": {
+              "kind": "NON_NULL",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          "args": {}
+        },
+        "adId": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "ID",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "advertiserCountry": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "advertiserId": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "ID",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "advertiserName": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "brand": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "catalogId": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "ID",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "customLabel0": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "customLabel1": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "customLabel2": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "customLabel3": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "customLabel4": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "description": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "String",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "id": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "ID",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "imageLink": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "isDeleted": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "Boolean",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "itemListId": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "ID",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "itemListName": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "lastUpdated": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "Instant",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "link": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "mobileLink": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "price": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "OBJECT",
+              "name": "AmountWithCurrency",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "salePrice": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "AmountWithCurrency",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "salePriceEffectiveDateEnd": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "Instant",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "salePriceEffectiveDateStart": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "Instant",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "serviceableAreas": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "shipping": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "Shipping",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "shippingWeight": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "shippingLength": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "shippingWidth": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "shippingHeight": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "sourceFeedType": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "targetCountry": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "title": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "availability": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "availabilityDate": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "Instant",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "certification": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "Certification",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "expirationDate": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "Instant",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "unitPricingMeasure": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "unitPricingBaseMeasure": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "installment": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "Installment",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "itemGroupId": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "ID",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "loyaltyPoints": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "LoyaltyPoints",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "googleProductCategory": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "GoogleProductCategory",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "productType": {
+          "type": {
+            "kind": "LIST",
+            "name": null,
+            "ofType": {
+              "kind": "NON_NULL",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          "args": {}
+        },
+        "gtin": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "mpn": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "identifierExists": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "condition": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "adult": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "multipack": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "Int",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "isBundle": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "energyEfficiencyClass": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "energyEfficiencyClassMin": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "energyEfficiencyClassMax": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "ageGroup": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "color": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "gender": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "material": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "minimumHandlingTime": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "maximumHandlingTime": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "pattern": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "size": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "sizeType": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "sizeSystem": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "tax": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "Tax",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "costOfGoodsSold": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "AmountWithCurrency",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "subscriptionCost": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "SubscriptionCost",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "productDetail": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "ProductDetail",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "productHighlight": {
+          "type": {
+            "kind": "LIST",
+            "name": null,
+            "ofType": {
+              "kind": "NON_NULL",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "String",
+                "ofType": null
+              }
+            }
+          },
+          "args": {}
+        },
+        "productLength": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "productWidth": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "productHeight": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "productWeight": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "adsRedirect": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "shoppingAdsExcludedCountry": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "shipsFromCountry": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "transitTimeLabel": {
+          "type": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          },
+          "args": {}
+        },
+        "linkCode": {
+          "type": {
+            "kind": "OBJECT",
+            "name": "LinkCode",
+            "ofType": null
+          },
+          "args": {
+            "pid": {
+              "kind": "NON_NULL",
+              "name": null,
+              "ofType": {
+                "kind": "SCALAR",
+                "name": "ID",
+                "ofType": null
+              }
+            },
+            "shopperId": {
+              "kind": "SCALAR",
+              "name": "ID",
+              "ofType": null
+            }
+          }
+        }
+      }
+    },
+    "ShoppingProductFeeds": {
+      "kind": "OBJECT",
+      "fields": {
+        "resultList": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "LIST",
+              "name": null,
+              "ofType": {
+                "kind": "NON_NULL",
+                "name": null,
+                "ofType": {
+                  "kind": "OBJECT",
+                  "name": "ProductFeed",
+                  "ofType": null
+                }
+              }
+            }
+          },
+          "args": {}
+        },
+        "totalCount": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "limit": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          },
+          "args": {}
+        },
+        "count": {
+          "type": {
+            "kind": "NON_NULL",
+            "name": null,
+            "ofType": {
+              "kind": "SCALAR",
+              "name": "Int",
+              "ofType": null
+            }
+          },
+          "args": {}
+        }
+      }
+    }
+  }
+}

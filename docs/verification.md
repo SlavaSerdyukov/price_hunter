@@ -708,3 +708,43 @@ typing, Alembic and migration-verifier steps passed. This result was recorded on
 after fetching the completed run and its logs. M4B is merge-ready on this evidence;
 the documentation-only commit recording it must also pass the same Checks workflow.
 No merge, deployment or live merchant activation is claimed.
+
+## M4C — Coverage engine, CJ and safe merchant onboarding — 2026-10-03
+
+Baseline started from merged M4B/M4B.1 main
+`4de62c5e9ce033f7ec375294498f133aa4cb9751` on `feat/m4c-coverage-engine`:
+**583 passed, no skips, 90.51% statement coverage**, with all required gates passing.
+The four initial acceptance cases failed before implementation: stale operator version,
+per-item persistence rejection falsely marking a network unavailable, missing CJ network
+identity, and nondeterministic claims for twenty equal-due programs.
+
+The [design](m4c-design.md) records inspected existing boundaries and deliberate reuse of
+the feed/staging/catalog pipeline. [CJ setup](cj-setup.md) records the current official
+documentation and Developer Portal schema asset, audit date/hash, exact fields, pagination,
+unknown quotas and unsupported capabilities. CI needs no real publisher credentials.
+
+Final local verification: **620 passed, no skips, 90.42% statement coverage**. The 85%
+gate and coverage scope are unchanged. Ruff lint/format (195 Python files), strict mypy
+(114 source files), Alembic upgrade/check and the complete disposable migration verifier
+passed. Dedicated PostgreSQL `pricehunter_test`, Redis DB 15 and fake remote transports
+were used; the only warning remains the upstream ARQ Redis `close()` deprecation.
+The updated CJ shared-budget unit contract also passed separately: 23 CJ unit cases.
+Documentation links and diff whitespace checks passed.
+
+Acceptance includes four-network strong-GTIN matching with BE €319 / DE €299, BE watch
+market isolation, unrelated weak-title separation, commission/payout neutrality, normalized
+source timestamps during deduplication, one rejected merchant without a network outage,
+ten valid CJ products plus one malformed row through the real adapter/staging/materialization
+path, request failures preserving a completed generation, and bounded search work/errors.
+Lifecycle checks cover fail-closed candidates/templates, explicit confirmation and dry-run,
+review/approval followed by activation, idempotent imports, stale writes, UPDATE/DELETE
+rejection on the audit table, immediate tracking/catalog/affiliate revocation, and reversible
+disable requiring a new completed feed. Coverage and duplicate diagnostics are read-only.
+Twenty-program claims continue past failed merchants; distinct advertiser requests share
+one network Redis budget. The migration verifier preserves existing reviews and all earlier
+catalog/history/billing/market/FX/outbound records and exercises guarded downgrade/re-upgrade.
+
+Real Awin/TradeDoubler/CJ credentials, merchant approvals, contract reviews and live feed/link
+verification remain operator work. No real network activation, `.env` change, Amazon change,
+shipping/tax ranking, automatic merge, deployment or frontend is claimed. Hosted results
+are recorded below only after inspecting the completed run and actual job logs.

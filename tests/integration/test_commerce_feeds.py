@@ -47,7 +47,7 @@ def row(external_id="sony", price="329", **overrides):
 async def program(service, merchant, country="BE", policy=SYNTHETIC_POLICY):
     from pricehunter.domain.feeds import MerchantProgramInput
 
-    return await service.save(
+    pending = await service.save(
         MerchantProgramInput(
             network="awin",
             external_merchant_id=merchant,
@@ -56,10 +56,16 @@ async def program(service, merchant, country="BE", policy=SYNTHETIC_POLICY):
             domain="example.com",
             currency="EUR",
             external_feed_id=merchant,
-            active=True,
-            approved=True,
-            policy=policy,
         )
+    )
+    reviewed = await service.review(
+        pending.id,
+        policy,
+        expected_version=pending.version,
+        reason="Synthetic fixture policy review",
+    )
+    return await service.activate(
+        reviewed.id, expected_version=reviewed.version, reason="Synthetic fixture activation"
     )
 
 

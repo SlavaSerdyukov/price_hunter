@@ -230,7 +230,14 @@ async def test_feed_admin_reports_and_dry_run_do_not_expose_urls(container, caps
     ):
         await feed_admin.run(
             container,
-            Namespace(command=command, program=p.id, query="Sony", dry_run=True, network="awin"),
+            Namespace(
+                command=command,
+                program=p.id,
+                query="Sony",
+                dry_run=True,
+                confirm=False,
+                network="awin",
+            ),
         )
         printed = capsys.readouterr().out
         assert "awin1.com" not in printed and "affiliate_url" not in printed
@@ -238,7 +245,10 @@ async def test_feed_admin_reports_and_dry_run_do_not_expose_urls(container, caps
     data.write_text(
         '{"network":"awin","external_merchant_id":"2","external_feed_id":"2","market_country":"BE","display_name":"Example","domain":"example.com","currency":"EUR"}'
     )
-    await feed_admin.run(container, Namespace(command="merchant-program-import", file=data))
+    await feed_admin.run(
+        container,
+        Namespace(command="merchant-program-import", file=data, dry_run=False, confirm=True),
+    )
     assert '"active": false' in capsys.readouterr().out
     container.feed_sources = {}
     with pytest.raises(FeedError, match="network_disabled"):

@@ -1,0 +1,40 @@
+{
+  "__typename": "Shopping",
+  "id": "sony-1",
+  "adId": "501",
+  "advertiserId": "101",
+  "advertiserCountry": "DE",
+  "title": "Sony WH-1000XM6",
+  "description": "Wireless headphones",
+  "brand": "Sony",
+  "mpn": "WH1000XM6",
+  "gtin": "4548736162563",
+  "price": {
+    "amount": "NaN",
+    "currency": "EUR"
+  },
+  "salePrice": null,
+  "salePriceEffectiveDateStart": "2026-01-01T00:00:00Z",
+  "salePriceEffectiveDateEnd": "2099-01-01T00:00:00Z",
+  "imageLink": "https://example.com/sony.jpg",
+  "link": "https://example.com/sony",
+  "linkCode": {
+    "clickUrl": "https://www.kqzyfj.com/click-100-501"
+  },
+  "availability": "IN_STOCK",
+  "targetCountry": "BE",
+  "serviceableAreas": "BE,DE",
+  "lastUpdated": "2026-10-01T10:00:00Z",
+  "isDeleted": false,
+  "productType": [
+    "Electronics",
+    "Headphones"
+  ],
+  "shipping": {
+    "country": "BE",
+    "price": {
+      "amount": "4.99",
+      "currency": "EUR"
+    }
+  }
+}

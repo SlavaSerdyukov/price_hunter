@@ -12,10 +12,11 @@ from pricehunter.domain.markets import CountryCode
 from pricehunter.domain.products import Availability, Money, ProductOfferData
 from pricehunter.domain.provider_policy import ProviderDataPolicy
 
-FEED_NETWORKS = frozenset({"awin", "tradedoubler"})
+FEED_NETWORKS = frozenset({"awin", "tradedoubler", "cj"})
 AFFILIATE_HOSTS = {
     "awin": {"www.awin1.com", "awin1.com"},
     "tradedoubler": {"pdt.tradedoubler.com", "clk.tradedoubler.com", "clkuk.tradedoubler.com"},
+    "cj": {"www.kqzyfj.com", "kqzyfj.com"},
 }
 
 
@@ -29,7 +30,7 @@ class FeedError(Exception):
 
 class MerchantProgramInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    network: Literal["awin", "tradedoubler"]
+    network: Literal["awin", "tradedoubler", "cj"]
     external_merchant_id: str = Field(pattern=r"^[0-9]{1,30}$")
     market_country: CountryCode
     display_name: str = Field(min_length=1, max_length=100)
@@ -138,6 +139,27 @@ class FeedReference:
     name: str
     market_country: str | None = None
     version: str | None = None
+    currency: str | None = None
+
+
+class MerchantProgramCandidate(BaseModel):
+    """Account visibility only; never an approval or market/data-use grant."""
+
+    network: str
+    external_merchant_id: str
+    external_feed_id: str
+    display_name: str
+    market_country: str | None = None
+    currency: str | None = None
+
+    def template(self) -> dict[str, Any]:
+        return {
+            **self.model_dump(),
+            "domain": "REVIEW_REQUIRED",
+            "active": False,
+            "approved": False,
+            "policy": ProviderDataPolicy().model_dump(),
+        }
 
 
 class FeedReport(BaseModel):

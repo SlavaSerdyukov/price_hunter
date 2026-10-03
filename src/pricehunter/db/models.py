@@ -494,6 +494,27 @@ class MerchantProgram(UUIDPrimaryKey, Timestamps, Base):
     policy_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_reference: Mapped[str] = mapped_column(String(500), default="")
+    version: Mapped[int] = mapped_column(default=1, server_default="1")
+
+
+class MerchantProgramAudit(UUIDPrimaryKey, Base):
+    __tablename__ = "merchant_program_audits"
+    __table_args__ = (
+        UniqueConstraint("merchant_program_id", "new_version"),
+        CheckConstraint("new_version = previous_version + 1", name="audit_version_step"),
+        Index("ix_program_audit_history", "merchant_program_id", "created_at"),
+    )
+    merchant_program_id: Mapped[UUID] = mapped_column(
+        ForeignKey("merchant_programs.id", ondelete="RESTRICT")
+    )
+    action: Mapped[str] = mapped_column(String(40))
+    previous_version: Mapped[int] = mapped_column()
+    new_version: Mapped[int] = mapped_column()
+    changed_fields: Mapped[list[str]] = mapped_column(JSONB)
+    reason: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
 
 
 class MerchantFeedItem(UUIDPrimaryKey, Base):
@@ -555,6 +576,7 @@ class FeedSyncState(Base):
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     next_sync_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
     )
