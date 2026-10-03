@@ -27,6 +27,7 @@ from pricehunter.domain.products import ProductOfferData
 from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.services.catalog_resolver import CatalogResolver
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.policy_resolver import PolicyResolver
 from pricehunter.services.product_watch_service import ProductWatchService
 from pricehunter.services.snapshot_ingestion import SnapshotUpdater
 
@@ -85,7 +86,9 @@ class ProductDiscoveryService:
         async with self.sessions.begin() as session:
             interests = self.interests(now)
             for provider in self.registry.providers.values():
-                if not self.settings.data_policy(provider.name).tracking_allowed:
+                if not PolicyResolver(self.settings).network_allowed(
+                    provider.name, "tracking_allowed"
+                ):
                     continue
                 if not provider.capabilities & {
                     Capability.SEARCH_GTIN,
@@ -165,7 +168,9 @@ class ProductDiscoveryService:
                             [
                                 name
                                 for name in self.registry.providers
-                                if self.settings.data_policy(name).tracking_allowed
+                                if PolicyResolver(self.settings).network_allowed(
+                                    name, "tracking_allowed"
+                                )
                             ]
                         ),
                         or_(
@@ -237,7 +242,10 @@ class ProductDiscoveryService:
                 )
                 .limit(1)
             )
-            self.settings.data_policy(target.provider).require("tracking_allowed")
+            if not PolicyResolver(self.settings).network_allowed(
+                target.provider, "tracking_allowed"
+            ):
+                return False
             provider = self.registry.get(target.provider)
             query = ProductSearchIdentity(
                 product.gtin,
@@ -372,6 +380,9 @@ class ProductDiscoveryService:
                         continue
                     try:
                         async with session.begin_nested():
+                            (await PolicyResolver(self.settings).incoming(session, data)).require(
+                                "tracking_allowed"
+                            )
                             snapshot = (
                                 search_ingestion(self.registry.get(target.provider).capabilities)
                                 == IngestionMode.SEARCH_SNAPSHOT
@@ -384,7 +395,13 @@ class ProductDiscoveryService:
                             )
                             if snapshot:
                                 await SnapshotUpdater().accept(
-                                    session, offer, data, self.settings.data_policy(target.provider)
+                                    session,
+                                    offer,
+                                    data,
+                                    await PolicyResolver(self.settings).incoming(session, data),
+                                    revalidation=await PolicyResolver(
+                                        self.settings
+                                    ).snapshot_context(session, data),
                                 )
                             found.add(offer.id)
                             log.info(

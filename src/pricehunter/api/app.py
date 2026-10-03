@@ -32,6 +32,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         nonlocal bot, dispatcher
+        await resources.validate_feeds()
         if settings.telegram_mode == "webhook" and settings.telegram_bot_token.get_secret_value():
             bot, dispatcher = create_bot(resources), create_dispatcher(resources)
         yield

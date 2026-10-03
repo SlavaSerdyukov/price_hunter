@@ -19,6 +19,7 @@ from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.schemas.api import OfferView, TrackerCreate, TrackerPatch, TrackerView
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.outbound_service import OutboundLinkService
+from pricehunter.services.policy_resolver import PolicyResolver
 
 
 def tracker_view(tracker: Tracker, offer: StoreOffer) -> TrackerView:
@@ -60,8 +61,8 @@ class TrackingService:
                 raise ProductNotFoundError()
             store = await session.get(Store, offer.store_id)
             assert store is not None
-            self.settings.data_policy(store.provider_type).require("tracking_allowed")
-            self.settings.data_policy(store.provider_type).require("refresh_allowed")
+            PolicyResolver(self.settings).offer(offer, store).require("tracking_allowed")
+            PolicyResolver(self.settings).offer(offer, store).require("refresh_allowed")
             if Capability.REFRESH not in self.registry.get(store.provider_type).capabilities:
                 raise ProviderPolicyError()
             existing = await session.scalar(
@@ -129,9 +130,9 @@ class TrackingService:
                 )
                 view.scheduled = (
                     view.id in allowed
-                    and self.settings.data_policy(
-                        stores[offer.store_id].provider_type
-                    ).tracking_allowed
+                    and PolicyResolver(self.settings)
+                    .offer(offer, stores[offer.store_id])
+                    .tracking_allowed
                 )
                 view.check_interval_seconds = (
                     self.settings.mock_check_interval_seconds
@@ -210,7 +211,8 @@ class TrackingService:
         if store:
             view.offer = OutboundLinkService(self.settings).offer_view(offer, store)
             view.scheduled = (
-                view.scheduled and self.settings.data_policy(store.provider_type).tracking_allowed
+                view.scheduled
+                and PolicyResolver(self.settings).offer(offer, store).tracking_allowed
             )
         view.check_interval_seconds = (
             self.settings.mock_check_interval_seconds

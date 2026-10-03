@@ -14,9 +14,11 @@ from pricehunter.db.base import utcnow
 from pricehunter.db.models import OutboundClick, Store, StoreOffer
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.errors import PriceHunterError, ProductNotFoundError, ProviderPolicyError
+from pricehunter.domain.feeds import AFFILIATE_HOSTS
 from pricehunter.domain.markets import validate_country
 from pricehunter.providers.ebay import MARKETPLACES
 from pricehunter.schemas.api import OfferView
+from pricehunter.services.policy_resolver import PolicyResolver
 
 EBAY_LINK_DOMAINS = {
     host
@@ -35,9 +37,9 @@ class OutboundLinkService:
         self.settings = settings
 
     def destination(self, offer: StoreOffer, store: Store) -> tuple[str, str | None]:
-        if not store.active or not store.supported:
+        if not store.active or not store.supported or offer.catalog_active is False:
             raise ProductNotFoundError()
-        policy = self.settings.data_policy(store.provider_type)
+        policy = PolicyResolver(self.settings).offer(offer, store)
         policy.require("catalog_persistence_allowed")
         if utcnow() - offer.last_checked_at > timedelta(seconds=policy.max_cache_seconds):
             raise ProductNotFoundError()
@@ -53,31 +55,37 @@ class OutboundLinkService:
                 and network == "rakuten"
                 and self.settings.rakuten_enabled
             )
+            or (
+                network in AFFILIATE_HOSTS
+                and network == store.provider_type
+                and PolicyResolver(self.settings).network_allowed(network, "affiliate_allowed")
+            )
         )
         if offer.affiliate_url and active:
             domains = (
                 {"click.linksynergy.com", "linksynergy.com"}
                 if network == "rakuten"
-                else EBAY_LINK_DOMAINS
+                else AFFILIATE_HOSTS.get(network or "", EBAY_LINK_DOMAINS)
             )
             validate_url(offer.affiliate_url, domains)
             return offer.affiliate_url, network
         if policy.affiliate_required or not offer.direct_url:
             raise ProviderPolicyError()
+        domain = offer.merchant_program.domain if offer.merchant_program else store.domain
         validate_url(
             offer.direct_url,
             EBAY_LINK_DOMAINS
             if store.provider_type == "ebay"
-            else {store.domain, "www." + store.domain.removeprefix("www.")},
+            else {domain, "www." + domain.removeprefix("www.")},
         )
         return offer.direct_url, None
 
     def offer_view(self, offer: StoreOffer, store: Store, *, surface: str = "api") -> OfferView:
         result = OfferView.model_validate(offer)
         result.store = store.name
-        result.attribution = self.settings.data_policy(
-            store.provider_type
-        ).display_attribution_required
+        result.attribution = (
+            PolicyResolver(self.settings).offer(offer, store).display_attribution_required
+        )
         try:
             result.url = self.link(
                 offer, store, surface=surface, market_country=offer.market_country

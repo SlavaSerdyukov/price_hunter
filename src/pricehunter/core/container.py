@@ -1,18 +1,28 @@
+from uuid import UUID
+
 import httpx
 from aiogram import Bot
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from pricehunter.core.config import Settings
 from pricehunter.core.limits import RateLimiter
 from pricehunter.core.network import PublicHTTPTransport
+from pricehunter.db.models import MerchantProgram
 from pricehunter.db.session import SessionFactory, create_sessions
+from pricehunter.domain.feeds import FEED_NETWORKS
 from pricehunter.domain.subscriptions import Plan, PlanEntitlements, SubscriptionPolicy
 from pricehunter.payments.stars import TelegramStarsPaymentProvider
 from pricehunter.providers.affiliate.rakuten import RakutenProvider, RakutenTokenManager
 from pricehunter.providers.amazon import AmazonCreatorsProvider
 from pricehunter.providers.base import StoreProvider
 from pricehunter.providers.ebay import EbayBrowseProvider
+from pricehunter.providers.feeds.awin import AwinFeedSource
+from pricehunter.providers.feeds.base import FeedSource
+from pricehunter.providers.feeds.local import FeedStoreProvider
+from pricehunter.providers.feeds.streaming import FeedBounds, FeedHTTP
+from pricehunter.providers.feeds.tradedoubler import TradeDoublerFeedSource
 from pricehunter.providers.http import ProviderHTTP
 from pricehunter.providers.mock import MockStoreProvider
 from pricehunter.providers.registry import ProviderRegistry
@@ -24,8 +34,11 @@ from pricehunter.services.billing_service import BillingService
 from pricehunter.services.comparison_operations import ComparisonOperations
 from pricehunter.services.discovery_service import ProductDiscoveryService
 from pricehunter.services.entitlement_service import EntitlementService
+from pricehunter.services.feed_sync import FeedSyncService
 from pricehunter.services.fx_service import FxService
+from pricehunter.services.merchant_programs import MerchantProgramService
 from pricehunter.services.outbound_service import OutboundLinkService, validate_redirect_settings
+from pricehunter.services.policy_resolver import PolicyResolver
 from pricehunter.services.price_check_service import PriceCheckService
 from pricehunter.services.product_service import ProductService
 from pricehunter.services.product_watch_service import ProductWatchService
@@ -67,6 +80,36 @@ class Container:
             limits=httpx.Limits(max_connections=20),
         )
         self.limiter = RateLimiter(self.redis, settings)
+        self.feed_sources: dict[str, FeedSource] = {}
+        enabled_feeds = [name for name in FEED_NETWORKS if getattr(settings, f"{name}_enabled")]
+        if enabled_feeds:
+            if not settings.feed_program_ids:
+                raise ValueError(
+                    "Enabled feeds require reviewed FEED_PROGRAM_IDS; see docs/merchant-programs.md"
+                )
+            try:
+                [UUID(value) for value in settings.feed_program_ids]
+            except ValueError:
+                raise ValueError("FEED_PROGRAM_IDS must contain merchant program UUIDs") from None
+            feed_http = FeedHTTP(
+                self.http,
+                self.limiter,
+                FeedBounds(
+                    compressed_bytes=settings.feed_max_compressed_bytes,
+                    decompressed_bytes=settings.feed_max_decompressed_bytes,
+                    record_bytes=settings.feed_max_record_bytes,
+                    rows=settings.feed_max_rows,
+                ),
+            )
+            if settings.awin_enabled:
+                self.feed_sources["awin"] = AwinFeedSource(feed_http, settings.awin_feed_api_key)
+            if settings.tradedoubler_enabled:
+                self.feed_sources["tradedoubler"] = TradeDoublerFeedSource(
+                    feed_http,
+                    settings.tradedoubler_token,
+                    page_size=settings.feed_page_size,
+                    max_pages=settings.feed_max_pages,
+                )
         providers: list[StoreProvider] = []
         if settings.mock_provider_enabled:
             providers.append(MockStoreProvider(settings.mock_discovery_seconds))
@@ -147,6 +190,7 @@ class Container:
             )
         for provider in providers:
             settings.data_policy(provider.name).require("catalog_persistence_allowed")
+        providers.extend(FeedStoreProvider(name, self.sessions, settings) for name in enabled_feeds)
         self.registry = registry or ProviderRegistry(providers)
         self.policy = SubscriptionPolicy(
             {
@@ -197,6 +241,32 @@ class Container:
         self.price_checks = PriceCheckService(
             self.sessions, self.registry, self.limiter, settings, self.entitlements
         )
+        self.merchant_programs = MerchantProgramService(self.sessions, settings)
+        self.feed_sync = FeedSyncService(self.sessions, settings, self.products)
+
+    async def validate_feeds(self) -> None:
+        if not self.feed_sources:
+            return
+        async with self.sessions() as session:
+            rows = list(
+                await session.scalars(
+                    select(MerchantProgram).where(
+                        MerchantProgram.id.in_([UUID(v) for v in self.settings.feed_program_ids])
+                    )
+                )
+            )
+        if (
+            len(rows) != len(set(self.settings.feed_program_ids))
+            or any(
+                p.network not in self.feed_sources
+                or not PolicyResolver(self.settings).program(p).catalog_persistence_allowed
+                for p in rows
+            )
+            or set(p.network for p in rows) != set(self.feed_sources)
+        ):
+            raise ValueError(
+                "FEED_PROGRAM_IDS requires active approved programs for each enabled network"
+            )
 
     async def close(self) -> None:
         if self.payment_provider.bot is not None:

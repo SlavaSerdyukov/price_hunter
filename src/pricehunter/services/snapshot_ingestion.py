@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import PriceObservation, StoreOffer
 from pricehunter.domain.discovery import DiscoveryMismatch
+from pricehunter.domain.ingestion import FeedRevalidationContext
 from pricehunter.domain.products import ProductOfferData
 from pricehunter.domain.provider_policy import ProviderDataPolicy
 
@@ -18,6 +19,8 @@ class SnapshotUpdater:
         offer: StoreOffer,
         data: ProductOfferData,
         policy: ProviderDataPolicy,
+        *,
+        revalidation: FeedRevalidationContext | None = None,
     ) -> bool:
         policy.require("catalog_persistence_allowed")
         if (offer.market_country, offer.currency, offer.external_id) != (
@@ -26,11 +29,25 @@ class SnapshotUpdater:
             data.external_id,
         ):
             raise DiscoveryMismatch()
+        now = utcnow()
+        if revalidation is not None and (
+            revalidation.program_id != offer.merchant_program_id
+            or revalidation.program_id != data.merchant_program_id
+            or revalidation.external_id != data.external_id
+            or revalidation.generation != data.feed_generation
+            or revalidation.confirmed_at > now
+        ):
+            raise DiscoveryMismatch()
         if offer.source_updated_at is not None and (
             data.source_updated_at is None or data.source_updated_at <= offer.source_updated_at
         ):
+            if revalidation is not None:
+                # Current feed presence can renew availability, never overwrite newer content.
+                offer.last_checked_at = revalidation.confirmed_at
+                offer.catalog_active = True
+                offer.feed_generation = revalidation.generation
+                await session.flush()
             return False
-        now = utcnow()
         if data.source_updated_at is not None and data.source_updated_at > now:
             raise DiscoveryMismatch()
         changed = (offer.price, offer.availability) != (data.price, data.availability)
@@ -69,6 +86,8 @@ class SnapshotUpdater:
             setattr(offer, field, getattr(data, field))
         offer.metadata_json = data.metadata
         offer.source_updated_at = data.source_updated_at
-        offer.last_checked_at = now
+        offer.last_checked_at = revalidation.confirmed_at if revalidation else now
+        offer.catalog_active = True
+        offer.feed_generation = max(offer.feed_generation, data.feed_generation)
         await session.flush()
         return True

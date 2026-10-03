@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from sqlalchemy import and_, delete, exists, or_, select
 
 from pricehunter.core.config import Settings
@@ -16,6 +14,7 @@ from pricehunter.db.models import (
     Tracker,
 )
 from pricehunter.db.session import SessionFactory
+from pricehunter.services.policy_resolver import PolicyResolver
 
 
 class CatalogPolicyMaintenance:
@@ -31,17 +30,12 @@ class CatalogPolicyMaintenance:
 
     async def purge(self) -> int:
         rules = [
-            and_(
-                Store.provider_type == name,
-                StoreOffer.last_checked_at < utcnow() - timedelta(seconds=policy.max_cache_seconds),
-            )
-            for name, policy in self.settings.provider_data_policies.items()
-            if policy.reviewed
-            and policy.catalog_persistence_allowed
-            and not policy.price_history_allowed
+            PolicyResolver(self.settings).allowed("catalog_persistence_allowed"),
+            ~PolicyResolver(self.settings).allowed("price_history_allowed"),
+            ~PolicyResolver(self.settings).allowed(
+                "catalog_persistence_allowed", now=utcnow(), current_feed=False
+            ),
         ]
-        if not rules:
-            return 0
         protected = [
             exists().where(Tracker.store_offer_id == StoreOffer.id),
             exists().where(ProductWatch.best_offer_id == StoreOffer.id),
@@ -55,7 +49,7 @@ class CatalogPolicyMaintenance:
                     await session.execute(
                         select(StoreOffer.id, StoreOffer.product_id, Store.slug)
                         .join(Store)
-                        .where(or_(*rules), ~or_(*protected))
+                        .where(and_(*rules), ~or_(*protected))
                         .order_by(StoreOffer.product_id, StoreOffer.id)
                         .limit(self.settings.batch_size)
                     )

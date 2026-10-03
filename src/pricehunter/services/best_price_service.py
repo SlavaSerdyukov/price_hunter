@@ -24,6 +24,7 @@ from pricehunter.domain.subscriptions import Feature
 from pricehunter.services.comparison_service import ComparisonReader, ComparisonSummary
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.market_context import user_market
+from pricehunter.services.policy_resolver import PolicyResolver
 
 
 class BestHistoryPoint(BaseModel):
@@ -84,8 +85,7 @@ class BestPriceService:
         )
         for currency in sorted(states.keys() | groups.keys() | watched):
             best = groups[currency].best_available_offer if currency in groups else None
-            if best and not self.settings.data_policy(best.provider).price_history_allowed:
-                continue
+            # The supplied summary is already filtered by current history permission.
             state = states.get(currency)
             is_new = state is None
             if state is None:
@@ -169,18 +169,7 @@ class BestPriceService:
                     BestPriceEvent.store_offer_id.in_(
                         select(StoreOffer.id)
                         .join(Store)
-                        .where(
-                            Store.provider_type.in_(
-                                [
-                                    name
-                                    for name, policy in {
-                                        "mock": self.settings.data_policy("mock"),
-                                        **self.settings.provider_data_policies,
-                                    }.items()
-                                    if policy.price_history_allowed
-                                ]
-                            )
-                        )
+                        .where(PolicyResolver(self.settings).allowed("price_history_allowed"))
                     ),
                 ),
             ]

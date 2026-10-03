@@ -135,7 +135,7 @@ async def main():
                 )
             )
 
-        async def snapshot():
+        async def snapshot(extra=()):
             async with engine.connect() as c:
                 return {
                     table: [
@@ -160,6 +160,7 @@ async def main():
                         "product_best_states",
                         "best_price_events",
                     )
+                    + extra
                 }
 
         # Create a real M3B-shaped database before upgrading M4A. Models below
@@ -265,8 +266,40 @@ async def main():
                 {"id": belgian_offer, "source": ids[3]},
             )
         original = await snapshot()
+        migrate("upgrade", "b7c21a48d903")
+        await engine.dispose()
+        async with engine.begin() as c:
+            await c.execute(
+                text(
+                    "INSERT INTO fx_rates "
+                    "(id,base_currency,quote_currency,rate,effective_date,fetched_at,source) "
+                    "VALUES (:id,'EUR','USD',1.15,current_date,now(),'ECB')"
+                ),
+                {"id": uuid4()},
+            )
+            await c.execute(
+                text(
+                    "INSERT INTO outbound_clicks "
+                    "(id,offer_id,store_id,affiliate_network,surface,market_country,"
+                    "created_at,opaque_click_reference) "
+                    "VALUES (:id,:offer,:store,'fixture','comparison','BE',now(),"
+                    "'migration-fixture')"
+                ),
+                {"id": uuid4(), "offer": ids[3], "store": ids[1]},
+            )
+        before_feeds = await snapshot(("fx_rates", "outbound_clicks"))
         migrate("upgrade", "head")
         await engine.dispose()
+        after_feeds = await snapshot(("fx_rates", "outbound_clicks"))
+        for table, rows in before_feeds.items():
+            for before, current in zip(rows, after_feeds[table], strict=True):
+                assert before == {key: current[key] for key in before}, table
+        # Remove only these synthetic rows after proving M4B preserved them.
+        async with engine.begin() as c:
+            await c.execute(
+                text("DELETE FROM outbound_clicks WHERE opaque_click_reference='migration-fixture'")
+            )
+            await c.execute(text("DELETE FROM fx_rates"))
         settings = Settings(_env_file=None, database_url=scratch_url)
         container = Container(settings, redis=fakeredis.aioredis.FakeRedis())
         try:
@@ -314,6 +347,34 @@ async def main():
                     )
                     == 2
                 )
+            from pricehunter.domain.feeds import MerchantProgramInput
+
+            program = await container.merchant_programs.save(
+                MerchantProgramInput(
+                    network="awin",
+                    external_merchant_id="999",
+                    market_country="BE",
+                    display_name="Migration fixture",
+                    domain="example.com",
+                    currency="EUR",
+                    external_feed_id="999",
+                )
+            )
+            migrate(
+                "downgrade",
+                "b7c21a48d903",
+                success=False,
+                contains="Remove/export merchant programs",
+            )
+            async with engine.begin() as c:
+                await c.execute(
+                    text("DELETE FROM feed_sync_states WHERE merchant_program_id=:id"),
+                    {"id": program.id},
+                )
+                await c.execute(
+                    text("DELETE FROM merchant_programs WHERE id=:id"), {"id": program.id}
+                )
+                await c.execute(text("DELETE FROM stores WHERE id=:id"), {"id": program.store_id})
             migrate(
                 "downgrade", "2c125500eaf6", success=False, contains="Export market-scoped history"
             )
@@ -360,9 +421,11 @@ async def main():
         finally:
             await container.close()
         print(
-            "PASS: M3A -> real M3B -> M4A -> M4A.1; users/products/identifiers/stores/offers/"
+            "PASS: M3A -> real M3B -> M4A -> M4A.1 -> M4B; "
+            "users/products/identifiers/stores/offers/"
             "observations/trackers/watches/discoveries/best states/history/outbox/"
-            "subscriptions/payments preserved; BE/DE market migration; nullable direct URL; "
+            "subscriptions/payments/FX/outbound clicks preserved; "
+            "BE/DE market migration; nullable direct URL; "
             "ambiguous history preserved; scoped baselines rebuilt without alerts; "
             "guarded downgrade/re-upgrade; schema check"
         )

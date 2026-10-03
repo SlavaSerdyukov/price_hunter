@@ -218,3 +218,22 @@ search-only policy creates no observations or watch alerts, and expired unrefere
 offers are evicted under their cache policy.
 Pagination and retries consume the shared per-request Rakuten budget. See
 [Rakuten setup](rakuten-setup.md) and [provider policy](international-commerce.md).
+
+## M4B local merchant feed discovery
+
+One FeedStoreProvider per enabled network searches indexed PostgreSQL staging. GTIN,
+EAN/UPC, exact MPN and normalized brand/model retrieve bounded candidates; text search
+uses a GIN index. Selected candidates still pass CatalogResolver. Parent IDs and weak
+text similarity never override variant conflicts or establish canonical identity.
+
+Existing product/provider/market/currency discovery targets remain shared across watchers.
+A network search can return many approved merchants; permission and market filters apply
+before the result limit. Catalog-only programs appear in interactive search but not watch
+recommendations. A program-scoped CLI search uses the same bounded retrieval.
+
+Feed refresh is a completed feed generation followed by bounded SnapshotUpdater calls,
+not a per-item remote endpoint or permanent job. Background updates require the current
+merchant's refresh permission. Expired cached rows cannot be rematerialized as new data.
+Interrupted generations leave current rows intact. Completed disappearance expires the
+offer without inventing out-of-stock, deleting history or changing another market.
+See [feed operations](commerce-feeds.md) and [merchant policies](merchant-programs.md).

@@ -5,15 +5,19 @@ from uuid import UUID
 import structlog
 from arq import cron
 from arq.connections import RedisSettings
+from arq.worker import func
+from sqlalchemy import exists, select
 
 from pricehunter.bot.app import create_bot
 from pricehunter.bot.sender import TelegramNotificationSender
 from pricehunter.core.config import get_settings
 from pricehunter.core.container import Container
 from pricehunter.core.logging import configure_logging
+from pricehunter.db.models import FeedSyncState, MerchantProgram, StoreOffer
 from pricehunter.providers.http import ProviderHTTP
 from pricehunter.services.catalog_policy_maintenance import CatalogPolicyMaintenance
 from pricehunter.services.discovery_service import DiscoveryClaim
+from pricehunter.services.feed_materialization import FeedMaterializationService
 from pricehunter.services.notification_service import NotificationService
 from pricehunter.services.price_check_service import RefreshClaim
 
@@ -22,6 +26,7 @@ async def startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
     container = Container(settings)
+    await container.validate_feeds()
     ctx["container"] = container
     if settings.telegram_bot_token.get_secret_value():
         bot = create_bot(container)
@@ -111,9 +116,62 @@ async def maintain_commerce(ctx: dict[str, Any]) -> bool:
     )
 
 
+async def schedule_feeds(ctx: dict[str, Any]) -> int:
+    container = cast(Container, ctx["container"])
+    if not container.feed_sources:
+        return 0
+    await container.feed_sync.retain()
+    count = 0
+    for _ in range(min(10, container.settings.discovery_batch_size)):
+        claim = await container.feed_sync.claim()
+        if claim is None:
+            break
+        program_id, token = claim
+        try:
+            await ctx["redis"].enqueue_job(
+                "sync_feed", str(program_id), str(token), _job_id=f"feed:{token}"
+            )
+            count += 1
+        except Exception:
+            structlog.get_logger().warning("feed_enqueue_failed", program_id=str(program_id))
+    # Refresh only bounded materialized work; staging rows never get individual jobs.
+    async with container.sessions() as session:
+        ids = list(
+            await session.scalars(
+                select(MerchantProgram.id)
+                .where(
+                    MerchantProgram.id.in_([UUID(v) for v in container.settings.feed_program_ids]),
+                    MerchantProgram.active.is_(True),
+                    exists().where(
+                        StoreOffer.merchant_program_id == MerchantProgram.id,
+                        FeedSyncState.merchant_program_id == MerchantProgram.id,
+                        StoreOffer.feed_generation < FeedSyncState.generation,
+                    ),
+                )
+                .order_by(MerchantProgram.id)
+                .limit(container.settings.feed_batch_size)
+            )
+        )
+    for program_id in ids:
+        await FeedMaterializationService(container.products).refresh(program_id, limit=10)
+    return count
+
+
+async def sync_feed(ctx: dict[str, Any], program_id: str, token: str) -> bool:
+    container = cast(Container, ctx["container"])
+    program = await container.merchant_programs.get(UUID(program_id))
+    source = container.feed_sources.get(program.network)
+    if source is None:
+        return False
+    await container.feed_sync.run(program.id, source, token=UUID(token))
+    return True
+
+
 class WorkerSettings:
     timezone = UTC
     functions = [
+        schedule_feeds,
+        func(sync_feed, timeout=7200),
         refresh_offer,
         refresh_due_offers,
         send_notifications,
@@ -124,6 +182,7 @@ class WorkerSettings:
         maintain_commerce,
     ]
     cron_jobs = [
+        cron(schedule_feeds, second=45, run_at_startup=True, unique=True),
         cron(
             maintain_commerce, minute={0, 15, 30, 45}, second=40, run_at_startup=True, unique=True
         ),

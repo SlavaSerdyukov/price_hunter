@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Computed,
     Date,
     DateTime,
     ForeignKey,
@@ -13,10 +14,11 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from pricehunter.db.base import Base, Timestamps, UUIDPrimaryKey, utcnow
 
@@ -129,6 +131,12 @@ class StoreOffer(UUIDPrimaryKey, Timestamps, Base):
     )
     product_id: Mapped[UUID] = mapped_column(ForeignKey("products.id"), index=True)
     store_id: Mapped[UUID] = mapped_column(ForeignKey("stores.id"))
+    merchant_program_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("merchant_programs.id", ondelete="RESTRICT"), index=True
+    )
+    merchant_program: Mapped["MerchantProgram | None"] = relationship(lazy="selectin")
+    feed_generation: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    catalog_active: Mapped[bool] = mapped_column(default=True, server_default="true")
     external_id: Mapped[str] = mapped_column(String(200))
     market_country: Mapped[str] = mapped_column(String(2))
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -462,3 +470,95 @@ class BestPriceEvent(UUIDPrimaryKey, Base):
     source_observation_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("price_observations.id", ondelete="SET NULL")
     )
+
+
+class MerchantProgram(UUIDPrimaryKey, Timestamps, Base):
+    __tablename__ = "merchant_programs"
+    __table_args__ = (
+        UniqueConstraint("network", "external_merchant_id", "market_country"),
+        CheckConstraint("market_country ~ '^[A-Z]{2}$'", name="program_market"),
+        Index("ix_program_network_market", "network", "market_country", "active", "approved"),
+    )
+    network: Mapped[str] = mapped_column(String(50))
+    external_merchant_id: Mapped[str] = mapped_column(String(100))
+    market_country: Mapped[str] = mapped_column(String(2))
+    store_id: Mapped[UUID] = mapped_column(ForeignKey("stores.id", ondelete="RESTRICT"))
+    display_name: Mapped[str] = mapped_column(String(100))
+    domain: Mapped[str] = mapped_column(String(200))
+    currency: Mapped[str] = mapped_column(String(3))
+    active: Mapped[bool] = mapped_column(default=False)
+    approved: Mapped[bool] = mapped_column(default=False)
+    feed_mode: Mapped[str] = mapped_column(String(30), default="full")
+    external_feed_id: Mapped[str] = mapped_column(String(100))
+    feed_language: Mapped[str] = mapped_column(String(2), default="en")
+    policy_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_reference: Mapped[str] = mapped_column(String(500), default="")
+
+
+class MerchantFeedItem(UUIDPrimaryKey, Base):
+    __tablename__ = "merchant_feed_items"
+    __table_args__ = (
+        UniqueConstraint("merchant_program_id", "external_id"),
+        Index("ix_feed_gtin", "gtin", "merchant_program_id"),
+        Index("ix_feed_model", "brand_model", "merchant_program_id"),
+        Index("ix_feed_mpn", "brand_mpn", "merchant_program_id"),
+        Index("ix_feed_text", "search_document", postgresql_using="gin"),
+        Index("ix_feed_inactive", "active", "seen_at"),
+    )
+    merchant_program_id: Mapped[UUID] = mapped_column(ForeignKey("merchant_programs.id"))
+    external_id: Mapped[str] = mapped_column(String(200))
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    gtin: Mapped[str | None] = mapped_column(String(14))
+    brand_model: Mapped[str | None] = mapped_column(String(410))
+    brand_mpn: Mapped[str | None] = mapped_column(String(410))
+    normalized_title: Mapped[str] = mapped_column(String(500))
+    search_document: Mapped[Any] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('simple', normalized_title)", persisted=True)
+    )
+    feed_generation: Mapped[int] = mapped_column(BigInteger)
+    seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    active: Mapped[bool] = mapped_column(default=True)
+
+
+Index("ix_feed_mpn_exact", func.lower(MerchantFeedItem.data["mpn"].astext))
+
+
+class FeedPendingItem(Base):
+    __tablename__ = "feed_pending_items"
+    merchant_program_id: Mapped[UUID] = mapped_column(
+        ForeignKey("merchant_programs.id"), primary_key=True
+    )
+    attempt: Mapped[UUID] = mapped_column(primary_key=True)
+    external_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    gtin: Mapped[str | None] = mapped_column(String(14))
+    brand_model: Mapped[str | None] = mapped_column(String(410))
+    brand_mpn: Mapped[str | None] = mapped_column(String(410))
+    normalized_title: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+
+
+class FeedSyncState(Base):
+    __tablename__ = "feed_sync_states"
+    merchant_program_id: Mapped[UUID] = mapped_column(
+        ForeignKey("merchant_programs.id"), primary_key=True
+    )
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    source_version: Mapped[str | None] = mapped_column(String(200))
+    generation: Mapped[int] = mapped_column(BigInteger, default=0)
+    lease_token: Mapped[UUID | None]
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_sync_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    failure_count: Mapped[int] = mapped_column(default=0)
+    error_code: Mapped[str | None] = mapped_column(String(60))
+    row_count: Mapped[int] = mapped_column(BigInteger, default=0)
+    report: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

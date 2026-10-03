@@ -149,6 +149,22 @@ class Settings(BaseSettings):
     discovery_suppression_seconds: int = Field(3600, ge=60)
     comparison_refresh_limit: int = Field(20, ge=1, le=100)
     support_contact: str = "Contact the bot administrator for support."
+    awin_enabled: bool = False
+    awin_feed_api_key: SecretStr = SecretStr("")
+    tradedoubler_enabled: bool = False
+    tradedoubler_token: SecretStr = SecretStr("")
+    # Explicit IDs also prevent an enabled adapter from silently exposing all programs.
+    feed_program_ids: list[str] = []
+    feed_batch_size: int = Field(500, ge=1, le=1000)
+    feed_lease_seconds: int = Field(300, ge=60)
+    feed_sync_seconds: int = Field(21600, ge=300)
+    feed_retention_days: int = Field(7, ge=1, le=90)
+    feed_max_rows: int = Field(1_000_000, ge=1)
+    feed_max_compressed_bytes: int = Field(256_000_000, ge=1024)
+    feed_max_decompressed_bytes: int = Field(2_000_000_000, ge=1024)
+    feed_max_record_bytes: int = Field(131072, ge=1024, le=1_000_000)
+    feed_page_size: int = Field(500, ge=1, le=1000)
+    feed_max_pages: int = Field(2000, ge=1)
 
     def data_policy(self, provider: str) -> ProviderDataPolicy:
         if provider == "mock":

@@ -1,0 +1,41 @@
+{
+  "productHeader": {
+    "totalHits": 1
+  },
+  "products": [
+    {
+      "name": "Sony WH-1000XM6",
+      "brand": "Sony",
+      "model": "WH-1000XM6",
+      "identifiers": {
+        "ean": "4548736162563",
+        "mpn": "WH1000XM6"
+      },
+      "productImage": {
+        "url": "https://example.com/image.jpg"
+      },
+      "fields": [
+        {
+          "name": "Colour",
+          "value": "black"
+        }
+      ],
+      "offers": [
+        {
+          "feedId": 501,
+          "sourceProductId": "sony",
+          "productUrl": "https://pdt.tradedoubler.com/click?a(1)p(101)product(sony)",
+          "sourceProductUrl": "https://example.com/p",
+          "price": {
+            "value": "329.00",
+            "currency": "EUR"
+          },
+          "availability": "In Stock",
+          "inStock": 2,
+          "modified": 1767261600000,
+          "shippingCost": "4.99"
+        }
+      ]
+    }
+  ]
+}

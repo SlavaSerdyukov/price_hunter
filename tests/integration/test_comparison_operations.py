@@ -1,3 +1,4 @@
+import asyncio
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -22,7 +23,7 @@ from pricehunter.services.catalog_diagnostics import CatalogDiagnostics
 from pricehunter.services.comparison_service import ComparisonReader
 from tests.integration.test_api import api_client
 from tests.integration.test_comparison import accept_price, event_types, persist, setup_watch
-from tests.support import grant_plan, market_user
+from tests.support import comparison_semantics, grant_plan, market_user
 
 pytestmark = pytest.mark.integration
 
@@ -348,16 +349,26 @@ async def test_large_comparison_has_bounded_queries_and_pagination(container, si
     try:
         async with container.sessions() as session:
             reader = container.products.comparisons
+            ages = {}
+            before = utcnow()
             first = await reader.build(session, a.product_id, size=10)
+            first_semantics = comparison_semantics(
+                first, started_at=before, finished_at=utcnow(), previous_ages=ages
+            )
             assert len(statements) == 6
             assert first.offer_count == size and len(first.offers) == 10
             assert first.best_available_offer.price == 2
             assert first.currency_groups[0].cheapest_stale_offer.price == 1
             assert first.currency_groups[0].stale_offer_count == size // 2
+            await asyncio.sleep(1.05)
+            before = utcnow()
             second = await reader.build(session, a.product_id, page=1, size=10)
+            second_semantics = comparison_semantics(
+                second, started_at=before, finished_at=utcnow(), previous_ages=ages
+            )
             assert len(statements) <= 12
             assert not {o.offer_id for o in first.offers} & {o.offer_id for o in second.offers}
-            assert second.currency_groups == first.currency_groups
+            assert second_semantics["currency_groups"] == first_semantics["currency_groups"]
             last = await reader.build(session, a.product_id, page=size // 10 - 1, size=10)
             assert len(last.offers) == 10 and last.offer_count == size
     finally:
