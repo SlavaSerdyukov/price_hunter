@@ -16,4 +16,5 @@ COPY alembic.ini ./
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 USER pricehunter
 EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=8s --start-period=20s --retries=3 CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=6).close()"]
 CMD ["python", "-m", "pricehunter.apps.api"]

@@ -150,6 +150,20 @@ See [merchant identity](docs/merchant-identity.md) and [verification evidence](d
 See [pilot steps](docs/merchant-pilot.md), [quality gates](docs/feed-quality.md) and
 [M4E evidence](docs/m4e-design.md).
 
+## M5A — Public beta runtime hardening — implemented
+
+- [x] Recoverable technical validation lease, token fencing and network outside PostgreSQL transactions.
+- [x] Exact packaged Alembic head, shared API/bot/worker startup preflight and bounded local readiness.
+- [x] API/Telegram shared user budget, financial bypass and safe Redis outage responses.
+- [x] Scoped HTTP/update/job correlation, private cache/security headers and safe infrastructure errors.
+- [x] Read-only operational backlog/lease diagnostics and stale notification recovery without resend.
+- [x] Explicit pool/query limits, operation-specific worker timeouts and owned-resource shutdown.
+- [x] Production lifespan and disposable stale-schema CI acceptances; operator release/recovery docs.
+- [ ] Public beta hosting, restore rehearsal, load test and real merchant/Stars acceptance.
+
+See [M5A design](docs/m5a-design.md), [runtime contracts](docs/runtime-hardening.md)
+and [beta operations](docs/beta-operations.md).
+
 ## Approved merchant pilot and delivery context — proposed
 
 - Onboard a small approved BE/DE merchant set; verify real feed completeness, quotas,

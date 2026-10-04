@@ -9,6 +9,7 @@ from babel.numbers import format_currency
 from pricehunter.localization.languages import NUMBER_LOCALES, normalize_language
 
 EN = {
+    "service_unavailable": "The service is temporarily unavailable. Please try again later.",
     "language": "🌐 Language",
     "stores_hint": "/stores — available stores",
     "stores_list": "<b>Available stores</b>\n{stores}\n\nSend a product link or use /search. Prices retain the store's currency. Delivery options depend on the store.",
@@ -85,6 +86,7 @@ EN = {
 }
 
 RU = {
+    "service_unavailable": "Сервис временно недоступен. Попробуйте позже.",
     "language": "🌐 Язык",
     "stores_hint": "/stores — доступные магазины",
     "stores_list": "<b>Доступные магазины</b>\n{stores}\n\nПришлите ссылку на товар или используйте /search. Цены показываются в валюте магазина. Условия доставки зависят от магазина.",

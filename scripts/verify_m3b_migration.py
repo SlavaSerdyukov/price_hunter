@@ -372,6 +372,42 @@ async def main():
                     assert "append-only" in str(exc)
                 else:
                     raise AssertionError("Pilot evidence mutation was allowed")
+        # M5A lease fields preserve all M4E evidence and guard active validator rollback.
+        async with engine.begin() as c:
+            await c.execute(
+                text("""INSERT INTO feed_sync_states
+                (merchant_program_id,status,generation,next_sync_at,failure_count,row_count,report)
+                VALUES (:p,'pending',0,now(),0,0,'{}') ON CONFLICT DO NOTHING"""),
+                {"p": legacy_program_id},
+            )
+        runtime_before = await snapshot(
+            ("merchant_program_validations", "feed_publication_audits", "feed_sync_states")
+        )
+        async with engine.begin() as c:
+            await c.execute(
+                text(
+                    "UPDATE feed_sync_states SET validation_token=gen_random_uuid(), "
+                    "validation_lease_until=now()+interval '1 hour' WHERE merchant_program_id=:p"
+                ),
+                {"p": legacy_program_id},
+            )
+        migrate("downgrade", "a54ef912b603", success=False, contains="Stop validation")
+        async with engine.begin() as c:
+            await c.execute(
+                text(
+                    "UPDATE feed_sync_states SET validation_token=NULL, validation_lease_until=NULL"
+                )
+            )
+        migrate("downgrade", "a54ef912b603")
+        migrate("upgrade", "head")
+        await engine.dispose()
+        assert await snapshot(tuple(runtime_before)) == runtime_before
+        # Remove only the extra synthetic lease fixture before the older identity rollback audit.
+        async with engine.begin() as c:
+            await c.execute(
+                text("DELETE FROM feed_sync_states WHERE merchant_program_id=:p"),
+                {"p": legacy_program_id},
+            )
         migrate(
             "downgrade", "6bde2194a7c0", success=False, contains="Export merchant pilot evidence"
         )
@@ -664,6 +700,7 @@ async def main():
             "canonical append-only audit and used-identity downgrade guard; "
             "M4D data/audits preserved; immutable pilot reports/override audit; "
             "evidence downgrade guard; "
+            "M4E evidence preserved through M5A lease upgrade/guarded rollback; "
             "guarded downgrade/re-upgrade; schema check"
         )
     finally:

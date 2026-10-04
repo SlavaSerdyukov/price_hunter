@@ -15,18 +15,22 @@ async def main() -> None:
         raise RuntimeError("Webhook mode is served by the API; do not also start polling")
     container = Container(settings)
     try:
-        await container.validate_feeds()
+        await container.runtime.run()
         bot = create_bot(container)
-        dispatcher = create_dispatcher(container)
+        dispatcher = None
         try:
+            dispatcher = create_dispatcher(container)
             # Explicit local polling mode; preserve updates Telegram already queued.
             await bot.delete_webhook(drop_pending_updates=False)
             await durable_polling(
                 bot, dispatcher, lambda update: persist_financial_update(container, update)
             )
         finally:
-            await dispatcher.storage.close()
-            await bot.session.close()
+            try:
+                if dispatcher is not None:
+                    await dispatcher.storage.close()
+            finally:
+                await bot.session.close()
     finally:
         await container.close()
 

@@ -111,3 +111,8 @@ class RenewalCancellationRequiredError(PriceHunterError):
 class BillingOperationPendingError(PriceHunterError):
     code = "billing_operation_pending"
     status_code = 409
+
+
+class ServiceUnavailableError(PriceHunterError):
+    code = "service_unavailable"
+    status_code = 503

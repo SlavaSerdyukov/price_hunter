@@ -161,5 +161,6 @@
   "provider_policy": "Este uso del proveedor aún no está autorizado.",
   "affiliate_disclosure": "Algunos enlaces son de afiliados. PriceHunter puede recibir una comisión; nunca influye en el orden de las ofertas.",
   "fx_reference": "≈ {price} · referencia {source}, {date}",
-  "provider_attribution": "{attribution}"
+  "provider_attribution": "{attribution}",
+  "service_unavailable": "El servicio no está disponible temporalmente. Inténtalo de nuevo más tarde."
 }

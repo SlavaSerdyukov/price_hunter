@@ -46,6 +46,7 @@ from pricehunter.services.policy_resolver import PolicyResolver
 from pricehunter.services.price_check_service import PriceCheckService
 from pricehunter.services.product_service import ProductService
 from pricehunter.services.product_watch_service import ProductWatchService
+from pricehunter.services.runtime import RuntimePreflight
 from pricehunter.services.search_service import SearchService
 from pricehunter.services.subscription_service import SubscriptionService
 from pricehunter.services.tracking_service import TrackingService
@@ -63,6 +64,9 @@ class Container:
         redis: Redis | None = None,
         registry: ProviderRegistry | None = None,
     ) -> None:
+        self._owns_sessions = sessions is None
+        self._owns_redis = redis is None
+        self._closed = False
         self.settings = settings
         validate_redirect_settings(settings)
         self.outbound = OutboundLinkService(settings)
@@ -258,6 +262,7 @@ class Container:
         self.feed_validation = FeedValidationService(self.sessions, settings)
         self.merchants = MerchantService(self.sessions)
         self.feed_sync = FeedSyncService(self.sessions, settings, self.products)
+        self.runtime = RuntimePreflight(self)
         self.coverage = CoverageDiagnostics(self.sessions, settings, self.registry, self.limiter)
 
     def create_feed_source(self, network: str) -> FeedSource:
@@ -318,10 +323,20 @@ class Container:
             )
 
     async def close(self) -> None:
-        if self.payment_provider.bot is not None:
-            await self.payment_provider.bot.session.close()
-        await self.http.aclose()
-        await self.redis.aclose()
-        engine = self.sessions.kw["bind"]
-        if isinstance(engine, AsyncEngine):
-            await engine.dispose()
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            if self.payment_provider.bot is not None:
+                await self.payment_provider.bot.session.close()
+        finally:
+            try:
+                await self.http.aclose()
+            finally:
+                try:
+                    if self._owns_redis:
+                        await self.redis.aclose()
+                finally:
+                    engine = self.sessions.kw["bind"]
+                    if self._owns_sessions and isinstance(engine, AsyncEngine):
+                        await engine.dispose()

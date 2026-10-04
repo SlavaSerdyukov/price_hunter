@@ -6,6 +6,7 @@ import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.types import Update
 
+from pricehunter.core.logging import correlation_context
 from pricehunter.domain.errors import PaymentRejectedError
 
 
@@ -22,9 +23,10 @@ async def durable_polling(
             await dispatcher.feed_update(bot, update)
         except Exception as exc:
             # Financial data is already durable and the worker retries it.
-            structlog.get_logger().warning(
-                "update_handler_retry_needed", error_type=type(exc).__name__
-            )
+            with correlation_context(telegram_update_id=update.update_id):
+                structlog.get_logger().warning(
+                    "update_handler_retry_needed", error_type=type(exc).__name__
+                )
 
     try:
         while True:
@@ -34,9 +36,11 @@ async def durable_polling(
                 )
                 for update in updates:
                     try:
-                        await persist(update)
+                        with correlation_context(telegram_update_id=update.update_id):
+                            await persist(update)
                     except PaymentRejectedError:
-                        structlog.get_logger().warning("financial_update_rejected")
+                        with correlation_context(telegram_update_id=update.update_id):
+                            structlog.get_logger().warning("financial_update_rejected")
                         offset = update.update_id + 1
                         continue
                     task = asyncio.create_task(dispatch(update))

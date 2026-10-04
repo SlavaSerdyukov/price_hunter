@@ -161,5 +161,6 @@
   "provider_policy": "To wykorzystanie dostawcy nie zostało jeszcze zatwierdzone.",
   "affiliate_disclosure": "Niektóre linki są afiliacyjne. PriceHunter może otrzymać prowizję; nigdy nie wpływa ona na kolejność ofert.",
   "fx_reference": "≈ {price} · kurs referencyjny {source}, {date}",
-  "provider_attribution": "{attribution}"
+  "provider_attribution": "{attribution}",
+  "service_unavailable": "Usługa jest chwilowo niedostępna. Spróbuj ponownie później."
 }

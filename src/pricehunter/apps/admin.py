@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from sqlalchemy import select, update
 
 from pricehunter.apps import feed_admin, merchant_admin
-from pricehunter.core.config import get_settings
+from pricehunter.core.config import RuntimeConfigurationError, get_settings
 from pricehunter.core.container import Container
 from pricehunter.core.security import new_api_key, token_digest
 from pricehunter.db.base import utcnow
@@ -19,11 +19,23 @@ from pricehunter.db.models import APIKey, NotificationEvent, User
 from pricehunter.domain.errors import ProviderPolicyError
 from pricehunter.domain.feeds import FeedError
 from pricehunter.services.catalog_diagnostics import CatalogDiagnostics
+from pricehunter.services.runtime import RuntimePreflightError, RuntimeStatus
 
 
 async def run(args: argparse.Namespace) -> None:
     container = Container(get_settings())
     try:
+        if args.command == "runtime-preflight":
+            try:
+                await container.runtime.run()
+            except RuntimePreflightError as exc:
+                print(json.dumps({"status": "not_ready", "reason": exc.reason}))
+                raise SystemExit(1) from None
+            print(json.dumps({"status": "ready"}))
+            return
+        if args.command == "runtime-status":
+            print(json.dumps(await RuntimeStatus(container).report(), indent=2))
+            return
         if args.command in merchant_admin.COMMANDS:
             try:
                 await merchant_admin.run(container, args)
@@ -142,6 +154,8 @@ async def run(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("runtime-preflight", help="Read-only deployment preflight")
+    commands.add_parser("runtime-status", help="Bounded read-only aggregate runtime diagnostics")
     feed_admin.add_commands(commands)
     merchant_admin.add_commands(commands)
     create = commands.add_parser("create-api-user", help="Create an API-only account and key")
@@ -189,7 +203,11 @@ def main() -> None:
         "duplicate-candidates", help="Read-only duplicate candidates; never merge automatically"
     )
     duplicates.add_argument("--limit", type=int, default=20)
-    asyncio.run(run(parser.parse_args()))
+    try:
+        asyncio.run(run(parser.parse_args()))
+    except (RuntimeConfigurationError, ValidationError, ProviderPolicyError):
+        print(json.dumps({"status": "not_ready", "reason": "configuration_invalid"}))
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

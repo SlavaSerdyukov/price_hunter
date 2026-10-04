@@ -2,7 +2,7 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pricehunter.domain.markets import CountryCode
@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     database_url: SecretStr = SecretStr(
         "postgresql+asyncpg://pricehunter:pricehunter@localhost:5432/pricehunter"
     )
+    database_pool_size: int = Field(10, ge=1, le=100)
+    database_max_overflow: int = Field(10, ge=0, le=100)
+    database_pool_timeout_seconds: int = Field(10, ge=1, le=60)
+    database_pool_recycle_seconds: int = Field(1800, ge=60)
+    database_command_timeout_seconds: int = Field(300, ge=30, le=1800)
+    runtime_preflight_timeout_seconds: int = Field(5, ge=1, le=30)
+    validation_timeout_seconds: int = Field(7200, ge=60, le=7200)
+    validation_lease_seconds: int = Field(7500, ge=90, le=7800)
     redis_url: SecretStr = SecretStr("redis://localhost:6379/0")
     telegram_bot_token: SecretStr = SecretStr("")
     telegram_webhook_secret: SecretStr = SecretStr("")
@@ -212,17 +220,62 @@ class Settings(BaseSettings):
                 and self.amazon_marketplaces
             ):
                 raise ValueError("Amazon requires Creators API credentials and marketplaces")
+        if self.validation_lease_seconds <= self.validation_timeout_seconds:
+            raise ValueError("Validation lease must exceed the bounded acquisition timeout")
         if self.environment == "production":
             if self.mock_provider_enabled:
                 raise ValueError("Disable MOCK_PROVIDER_ENABLED in production")
-            if "*" in self.allowed_hosts:
+            if not self.allowed_hosts or any("*" in host for host in self.allowed_hosts):
                 raise ValueError("Production requires explicit ALLOWED_HOSTS")
+            if self.ebay_enabled and not (
+                self.ebay_client_id.get_secret_value().strip()
+                and self.ebay_client_secret.get_secret_value().strip()
+            ):
+                raise ValueError("Enabled eBay requires both production credentials")
+            if self.rakuten_enabled and not (
+                self.rakuten_client_id.get_secret_value().strip()
+                and self.rakuten_client_secret.get_secret_value().strip()
+                and self.rakuten_account_id.get_secret_value().strip()
+                and self.rakuten_advertisers
+            ):
+                raise ValueError("Enabled Rakuten requires credentials and reviewed advertisers")
+            if self.awin_enabled and not self.awin_feed_api_key.get_secret_value().strip():
+                raise ValueError("Enabled Awin requires credentials")
+            if self.tradedoubler_enabled and not self.tradedoubler_token.get_secret_value().strip():
+                raise ValueError("Enabled TradeDoubler requires credentials")
+            if any((self.awin_enabled, self.tradedoubler_enabled, self.cj_enabled)):
+                from uuid import UUID
+
+                if not self.feed_program_ids:
+                    raise ValueError("Enabled feeds require reviewed FEED_PROGRAM_IDS")
+                try:
+                    for value in self.feed_program_ids:
+                        UUID(value)
+                except ValueError:
+                    raise ValueError("FEED_PROGRAM_IDS must contain program UUIDs") from None
             if self.telegram_mode == "webhook":
-                if len(self.telegram_webhook_secret.get_secret_value()) < 32:
-                    raise ValueError("Webhook secret must have at least 32 characters")
+                if (
+                    not self.telegram_bot_token.get_secret_value()
+                    or not 32 <= len(self.telegram_webhook_secret.get_secret_value()) <= 256
+                    or any(
+                        c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+                        for c in self.telegram_webhook_secret.get_secret_value()
+                    )
+                ):
+                    raise ValueError(
+                        "Production webhook requires a bot token and "
+                        "a 32..256 character URL-safe secret"
+                    )
         return self
+
+
+class RuntimeConfigurationError(ValueError):
+    """A settings traceback must never print the raw environment input mapping."""
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    try:
+        return Settings()
+    except ValidationError:
+        raise RuntimeConfigurationError("configuration_invalid") from None

@@ -5,9 +5,14 @@ from typing import cast
 from uuid import uuid4
 
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from pricehunter.core.config import Settings
-from pricehunter.domain.errors import ProviderUnavailableError, RateLimitExceededError
+from pricehunter.domain.errors import (
+    ProviderUnavailableError,
+    RateLimitExceededError,
+    ServiceUnavailableError,
+)
 
 RATE_SCRIPT = """
 local count = redis.call('INCR', KEYS[1])
@@ -37,9 +42,12 @@ class RateLimiter:
         self.settings = settings
 
     async def check(self, key: str, *, limit: int, seconds: int = 60) -> None:
-        count = await cast(
-            Awaitable[int], self.redis.eval(RATE_SCRIPT, 1, f"ph:rate:{key}", str(seconds))
-        )
+        try:
+            count = await cast(
+                Awaitable[int], self.redis.eval(RATE_SCRIPT, 1, f"ph:rate:{key}", str(seconds))
+            )
+        except (RedisError, OSError, TimeoutError):
+            raise ServiceUnavailableError() from None
         if int(count) > limit:
             raise RateLimitExceededError()
 
@@ -48,42 +56,48 @@ class RateLimiter:
 
     @asynccontextmanager
     async def offer_refresh(self, offer_id: object) -> AsyncIterator[bool]:
-        key, token = f"ph:refresh:{offer_id}", str(uuid4())
-        acquired = bool(await self.redis.set(key, token, nx=True, ex=60))
         try:
-            yield acquired
-        finally:
-            if acquired:
-                await cast(Awaitable[int], self.redis.eval(UNLOCK_SCRIPT, 1, key, token))
+            key, token = f"ph:refresh:{offer_id}", str(uuid4())
+            acquired = bool(await self.redis.set(key, token, nx=True, ex=60))
+            try:
+                yield acquired
+            finally:
+                if acquired:
+                    await cast(Awaitable[int], self.redis.eval(UNLOCK_SCRIPT, 1, key, token))
+        except (RedisError, OSError):
+            raise ServiceUnavailableError() from None
 
     @asynccontextmanager
     async def provider(self, provider: str) -> AsyncIterator[None]:
         if provider == "mock":
             yield
             return
-        limit = self.settings.provider_rate_limits.get(
-            provider,
-            self.settings.provider_requests_per_minute,
-        )
-        await self.check(f"provider:{provider}", limit=limit)
-        key, token = f"ph:slots:{provider}", str(uuid4())
-        claimed = await cast(
-            Awaitable[int],
-            self.redis.eval(
-                SLOT_SCRIPT,
-                1,
-                key,
-                str(self.settings.provider_concurrency),
-                "60",
-                token,
-            ),
-        )
-        if not claimed:
-            raise RateLimitExceededError()
         try:
-            async with asyncio.timeout(self.settings.provider_timeout_seconds):
-                yield
-        except TimeoutError as exc:
-            raise ProviderUnavailableError() from exc
-        finally:
-            await self.redis.zrem(key, token)
+            limit = self.settings.provider_rate_limits.get(
+                provider,
+                self.settings.provider_requests_per_minute,
+            )
+            await self.check(f"provider:{provider}", limit=limit)
+            key, token = f"ph:slots:{provider}", str(uuid4())
+            claimed = await cast(
+                Awaitable[int],
+                self.redis.eval(
+                    SLOT_SCRIPT,
+                    1,
+                    key,
+                    str(self.settings.provider_concurrency),
+                    "60",
+                    token,
+                ),
+            )
+            if not claimed:
+                raise RateLimitExceededError()
+            try:
+                async with asyncio.timeout(self.settings.provider_timeout_seconds):
+                    yield
+            except TimeoutError as exc:
+                raise ProviderUnavailableError() from exc
+            finally:
+                await self.redis.zrem(key, token)
+        except (RedisError, OSError):
+            raise ServiceUnavailableError() from None

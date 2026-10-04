@@ -938,3 +938,45 @@ transports. No real application credentials/configuration or merchant activation
 was used. Final-head hosted Actions success is checked separately before readiness
 is reported. See [design](m4e-design.md), [quality](feed-quality.md) and
 [exact first-pilot steps](merchant-pilot.md).
+
+## M5A — Public beta runtime hardening — 2026-10-04
+
+Started from merged M4E PR #7, main `fab0c9faed6a5822f1a50c60ae92df439ca5648c`.
+M4E final head `837ffdc7c1ce34f20d5de89e54a5435bd2664848` had hosted success
+([run 37213708320](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37213708320)),
+752 tests and 90.94% coverage. Local baseline reproduced **752 passed, 90.92%**
+(242.96s). Baseline contains 183 Python files, 119 production source modules;
+Ruff formatted/checks 215 files including Markdown, not 215 Python files.
+
+The seven required acceptance scenarios were executed red before implementation:
+**7 failed**, 0.79s. Then acceptance covers transaction-free remote validation,
+recoverable token/expiry fencing with no stale authoritative report, behind/ahead
+schema refusal, shared API/Telegram budget and independent users, financial bypass,
+safe Redis failure, concurrent correlation and private/error headers. A further
+`/start`/callback test ran red when router traversal counted a single command three
+times; the user middleware now wraps the common dispatcher ingress exactly once.
+
+Production lifespan runs against migrated PostgreSQL/Redis with mock disabled,
+explicit hosts and no enabled credential providers; live/ready pass and docs/OpenAPI
+are disabled. A separate disposable PostgreSQL database boots one migration behind,
+refuses preflight/startup/readiness, upgrades to head and boots successfully. Normal
+CI's database is never downgraded. Tests also cover Redis/FSM outage, all seven
+unavailable localizations, diagnostic counts/freshness/expired leases, no automatic
+uncertain-notification resend, resource ownership/cleanup, safe settings/worker
+error logs, operation timeouts and retained body/pagination/query bounds.
+
+Final local suite: **812 passed, no skips, 91.59% statement coverage**, 244.30s.
+60 new cases; all prior M0–M4E cases retained. Ruff lint/format passes (224 formatted
+files: 189 Python plus Markdown), strict mypy passes (121 source modules). Alembic
+upgrade/schema comparison, full migration preservation verifier, Markdown link
+targets and whitespace checks pass. New revision `b65a7012c904` preserves M4E
+immutable evidence and refuses active-token downgrade; the verifier exercises that
+guard/export/re-upgrade alongside every older protected history/audit contract.
+The sole warning is the existing upstream ARQ `close()` deprecation.
+
+Validation uses fixed lease 7500s, total acquisition timeout 7200s; crash recovery
+may wait 125 minutes. Read-only runtime diagnostics do not clear ownership/backlog.
+No real application credentials, external retailer activation or business semantics
+were changed. Final-head hosted CI is checked separately and linked in the delivery
+report before merge readiness is claimed. See [design](m5a-design.md),
+[runtime contracts](runtime-hardening.md) and [beta operations](beta-operations.md).

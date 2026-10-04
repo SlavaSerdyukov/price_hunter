@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol, cast
 from uuid import UUID
 
 import structlog
 from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 
 from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
@@ -49,6 +50,19 @@ class NotificationSender(Protocol):
     async def send(self, delivery: Delivery) -> int: ...
 
 
+async def recover_stale_notifications(sessions: SessionFactory) -> int:
+    async with sessions.begin() as session:
+        result = await session.execute(
+            update(NotificationEvent)
+            .where(
+                NotificationEvent.status == "sending",
+                NotificationEvent.attempt_started_at < utcnow() - timedelta(minutes=2),
+            )
+            .values(status="uncertain")
+        )
+        return cast(CursorResult[Any], result).rowcount
+
+
 class NotificationService:
     def __init__(
         self,
@@ -61,17 +75,12 @@ class NotificationService:
         self.settings = settings or Settings(_env_file=None)
         self.outbound = OutboundLinkService(self.settings)
 
+    async def recover_stale(self) -> int:
+        return await recover_stale_notifications(self.sessions)
+
     async def claim(self) -> Delivery | None:
+        await self.recover_stale()
         async with self.sessions.begin() as session:
-            # A terminated worker may have sent the message; never blindly resend it.
-            await session.execute(
-                update(NotificationEvent)
-                .where(
-                    NotificationEvent.status == "sending",
-                    NotificationEvent.attempt_started_at < utcnow() - timedelta(minutes=2),
-                )
-                .values(status="uncertain")
-            )
             event = await session.scalar(
                 select(NotificationEvent)
                 .where(
