@@ -813,6 +813,14 @@ on `feat/m4c-coverage-engine`. Actual job logs report **655 passed, no skips, 90
 statement coverage** (307.47s), with the existing single upstream ARQ warning. All required
 dependency, Ruff, mypy, Alembic and migration-verifier steps succeeded. The hosted coverage
 measurement is separate from local 90.49%. This record was written after fetching the
-completed workflow, all job step conclusions and actual logs. Final merge-readiness also
-requires the branch head containing this verification record to pass the unchanged Checks
-workflow; that head is checked separately before reporting readiness.
+completed workflow, all job step conclusions and actual logs.
+
+**Verified final M4C.1 result:** the documentation commit
+`193d4a37ca7e977001c84586462a3b6ecf5ddac5` subsequently passed
+[GitHub Actions run 37168328318](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37168328318).
+Actual completed job logs report **655 passed, no skips, 90.49% statement coverage**
+(385.53s), with the existing single upstream ARQ warning. Every required Checks step
+completed successfully. This records the final M4C.1 result separately from the
+implementation run's 90.48% measurement.
+The completed run, all step conclusions and actual logs were rechecked before adding
+this record; M4C.1 satisfies its hosted verification requirements.
