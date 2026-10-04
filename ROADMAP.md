@@ -126,7 +126,18 @@ and [verification](docs/verification.md). Named onboarding targets are not live 
 
 See [coverage engine](docs/coverage-engine.md) and [CJ setup](docs/cj-setup.md).
 
-## M4D — Approved merchant pilot and delivery context — proposed
+## M4D — Canonical merchants and cross-network deduplication — implemented
+
+- [x] Mandatory source → canonical Merchant identity and safe 1:1 backfill.
+- [x] Explicit preview/dry-run/confirmed linking, version receipts and append-only audit.
+- [x] SQL effective offers before summaries/pagination with policy/freshness/stock ranking.
+- [x] Canonical counts, source-aware watch/history semantics and exact outbound attribution.
+- [x] Reversible retailer disable, safe unlink and raw/canonical coverage diagnostics.
+- [x] Migration preservation/guards and 100/500/1000 raw-row query-count acceptance.
+
+See [merchant identity](docs/merchant-identity.md) and [verification evidence](docs/verification.md).
+
+## Approved merchant pilot and delivery context — proposed
 
 - Onboard a small approved BE/DE merchant set; verify real feed completeness, quotas,
   identifiers, variants, update cadence, permissions and affiliate attribution.

@@ -10,6 +10,7 @@ from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import (
     FeedSyncState,
+    Merchant,
     MerchantFeedItem,
     MerchantProgram,
     Store,
@@ -46,6 +47,8 @@ class PolicyResolver:
             return ProviderDataPolicy()
 
     def offer(self, offer: StoreOffer, store: Store) -> ProviderDataPolicy:
+        if store.merchant is not None and not store.merchant.active:
+            return ProviderDataPolicy()
         if store.provider_type in FEED_NETWORKS or offer.merchant_program_id is not None:
             program = offer.merchant_program
             if program is None or (program.network, program.store_id, program.market_country) != (
@@ -196,7 +199,12 @@ class PolicyResolver:
                     0, 0, 0, 0, 0, 0, MerchantProgram.policy_data["max_cache_seconds"].as_integer()
                 )
             )
-        return or_(*direct, exists().where(*conditions))
+        return and_(
+            exists()
+            .where(Merchant.id == Store.merchant_id, Merchant.active.is_(True))
+            .correlate(Store),
+            or_(*direct, exists().where(*conditions)),
+        )
 
     def ttl(self, fallback: ColumnElement[int]) -> ColumnElement[int]:
         merchant_ttl = (

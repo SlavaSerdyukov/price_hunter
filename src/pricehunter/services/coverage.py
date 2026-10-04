@@ -149,6 +149,40 @@ class CoverageDiagnostics:
                     .group_by(MerchantProgram.network)
                 )
             ).all()
+            source_markets = (
+                select(Store.id, Store.merchant_id, Store.country.label("market"))
+                .union(
+                    select(Store.id, Store.merchant_id, MerchantProgram.market_country).join(
+                        MerchantProgram, MerchantProgram.store_id == Store.id
+                    ),
+                    select(Store.id, Store.merchant_id, StoreOffer.market_country).join(
+                        StoreOffer, StoreOffer.store_id == Store.id
+                    ),
+                )
+                .subquery()
+            )
+            identities = (
+                await session.execute(
+                    select(
+                        source_markets.c.market,
+                        func.count(func.distinct(source_markets.c.merchant_id)).label(
+                            "canonical_merchants"
+                        ),
+                        func.count(func.distinct(source_markets.c.id)).label("source_stores"),
+                    ).group_by(source_markets.c.market)
+                )
+            ).all()
+            merchant_offers = (
+                await session.execute(
+                    select(
+                        StoreOffer.market_country,
+                        func.count().label("raw_source_offers"),
+                        func.count()
+                        .filter(StoreOffer.id.in_(self.reader.effective_ids(None, now)))
+                        .label("effective_offers"),
+                    ).group_by(StoreOffer.market_country)
+                )
+            ).all()
         markets: dict[str, dict[str, Any]] = {}
         defaults = dict.fromkeys(
             (
@@ -187,7 +221,24 @@ class CoverageDiagnostics:
                 "search_health": health,
                 **next((dict(r._mapping) for r in feed_health if r.network == network), {}),
             }
-        return {"providers": providers, "markets": markets}
+        merchant_coverage = {
+            r.market: {
+                "canonical_merchants": r.canonical_merchants,
+                "source_stores": r.source_stores,
+                "merchant_programs": 0,
+                "raw_source_offers": 0,
+                "effective_offers": 0,
+            }
+            for r in identities
+        }
+        for row in programs:
+            merchant_coverage[row.market_country]["merchant_programs"] += row.programs
+        for offer_totals in merchant_offers:
+            merchant_coverage[offer_totals.market_country].update(
+                raw_source_offers=offer_totals.raw_source_offers,
+                effective_offers=offer_totals.effective_offers,
+            )
+        return {"providers": providers, "markets": markets, "merchant_coverage": merchant_coverage}
 
     async def product(self, query: str, country: str) -> dict[str, Any]:
         if not query.strip() or len(query) > 200 or len(country) != 2:
@@ -282,12 +333,18 @@ class CoverageDiagnostics:
         async with self.sessions() as session:
             rows = (
                 await session.execute(
-                    select(a, b)
+                    select(
+                        a,
+                        b,
+                        (domain(a.domain) == domain(b.domain)).label("same_domain"),
+                        (name(a.name) == name(b.name)).label("same_name"),
+                    )
                     .join(
                         b,
                         and_(
                             a.id < b.id,
                             a.provider_type != b.provider_type,
+                            a.merchant_id != b.merchant_id,
                             or_(domain(a.domain) == domain(b.domain), name(a.name) == name(b.name)),
                         ),
                     )
@@ -297,9 +354,25 @@ class CoverageDiagnostics:
             ).all()
             return [
                 {
-                    "left": {"id": str(x.id), "network": x.provider_type, "merchant": x.name},
-                    "right": {"id": str(y.id), "network": y.provider_type, "merchant": y.name},
+                    "left": {
+                        "id": str(x.id),
+                        "network": x.provider_type,
+                        "merchant": x.name,
+                        "merchant_id": str(x.merchant_id),
+                        "source_slug": x.slug,
+                    },
+                    "right": {
+                        "id": str(y.id),
+                        "network": y.provider_type,
+                        "merchant": y.name,
+                        "merchant_id": str(y.merchant_id),
+                        "source_slug": y.slug,
+                    },
+                    "evidence": {
+                        "same_normalized_domain": same_domain,
+                        "same_normalized_name": same_name,
+                    },
                     "reason": "possible_duplicate_only",
                 }
-                for x, y in rows
+                for x, y, same_domain, same_name in rows
             ]

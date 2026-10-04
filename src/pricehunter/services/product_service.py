@@ -10,6 +10,7 @@ from pricehunter.db.models import PriceObservation, Product, Store, Tracker
 from pricehunter.db.repositories.catalog import CatalogRepository
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.comparison import ComparisonProduct
+from pricehunter.domain.errors import ProductNotFoundError
 from pricehunter.domain.ingestion import IngestionMode, search_ingestion
 from pricehunter.domain.pricing import percentage_change
 from pricehunter.domain.products import ProductOfferData
@@ -46,7 +47,10 @@ class ProductService:
         provider = self.registry.resolve_url(url)
         async with self.limiter.provider(provider.name):
             data = await provider.resolve_url(url)
-        return await self.persist(data)
+        persisted = await self.persist(data)
+        # Acquisition may keep its snapshot; the customer URL surface must still
+        # recheck the canonical retailer's current enabled state.
+        return await self.offer(persisted.id)
 
     async def persist(
         self,
@@ -88,6 +92,8 @@ class ProductService:
             offer = await CatalogRepository(session).get_offer(offer_id)
             store = await session.get(Store, offer.store_id)
             assert store is not None
+            if not store.merchant.active:
+                raise ProductNotFoundError()
             return self.outbound.offer_view(offer, store)
 
     async def product(

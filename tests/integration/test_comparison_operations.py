@@ -317,12 +317,29 @@ async def test_large_comparison_has_bounded_queries_and_pagination(container, si
     now = utcnow()
     async with container.sessions.begin() as session:
         stored = await session.get(StoreOffer, a.id)
+        # This legacy pagination contract has one independent retailer per row.
+        # M4D duplicate-source load cases exercise many rows per Merchant separately.
+        source_ids = [uuid4() for _ in range(size - 1)]
+        await session.execute(
+            insert(Store),
+            [
+                dict(
+                    id=source_id,
+                    slug=f"legacy-load-{i}",
+                    name=f"Load merchant {i}",
+                    domain="example.com",
+                    provider_type="mock",
+                    country="DE",
+                )
+                for i, source_id in enumerate(source_ids)
+            ],
+        )
         await session.execute(
             insert(StoreOffer),
             [
                 {
                     "product_id": a.product_id,
-                    "store_id": stored.store_id,
+                    "store_id": source_ids[i],
                     "external_id": f"load_{i}",
                     "market_country": "DE",
                     "url": a.url,

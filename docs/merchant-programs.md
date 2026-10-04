@@ -1,5 +1,13 @@
 # Merchant programs
 
+M4D separates the reviewed network/market `MerchantProgram` and acquisition `Store` from
+the canonical customer-visible `Merchant`. Every newly onboarded Store receives its own
+distinct Merchant by default. Matching names/domains never reconcile retailers. Once retail
+identity has been reviewed, use the separate [canonical merchant commands](merchant-identity.md)
+to link sources with current version receipts, dry-run and explicit confirmation.
+Each program's rights, activation, feed IDs and provenance remain independent after linking.
+Canonical disable hides all its sources without editing any program contract.
+
 Review each network/advertiser/market independently. Account/feed visibility is not a
 persistent tracking/history grant. Stable Store identity uses network + advertiser ID;
 market-specific programs may share it. Cross-network merchant identities remain separate.
@@ -53,7 +61,8 @@ Additional explicit operations:
   observations, canonical products, trackers, watches and price events. It revokes
   eligibility, cancels in-flight ownership and invalidates cached staging presence.
 - merchant-program-metadata: --display-name plus version/reason/confirmation. The
-  customer-visible Store name is updated; shared market programs retain their own labels.
+  source Store name is updated; shared market programs retain their own labels. Established
+  canonical customer display is changed separately with merchant-metadata.
 - merchant-program-feed-reference: --feed-id plus version/reason/confirmation. A changed
   feed clears approval/policy and staging eligibility and requires another review.
 

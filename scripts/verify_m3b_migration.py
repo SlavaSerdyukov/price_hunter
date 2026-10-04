@@ -311,8 +311,59 @@ async def main():
                 .mappings()
                 .one()
             )
+        migrate("upgrade", "9f62c7d40a11")
+        await engine.dispose()
+        merchant_baseline = await snapshot(
+            (
+                "stores",
+                "store_offers",
+                "products",
+                "trackers",
+                "product_watches",
+                "price_observations",
+                "best_price_events",
+                "notification_events",
+                "outbound_clicks",
+                "merchant_programs",
+                "subscriptions",
+                "payment_events",
+            )
+        )
         migrate("upgrade", "head")
         await engine.dispose()
+        merchant_after = await snapshot(tuple(merchant_baseline))
+        for table, rows in merchant_baseline.items():
+            for before, current in zip(rows, merchant_after[table], strict=True):
+                assert before == {key: current[key] for key in before}, table
+        async with engine.connect() as c:
+            stores = (
+                await c.execute(text("SELECT id,merchant_id,name FROM stores ORDER BY id"))
+            ).all()
+            merchants = (
+                await c.execute(text("SELECT id,display_name FROM merchants ORDER BY id"))
+            ).all()
+            assert len(stores) == len(merchants)
+            assert [(s.id, s.name) for s in stores] == [tuple(m) for m in merchants]
+            assert all(s.id == s.merchant_id for s in stores)
+            assert await c.scalar(text("SELECT merchant_id FROM outbound_clicks")) == ids[1]
+            assert (
+                await c.scalar(
+                    text("SELECT best_merchant_id FROM product_watches WHERE id=:id"),
+                    {"id": watch_id},
+                )
+                == ids[1]
+            )
+        for statement in (
+            "UPDATE merchant_audits SET reason='tamper'",
+            "DELETE FROM merchant_audits",
+        ):
+            try:
+                async with engine.begin() as c:
+                    await c.execute(text(statement))
+            except Exception as exc:
+                assert "append-only" in str(exc)
+            else:
+                raise AssertionError("Canonical merchant audit mutation was allowed")
         async with engine.connect() as c:
             upgraded = dict(
                 (
@@ -359,6 +410,41 @@ async def main():
         settings = Settings(_env_file=None, database_url=scratch_url)
         container = Container(settings, redis=fakeredis.aioredis.FakeRedis())
         try:
+            # Before reconciliation the migrated 1:1 retail identities retain the
+            # existing customer's prices, source IDs, labels and market counts.
+            baseline_stores = {s["id"]: s for s in merchant_baseline["stores"]}
+            for market in ("BE", "DE"):
+                old_offers = [
+                    o
+                    for o in merchant_baseline["store_offers"]
+                    if o["product_id"] == ids[2] and o["market_country"] == market
+                ]
+                async with container.sessions() as session:
+                    comparison = await container.products.comparisons.build(
+                        session, ids[2], market_country=market
+                    )
+                assert comparison.offer_count == len(old_offers) == 1
+                assert comparison.store_count == len({o["store_id"] for o in old_offers})
+                old = old_offers[0]
+                current = comparison.offers[0]
+                assert (
+                    current.offer_id,
+                    current.source_store_id,
+                    current.store,
+                    current.price,
+                    current.currency,
+                    current.store_country,
+                ) == (
+                    old["id"],
+                    old["store_id"],
+                    baseline_stores[old["store_id"]]["name"],
+                    old["price"],
+                    old["currency"],
+                    market,
+                )
+                assert current.merchant_id == old["store_id"]
+                assert comparison.best_available_offer.price == old["price"]
+                assert comparison.price_spread == 0
             after = await snapshot()
             for table, rows in original.items():
                 for before, current in zip(rows, after[table], strict=True):
@@ -416,6 +502,29 @@ async def main():
                     external_feed_id="999",
                 )
             )
+            # Exercise operator-used downgrade guard, then export/reconcile only the
+            # synthetic scratch identity. Production audit is never erased by migration.
+            from pricehunter.domain.merchants import MerchantInput
+
+            canonical = await container.merchants.create(
+                MerchantInput(slug="migration-retailer", display_name="Explicit retailer"),
+                expected_version=0,
+                reason="Synthetic operator review",
+                confirm=True,
+            )
+            migrate(
+                "downgrade",
+                "9f62c7d40a11",
+                success=False,
+                contains="Export/reconcile canonical merchant",
+            )
+            async with engine.begin() as c:
+                await c.execute(text("TRUNCATE merchant_audits"))
+                await c.execute(text("DELETE FROM merchants WHERE id=:id"), {"id": canonical.id})
+            migrate("downgrade", "9f62c7d40a11")
+            migrate("upgrade", "head")
+            await engine.dispose()
+            await container.sessions.kw["bind"].dispose()
             migrate(
                 "downgrade",
                 "b7c21a48d903",
@@ -425,6 +534,7 @@ async def main():
             async with engine.begin() as c:
                 # Synthetic audit export verified above; administrative cleanup only in scratch DB.
                 await c.execute(text("TRUNCATE merchant_program_audits"))
+                await c.execute(text("TRUNCATE merchant_audits"))
                 await c.execute(
                     text("DELETE FROM merchant_programs WHERE id=:id"), {"id": legacy_program_id}
                 )
@@ -443,6 +553,9 @@ async def main():
                     text("DELETE FROM merchant_programs WHERE id=:id"), {"id": program.id}
                 )
                 await c.execute(text("DELETE FROM stores WHERE id=:id"), {"id": program.store_id})
+                await c.execute(
+                    text("DELETE FROM merchants WHERE id=:id"), {"id": program.store_id}
+                )
             migrate(
                 "downgrade", "2c125500eaf6", success=False, contains="Export market-scoped history"
             )
@@ -489,13 +602,16 @@ async def main():
         finally:
             await container.close()
         print(
-            "PASS: M3A -> real M3B -> M4A -> M4A.1 -> M4B -> M4C; "
+            "PASS: M3A -> real M3B -> M4A -> M4A.1 -> M4B -> M4C -> M4D; "
             "users/products/identifiers/stores/offers/"
             "observations/trackers/watches/discoveries/best states/history/outbox/"
             "subscriptions/payments/FX/outbound clicks preserved; "
             "BE/DE market migration; nullable direct URL; "
             "ambiguous history preserved; scoped baselines rebuilt without alerts; "
             "existing merchant review preserved; version/audit backfill; append-only guard; "
+            "canonical merchant 1:1 backfill and source IDs preserved; "
+            "pre-link BE/DE customer comparisons equivalent; "
+            "canonical append-only audit and used-identity downgrade guard; "
             "guarded downgrade/re-upgrade; schema check"
         )
     finally:

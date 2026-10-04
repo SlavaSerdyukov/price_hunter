@@ -1,4 +1,4 @@
-# Product comparison — M3A through M4A.1
+# Product comparison — M3A through M4D
 
 A `Product` is one canonical purchasable product/variant. A `StoreOffer` is a listing
 in a persisted `Store` merchant/marketplace and one catalog market. `Tracker` watches
@@ -62,7 +62,7 @@ endpoint pages up to 50 offers and includes summaries across **all** eligible kn
 offers in that market. Country uses explicit input, otherwise the saved profile;
 without either, user-facing search/comparison/history/refresh return `country_required`.
 Search reloads shared canonical products with its exact requested country, so a later DE
-search cannot contaminate an earlier BE result. Merchant identity/name come from `Store`;
+search cannot contaminate an earlier BE result. Merchant identity/name come from `Merchant`;
 offer market always comes from StoreOffer.market_country. Disabled,
 unsupported and policy-ineligible offers are excluded. Offer DTOs add `freshness` (`fresh`, `stale`, `failed`),
 `age_seconds`, and `stale` (true for any non-fresh value), alongside `last_checked_at`.
@@ -84,6 +84,19 @@ Recommendations and spread are calculated separately for each market/native curr
 
 Products rank by exact model/GTIN relevance, availability, confidence, number of stores,
 then stable title/UUID ties. Offer pages sort by currency, freshness, availability, price, store and ID.
+M4D first selects one effective source snapshot per Product/Merchant/market/native
+currency, with surface policy eligibility before SQL window ranking. Freshness, stock,
+native price, confidence, observation time and source/offer UUID determine selection.
+Commission, network name and link usability never choose the source. All statistics and
+pagination operate on these representatives: `store_count` counts distinct Merchants,
+`offer_count` counts effective rows. Raw source counts remain diagnostic only.
+
+ComparisonOffer adds `merchant_id`, `merchant_slug`, `source_store_id`; `store` is the
+canonical display name. Existing `store_slug` remains acquisition provenance for backward
+compatibility, not canonical retailer identity. Use the new Merchant fields for identity.
+The selected source supplies its own permitted outbound URL; a null URL is never replaced
+with another source's destination. See [merchant identity](merchant-identity.md).
+
 SQL counts and window ranks build whole-product summaries in three queries; a complete
 comparison uses a bounded number of queries regardless of 100, 500 or 1000 listings.
 M3B's core aggregation used six; M4A adds account context and, when enabled, a shared
@@ -144,6 +157,13 @@ ambiguous pre-M4A.1 global events remain stored with NULL market and are exclude
 Catalog comparison, watch comparison/evaluation and history apply catalog, tracking
 and history permission respectively. Ambiguous Telegram sends retain the existing
 `uncertain` delivery semantics.
+
+M4D watch state keeps both `best_offer_id` and `best_merchant_id`. Same-retailer source
+changes use ordinary price-change semantics, not merchant_became_cheapest. An identical
+retailer/price switch only updates current provenance without history/notification events.
+New snapshots retain canonical Merchant plus source Store/offer/network IDs. Historical
+JSON/name snapshots stay unchanged; operator linking only rebases current identity pointers.
+Exact StoreOffer Trackers remain source-specific.
 
 ## Deterministic demo
 

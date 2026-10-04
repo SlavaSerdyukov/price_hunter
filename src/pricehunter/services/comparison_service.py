@@ -3,13 +3,13 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import and_, case, func, literal, or_, select
+from sqlalchemy import Select, and_, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import Product, ProductDiscovery, Store, StoreOffer, User
+from pricehunter.db.models import Merchant, Product, ProductDiscovery, Store, StoreOffer, User
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.comparison import (
     ComparisonOffer,
@@ -96,9 +96,10 @@ class ComparisonReader:
             else_=str(Freshness.STALE),
         )
 
-    def filters(self, product_id: UUID, currency: str | None = None) -> list[ColumnElement[bool]]:
+    def filters(
+        self, product_id: UUID | None, currency: str | None = None
+    ) -> list[ColumnElement[bool]]:
         filters = [
-            StoreOffer.product_id == product_id,
             Store.active.is_(True),
             Store.supported.is_(True),
             StoreOffer.catalog_active.is_(True),
@@ -106,11 +107,63 @@ class ComparisonReader:
                 self.permission or "catalog_persistence_allowed", now=utcnow()
             ),
         ]
+        if product_id is not None:
+            filters.append(StoreOffer.product_id == product_id)
         if self.market_country is not None:
             filters.append(StoreOffer.market_country == self.market_country)
         if currency:
             filters.append(StoreOffer.currency == currency)
         return filters
+
+    def effective_ids(
+        self, product_id: UUID | None, now: datetime, currency: str | None = None
+    ) -> Select[tuple[UUID]]:
+        """Eligible representative per retailer/product/market/native currency in SQL.
+
+        No source rows are deleted; no affiliate/link/network economics enter ranking.
+        Filtering precedes ranking so each requested surface has its own representative.
+        """
+        freshness = self.freshness_expression(now)
+        ranked = (
+            select(
+                StoreOffer.id,
+                func.row_number()
+                .over(
+                    partition_by=(
+                        StoreOffer.product_id,
+                        Store.merchant_id,
+                        StoreOffer.market_country,
+                        StoreOffer.currency,
+                    ),
+                    order_by=(
+                        case(
+                            (freshness == Freshness.FRESH, 0),
+                            (freshness == Freshness.STALE, 1),
+                            else_=2,
+                        ),
+                        case(
+                            (StoreOffer.availability == "in_stock", 0),
+                            (StoreOffer.availability == "unknown", 1),
+                            else_=2,
+                        ),
+                        StoreOffer.price,
+                        StoreOffer.match_confidence.desc(),
+                        StoreOffer.last_checked_at.desc(),
+                        Store.id,
+                        StoreOffer.id,
+                    ),
+                )
+                .label("merchant_rank"),
+            )
+            .join(Store)
+            .where(*self.filters(product_id, currency))
+            # Do not let an underestimated semijoin rescan the entire window for
+            # every outer offer (especially just after a feed/TRUNCATE). Rank once
+            # per statement even when planner statistics are stale.
+            .cte("effective_source_ranks")
+            .prefix_with("MATERIALIZED")
+        )
+        return select(ranked.c.id).where(ranked.c.merchant_rank == 1)
 
     def view(self, offer: StoreOffer, store: Store, now: datetime) -> ComparisonOffer:
         effective = PolicyResolver(self.settings).offer(offer, store)
@@ -130,7 +183,10 @@ class ComparisonReader:
             url = None
         return ComparisonOffer(
             offer_id=offer.id,
-            store=store.name,
+            merchant_id=store.merchant_id,
+            merchant_slug=store.merchant.slug if store.merchant else None,
+            source_store_id=store.id,
+            store=store.merchant.display_name if store.merchant else store.name,
             store_slug=store.slug,
             store_country=offer.market_country,
             title=offer.title,
@@ -153,6 +209,7 @@ class ComparisonReader:
         freshness = self.freshness_expression(now)
         valid = and_(freshness == Freshness.FRESH, StoreOffer.availability == "in_stock")
         filters = self.filters(product_id, currency)
+        filters.append(StoreOffer.id.in_(self.effective_ids(product_id, now, currency)))
         stats = (
             await session.execute(
                 select(
@@ -182,7 +239,7 @@ class ComparisonReader:
             await session.execute(
                 select(
                     func.count(),
-                    func.count(func.distinct(StoreOffer.store_id)),
+                    func.count(func.distinct(Store.merchant_id)),
                     func.min(StoreOffer.match_confidence),
                     func.min(
                         StoreOffer.last_checked_at
@@ -202,7 +259,7 @@ class ComparisonReader:
                 .where(*filters)
             )
         ).one()
-        order = (StoreOffer.price, Store.slug, StoreOffer.id)
+        order = (StoreOffer.price, Merchant.display_name, Store.merchant_id, StoreOffer.id)
         ranked = (
             select(
                 StoreOffer.id,
@@ -224,6 +281,7 @@ class ComparisonReader:
                 .label("stale_rank"),
             )
             .join(Store)
+            .join(Merchant, Merchant.id == Store.merchant_id)
             .where(*filters)
             .subquery()
         )
@@ -289,7 +347,9 @@ class ComparisonReader:
             await session.execute(
                 select(StoreOffer, Store)
                 .join(Store)
+                .join(Merchant, Merchant.id == Store.merchant_id)
                 .where(*self.filters(product_id))
+                .where(StoreOffer.id.in_(self.effective_ids(product_id, now)))
                 .order_by(
                     StoreOffer.currency,
                     case((freshness == Freshness.FRESH, 0), else_=1),
@@ -299,7 +359,8 @@ class ComparisonReader:
                         else_=2,
                     ),
                     StoreOffer.price,
-                    Store.slug,
+                    Merchant.display_name,
+                    Store.merchant_id,
                     StoreOffer.id,
                 )
                 .offset(max(0, page) * size)

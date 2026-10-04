@@ -38,4 +38,5 @@ class WatchView(WatchCreate):
     enabled: bool
     scheduled: bool
     best_offer_id: UUID | None
+    best_merchant_id: UUID | None = None
     best_price: Decimal | None

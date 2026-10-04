@@ -1,10 +1,10 @@
 from uuid import UUID
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, exists, func, or_, select
 
 from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import MerchantFeedItem, MerchantProgram
+from pricehunter.db.models import Merchant, MerchantFeedItem, MerchantProgram, Store
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.discovery import Capability, DiscoveryQuery
 from pricehunter.domain.errors import UnsupportedStoreError
@@ -99,6 +99,13 @@ class FeedStoreProvider(StoreProvider):
             program.network == self.name,
             program.market_country == country,
             PolicyResolver(self.settings).program_filter(permission),
+            exists().where(
+                Store.id == program.store_id,
+                Store.active.is_(True),
+                Store.supported.is_(True),
+                Merchant.id == Store.merchant_id,
+                Merchant.active.is_(True),
+            ),
             item.active.is_(True),
             item.seen_at
             > utcnow()

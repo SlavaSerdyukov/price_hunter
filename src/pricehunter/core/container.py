@@ -39,6 +39,7 @@ from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.feed_sync import FeedSyncService
 from pricehunter.services.fx_service import FxService
 from pricehunter.services.merchant_programs import MerchantProgramService
+from pricehunter.services.merchants import MerchantService
 from pricehunter.services.outbound_service import OutboundLinkService, validate_redirect_settings
 from pricehunter.services.policy_resolver import PolicyResolver
 from pricehunter.services.price_check_service import PriceCheckService
@@ -253,6 +254,7 @@ class Container:
             self.sessions, self.registry, self.limiter, settings, self.entitlements
         )
         self.merchant_programs = MerchantProgramService(self.sessions, settings)
+        self.merchants = MerchantService(self.sessions)
         self.feed_sync = FeedSyncService(self.sessions, settings, self.products)
         self.coverage = CoverageDiagnostics(self.sessions, settings, self.registry, self.limiter)
 

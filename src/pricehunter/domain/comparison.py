@@ -10,6 +10,9 @@ from pricehunter.domain.products import Availability, model_code, normalized
 
 class ComparisonOffer(BaseModel):
     offer_id: UUID
+    merchant_id: UUID | None = None
+    merchant_slug: str | None = None
+    source_store_id: UUID | None = None
     store: str
     store_slug: str
     store_country: str

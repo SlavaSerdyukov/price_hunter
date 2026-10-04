@@ -88,6 +88,7 @@ class ProductWatchService:
                 **data.model_dump(exclude={"market_country"}),
                 market_country=market,
                 best_offer_id=best.offer_id if best else None,
+                best_merchant_id=best.merchant_id if best else None,
                 best_price=best.price if best else None,
                 best_absence_reason=self.absence(summary.groups[0]) if not best else None,
             )
@@ -136,6 +137,7 @@ class ProductWatchService:
             notify_on_new_best=watch.notify_on_new_best,
             notify_on_price_drop=watch.notify_on_price_drop,
             best_offer_id=watch.best_offer_id,
+            best_merchant_id=watch.best_merchant_id,
             best_price=watch.best_price,
             scheduled=scheduled is not None,
         )
@@ -211,6 +213,7 @@ class ProductWatchService:
                 watch.best_offer_id, watch.best_price = (
                     (best.offer_id, best.price) if best else (None, None)
                 )
+                watch.best_merchant_id = best.merchant_id if best else None
                 if patch.enabled:
                     await self._schedule(session, watch, rights.check_interval_seconds)
             await session.flush()
@@ -310,17 +313,19 @@ class ProductWatchService:
         for watch in watches:
             best = groups[watch.currency].best_available_offer if watch.currency in groups else None
             previous_id, previous_price = watch.best_offer_id, watch.best_price
+            previous_merchant_id = watch.best_merchant_id
             previous_absence = watch.best_absence_reason
             watch.best_absence_reason = (
                 self.absence(groups.get(watch.currency)) if not best else None
             )
-            if (previous_id, previous_price) == (
-                (best.offer_id, best.price) if best else (None, None)
+            if (previous_id, previous_price, previous_merchant_id) == (
+                (best.offer_id, best.price, best.merchant_id) if best else (None, None, None)
             ):
                 continue
             watch.best_offer_id, watch.best_price = (
                 (best.offer_id, best.price) if best else (None, None)
             )
+            watch.best_merchant_id = best.merchant_id if best else None
             if previous_absence == "market_rebuild":
                 continue
             watch.evaluation_sequence += 1
@@ -339,6 +344,7 @@ class ProductWatchService:
                 rights.target_price_alerts,
                 rights.back_in_stock_alerts,
                 previous_absence,
+                previous_merchant_id,
             )
             if event_type is None:
                 continue
@@ -351,7 +357,7 @@ class ProductWatchService:
                 continue
             previous = await session.get(StoreOffer, previous_id) if previous_id else None
             previous_store_row = await session.get(Store, previous.store_id) if previous else None
-            previous_store = previous_store_row.name if previous_store_row else "—"
+            previous_store = previous_store_row.merchant.display_name if previous_store_row else "—"
             await session.execute(
                 insert(NotificationEvent)
                 .values(
@@ -366,6 +372,15 @@ class ProductWatchService:
                         "title": product.canonical_name,
                         "offer_id": str(best.offer_id),
                         "store": best.store,
+                        "merchant_id": str(best.merchant_id) if best.merchant_id else None,
+                        "merchant_slug": best.merchant_slug,
+                        "source_store_id": str(best.source_store_id)
+                        if best.source_store_id
+                        else None,
+                        "source_provider": best.provider,
+                        "previous_merchant_id": str(previous_merchant_id)
+                        if previous_merchant_id
+                        else None,
                         "country": best.store_country,
                         "market_country": watch.market_country,
                         "url": best.url,
@@ -388,6 +403,7 @@ class ProductWatchService:
         targets_allowed: bool,
         restocks_allowed: bool,
         previous_absence: str | None = None,
+        previous_merchant_id: UUID | None = None,
     ) -> str | None:
         if (
             targets_allowed
@@ -404,7 +420,12 @@ class ProductWatchService:
                 if watch.notify_on_new_best and restocks_allowed
                 else None
             )
-        if previous_id != best.offer_id and watch.notify_on_new_best:
+        merchant_changed = (
+            previous_merchant_id != best.merchant_id
+            if previous_merchant_id is not None and best.merchant_id is not None
+            else previous_id != best.offer_id
+        )
+        if merchant_changed and watch.notify_on_new_best:
             return "merchant_became_cheapest"
         if (
             previous_price is not None

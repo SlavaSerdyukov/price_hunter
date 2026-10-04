@@ -127,10 +127,13 @@ async def test_redirect_resolves_live_policy_and_appends_no_pii(container):
             and click.market_country == "DE"
         )
         assert click.affiliate_network is None
+        store = await session.get(Store, click.store_id)
+        assert click.merchant_id == store.merchant_id
         assert set(OutboundClick.__table__.columns.keys()) == {
             "id",
             "offer_id",
             "store_id",
+            "merchant_id",
             "affiliate_network",
             "surface",
             "market_country",
