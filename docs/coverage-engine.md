@@ -24,13 +24,54 @@ Work budgets are independent of subscription output limits:
 | SEARCH_COMPARISON_LIMIT | 100 | 200 |
 | SEARCH_ERROR_LIMIT | 20 | 100 |
 
-Provider candidate slices are deterministically sorted and interleaved before the global
-persistence cap. Identical provider/store/external-ID/market/normalized-variant identities
-are processed once, selecting a deterministic content version. Distinct variants and
-markets are never collapsed by that deduplication. Wrong-market candidates are rejected.
-Comparison uses existing native price/relevance semantics; network, affiliate payout and
-commission never supply ranking or canonical-match evidence. Limits can omit candidates;
-PARTIAL diagnostics identify candidate/persistence truncation rather than an outage.
+Provider candidate slices retain the provider's returned relevance order. Ordered
+listing-identity deduplication keeps the first logical position and original raw provider
+rank; replacement selects the newest deterministic content version without moving that
+position. Identical provider/store/external-ID/market/normalized-variant identities are
+processed once. Distinct variants and markets remain separate. Provider sequences are
+interleaved round-robin before the global persistence cap, so one provider cannot consume
+the whole budget merely because it was configured first.
+
+M4C.1 uses two bounded ranking stages:
+
+```text
+provider retrieval order + ordered deduplication
+    → round-robin bounded persistence, rejecting wrong markets/currencies
+    → cheap query-evidence canonical shortlist
+    → bounded ComparisonProduct construction
+    → existing final comparison_rank + entitlement output limit
+```
+
+The reusable `query_evidence_rank` helper evaluates normalized, deterministic evidence:
+
+| Priority (lower first) | Query evidence |
+| ---: | --- |
+| 0 | Exact valid normalized GTIN/EAN/UPC |
+| 1 | Exact MPN or model code |
+| 2 | Exact brand plus MPN/model code |
+| 3 | Normalized exact title |
+| 4 | Normalized query contained in title |
+| 5 | Other provider-retrieved candidates |
+
+Trade queries use the existing length/checksum/ASCII validation and padded trade-ID
+normalization. A nonmatching/conflicting provided trade identifier cannot gain an exact
+identifier-query boost from its title or model. Model codes only remove existing common
+formatting separators; no fuzzy/semantic/LLM matching is introduced. This priority is
+retrieval evidence only and is never passed to CatalogResolver as merge authorization.
+
+For each successfully persisted canonical Product, search retains its **best** evidence
+across merchants, then original provider rank and interleaved retrieval position as ties.
+The map has at most search_persistence_limit entries. It selects at most
+search_comparison_limit Products before building their expensive comparisons; it does not
+build every Product to discover relevance. Canonical UUID and listing IDs never choose
+this shortlist. Multiple merchant offers resolving to one Product consume one slot.
+The existing final comparison_rank continues ordering the built comparisons independently.
+
+Neither stage introduces commission, payout or network preference. Execution ties retain
+deterministic round-robin retrieval order; no network receives a relevance score. The
+per-provider/persistence caps still bound what can be inspected: candidates outside those
+caps cannot gain inclusion. PARTIAL diagnostics identify candidate/persistence truncation,
+not a provider outage. Subscription output limits still apply after final ranking.
 
 Same-GTIN listings across four networks can share one global Product while market-specific
 StoreOffers remain distinct. BE comparisons/watches use BE prices; cheaper DE offers cannot

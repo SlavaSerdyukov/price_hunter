@@ -10,7 +10,7 @@ from pricehunter.core.limits import RateLimiter
 from pricehunter.domain.comparison import ComparisonProduct, comparison_rank
 from pricehunter.domain.ingestion import search_ingestion
 from pricehunter.domain.products import ProductOfferData, normalized_variant
-from pricehunter.domain.search import ProviderSearchOutcome
+from pricehunter.domain.search import ProviderCandidate, ProviderSearchOutcome, query_evidence_rank
 from pricehunter.domain.subscriptions import Feature
 from pricehunter.providers.base import StoreProvider
 from pricehunter.providers.registry import ProviderRegistry
@@ -80,7 +80,7 @@ class SearchService:
 
         async def one(
             provider: StoreProvider,
-        ) -> tuple[StoreProvider, list[ProductOfferData], ProviderSearchOutcome]:
+        ) -> tuple[StoreProvider, list[ProviderCandidate], ProviderSearchOutcome]:
             outcome = ProviderSearchOutcome(provider=provider.name)
             try:
                 async with (
@@ -98,9 +98,11 @@ class SearchService:
                 if len(results) > settings.search_provider_candidate_limit:
                     error(outcome, "candidate_limit")
                 candidates: dict[
-                    tuple[str, str, str, str, tuple[tuple[str, str], ...]], ProductOfferData
+                    tuple[str, str, str, str, tuple[tuple[str, str], ...]], ProviderCandidate
                 ] = {}
-                for data in results[: settings.search_provider_candidate_limit]:
+                for provider_rank, data in enumerate(
+                    results[: settings.search_provider_candidate_limit]
+                ):
                     if not isinstance(data, ProductOfferData) or data.provider != provider.name:
                         outcome.rejected_count += 1
                         error(outcome, "invalid_item")
@@ -116,20 +118,14 @@ class SearchService:
                     if identity in candidates:
                         outcome.duplicate_count += 1
                         previous = candidates[identity]
-                        if content_version(data) <= content_version(previous):
+                        if content_version(data) <= content_version(previous.data):
                             continue
-                    candidates[identity] = data
+                        provider_rank = previous.provider_rank
+                    # Replacing an existing dict value retains its first relevance slot.
+                    candidates[identity] = ProviderCandidate(data, provider_rank)
                 return (
                     provider,
-                    sorted(
-                        candidates.values(),
-                        key=lambda d: (
-                            d.store_slug,
-                            d.external_id,
-                            d.country,
-                            tuple(sorted(normalized_variant(d.variant).items())),
-                        ),
-                    ),
+                    list(candidates.values()),
                     outcome,
                 )
             except Exception:
@@ -146,18 +142,19 @@ class SearchService:
             entry
             for round_ in zip_longest(
                 *[
-                    [(provider, data, outcome) for data in offers]
+                    [(provider, candidate, outcome) for candidate in offers]
                     for provider, offers, outcome in responses
                 ]
             )
             for entry in round_
             if entry is not None
         ]
-        persisted: set[UUID] = set()
-        for i, (provider, data, outcome) in enumerate(incoming):
+        product_candidates: dict[UUID, tuple[int, int, int]] = {}
+        for i, (provider, candidate, outcome) in enumerate(incoming):
             if i >= settings.search_persistence_limit:
                 error(outcome, "persistence_limit")
                 continue
+            data = candidate.data
             if data.country != country or (currency and data.currency != currency):
                 outcome.rejected_count += 1
                 error(outcome, "market_mismatch")
@@ -166,7 +163,10 @@ class SearchService:
                 offer = await self.products.persist(
                     data, mode=search_ingestion(provider.capabilities)
                 )
-                persisted.add(offer.product_id)
+                evidence = (query_evidence_rank(data, query), candidate.provider_rank, i)
+                previous_evidence = product_candidates.get(offer.product_id)
+                if previous_evidence is None or evidence < previous_evidence:
+                    product_candidates[offer.product_id] = evidence
                 outcome.accepted_count += 1
             except Exception:
                 outcome.rejected_count += 1
@@ -174,9 +174,14 @@ class SearchService:
                 structlog.get_logger().warning(
                     "search_item_rejected", provider=provider.name, code="item_rejected"
                 )
+        # At most one entry per persisted Product, bounded by persistence work. Keep
+        # its best query evidence and retrieval position; UUIDs never determine rank.
+        shortlist = sorted(product_candidates, key=product_candidates.__getitem__)[
+            : settings.search_comparison_limit
+        ]
         comparisons = [
             await self.products.product(product_id, user_id, market_country=country)
-            for product_id in sorted(persisted)[: settings.search_comparison_limit]
+            for product_id in shortlist
         ]
         comparisons.sort(key=lambda product: comparison_rank(product, query))
         outcomes = []

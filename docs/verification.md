@@ -758,3 +758,51 @@ migration verifier all passed. The hosted measurement is separate from local 90.
 This record was written only after fetching the completed run and its job logs. The
 subsequent documentation commit must also pass the unchanged Checks workflow before
 final merge-readiness is reported; no merge or deployment is performed by this task.
+
+**Verified final M4C result:** the documentation commit
+`7e875364ecb0daf8c99ca1bb2a0ac326e503ddbb` subsequently passed
+[GitHub Actions run 37123004411](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37123004411).
+The completed job logs report **620 passed, no skips, 90.45% statement coverage** and all
+required Checks steps successful. This supersedes the earlier outstanding documentation
+check; M4C.1 verification is recorded separately below.
+
+## M4C.1 — Relevance-preserving bounded search — 2026-10-04
+
+Started on `feat/m4c-coverage-engine` from verified M4C head
+`7e875364ecb0daf8c99ca1bb2a0ac326e503ddbb`. Before changing production code, five
+deterministic acceptance cases **failed**: the exact model was omitted by the early-UUID
+comparison cutoff among 100 canonical candidates; provider relevance was replaced by
+store/external-ID sorting under the persistence cap; two multi-provider model/GTIN cases
+lost strong candidates; and ordered duplicate replacement lost its useful first slot.
+The tests control canonical UUIDs explicitly rather than depending on random ordering.
+
+Provider deduplication now preserves returned order, the original raw candidate rank and
+the first listing slot, selecting content with the existing deterministic version rule.
+The reusable domain `query_evidence_rank` prioritizes validated trade identifiers,
+MPN/model, brand plus model, normalized exact/contained titles and other retrievals.
+It uses existing normalization/validation and never supplies canonical merge evidence.
+For each successfully persisted Product, search retains the best evidence across merchants,
+then provider rank and interleaved position, to select at most search_comparison_limit
+Products before comparison construction. UUIDs and commercial metadata do not choose
+this shortlist. Existing final comparison_rank, entitlement output limits, round-robin
+persistence, market/currency filtering and provider-health semantics remain in place.
+
+Added **35 cases**: 34 unit cases and one integration case using the actual CatalogResolver,
+PostgreSQL and counted ComparisonProduct construction. The integration case persists 100
+distinct Products/StoreOffers, gives the exact product the highest controlled UUID, builds
+only ten comparisons and returns the exact model first. Other new cases cover multi-provider
+model/GTIN survival, newest snapshot selection in both input orders, commission neutrality,
+best evidence across merchants sharing one Product, all work/output caps, equal-evidence
+provider ranks, BE/DE and currency isolation, fashion variants and invalid/conflicting IDs.
+Existing partial-failure, health, feed, strong-GTIN, variant, market and lifecycle regressions
+remain part of the unchanged full suite.
+
+Final local verification: **655 passed, no skips, 90.49% statement coverage** (148.84s).
+The unchanged 85% gate passed. Ruff lint/format (198 Python files), strict mypy (114 source
+files), Alembic upgrade/check and the full disposable migration verifier passed. The only
+warning is the existing upstream ARQ Redis close() deprecation. Dedicated PostgreSQL
+pricehunter_test and Redis DB 15 were used; no live credentials or merchant APIs are needed.
+Diff whitespace validation passed. No schema, dependency or configuration changes were
+required. The two-stage ranking and hard-budget limits are documented in
+[coverage-engine.md](coverage-engine.md). Hosted evidence is recorded only after fetching
+the completed Checks run and actual job logs.
