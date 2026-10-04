@@ -20,6 +20,7 @@ from pricehunter.providers.base import StoreProvider
 from pricehunter.providers.ebay import EbayBrowseProvider
 from pricehunter.providers.feeds.awin import AwinFeedSource
 from pricehunter.providers.feeds.base import FeedSource
+from pricehunter.providers.feeds.cj import CJFeedSource
 from pricehunter.providers.feeds.local import FeedStoreProvider
 from pricehunter.providers.feeds.streaming import FeedBounds, FeedHTTP
 from pricehunter.providers.feeds.tradedoubler import TradeDoublerFeedSource
@@ -32,6 +33,7 @@ from pricehunter.services.billing_intake import BillingIntake
 from pricehunter.services.billing_reconciliation import BillingReconciliation
 from pricehunter.services.billing_service import BillingService
 from pricehunter.services.comparison_operations import ComparisonOperations
+from pricehunter.services.coverage import CoverageDiagnostics
 from pricehunter.services.discovery_service import ProductDiscoveryService
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.feed_sync import FeedSyncService
@@ -107,6 +109,15 @@ class Container:
                 self.feed_sources["tradedoubler"] = TradeDoublerFeedSource(
                     feed_http,
                     settings.tradedoubler_token,
+                    page_size=settings.feed_page_size,
+                    max_pages=settings.feed_max_pages,
+                )
+            if settings.cj_enabled:
+                self.feed_sources["cj"] = CJFeedSource(
+                    feed_http,
+                    settings.cj_api_token,
+                    settings.cj_company_id,
+                    settings.cj_website_id,
                     page_size=settings.feed_page_size,
                     max_pages=settings.feed_max_pages,
                 )
@@ -243,6 +254,40 @@ class Container:
         )
         self.merchant_programs = MerchantProgramService(self.sessions, settings)
         self.feed_sync = FeedSyncService(self.sessions, settings, self.products)
+        self.coverage = CoverageDiagnostics(self.sessions, settings, self.registry, self.limiter)
+
+    def create_feed_source(self, network: str) -> FeedSource:
+        """Operator discovery can use credentials while the network remains disabled."""
+        settings = self.settings
+        http = FeedHTTP(
+            self.http,
+            self.limiter,
+            FeedBounds(
+                compressed_bytes=settings.feed_max_compressed_bytes,
+                decompressed_bytes=settings.feed_max_decompressed_bytes,
+                record_bytes=settings.feed_max_record_bytes,
+                rows=settings.feed_max_rows,
+            ),
+        )
+        if network == "awin":
+            return AwinFeedSource(http, settings.awin_feed_api_key)
+        if network == "tradedoubler":
+            return TradeDoublerFeedSource(
+                http,
+                settings.tradedoubler_token,
+                page_size=settings.feed_page_size,
+                max_pages=settings.feed_max_pages,
+            )
+        if network == "cj":
+            return CJFeedSource(
+                http,
+                settings.cj_api_token,
+                settings.cj_company_id,
+                settings.cj_website_id,
+                page_size=settings.feed_page_size,
+                max_pages=settings.feed_max_pages,
+            )
+        raise ValueError("Unknown feed network")
 
     async def validate_feeds(self) -> None:
         if not self.feed_sources:

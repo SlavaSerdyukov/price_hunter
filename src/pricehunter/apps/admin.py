@@ -7,6 +7,7 @@ from dataclasses import asdict
 from datetime import timedelta
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import select, update
 
 from pricehunter.apps import feed_admin
@@ -15,6 +16,7 @@ from pricehunter.core.container import Container
 from pricehunter.core.security import new_api_key, token_digest
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import APIKey, NotificationEvent, User
+from pricehunter.domain.errors import ProviderPolicyError
 from pricehunter.domain.feeds import FeedError
 from pricehunter.services.catalog_diagnostics import CatalogDiagnostics
 
@@ -27,6 +29,14 @@ async def run(args: argparse.Namespace) -> None:
                 await feed_admin.run(container, args)
             except FeedError as exc:
                 raise SystemExit(f"Feed operation failed: {exc.code}") from None
+            except ValidationError:
+                raise SystemExit(
+                    "Invalid operator document; inspect schema and required fields"
+                ) from None
+            except ProviderPolicyError:
+                raise SystemExit("Reviewed catalog permission is required") from None
+            except ValueError as exc:
+                raise SystemExit(f"Operator change rejected: {exc}") from None
             return
         if args.command in ("create-api-user", "issue-api-key"):
             key = new_api_key()

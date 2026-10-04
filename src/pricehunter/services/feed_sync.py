@@ -62,7 +62,7 @@ class FeedSyncService:
                     else FeedSyncState.next_sync_at <= utcnow(),
                     or_(FeedSyncState.lease_until.is_(None), FeedSyncState.lease_until <= utcnow()),
                 )
-                .order_by(FeedSyncState.next_sync_at)
+                .order_by(FeedSyncState.next_sync_at, FeedSyncState.merchant_program_id)
                 .limit(1)
                 .with_for_update(of=FeedSyncState, skip_locked=True)
             )
@@ -200,6 +200,7 @@ class FeedSyncService:
                 state = await session.get(FeedSyncState, program_id, with_for_update=True)
                 if state and state.lease_token == token:
                     state.failure_count += 1
+                    state.last_failure_at = utcnow()
                     state.error_code = exc.code if isinstance(exc, FeedError) else "sync_failed"
                     state.status, state.lease_token, state.lease_until = "failed", None, None
                     state.next_sync_at = utcnow() + timedelta(

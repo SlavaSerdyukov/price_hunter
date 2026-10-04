@@ -288,8 +288,64 @@ async def main():
                 {"id": uuid4(), "offer": ids[3], "store": ids[1]},
             )
         before_feeds = await snapshot(("fx_rates", "outbound_clicks"))
+        migrate("upgrade", "431e7de33df9")
+        legacy_program_id = uuid4()
+        async with engine.begin() as c:
+            await c.execute(
+                text("""INSERT INTO merchant_programs
+                (id,network,external_merchant_id,market_country,store_id,display_name,domain,
+                currency,active,approved,feed_mode,external_feed_id,feed_language,policy_data,
+                review_reference,last_reviewed_at,created_at,updated_at)
+                VALUES (:id,'awin','998','BE',:store,'Existing reviewed merchant','legacy.test',
+                'EUR',true,true,'full','998','en',jsonb_build_object('reviewed',true),
+                'Existing signed review',now(),now(),now())"""),
+                {"id": legacy_program_id, "store": ids[1]},
+            )
+            legacy_program = dict(
+                (
+                    await c.execute(
+                        text("SELECT * FROM merchant_programs WHERE id=:id"),
+                        {"id": legacy_program_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
         migrate("upgrade", "head")
         await engine.dispose()
+        async with engine.connect() as c:
+            upgraded = dict(
+                (
+                    await c.execute(
+                        text("SELECT * FROM merchant_programs WHERE id=:id"),
+                        {"id": legacy_program_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            assert upgraded.pop("version") == 1 and upgraded == legacy_program
+            audit = (
+                await c.execute(
+                    text(
+                        "SELECT action,previous_version,new_version FROM merchant_program_audits "
+                        "WHERE merchant_program_id=:id"
+                    ),
+                    {"id": legacy_program_id},
+                )
+            ).one()
+            assert tuple(audit) == ("migrated", 0, 1)
+        for statement in (
+            "UPDATE merchant_program_audits SET reason='tamper'",
+            "DELETE FROM merchant_program_audits",
+        ):
+            try:
+                async with engine.begin() as c:
+                    await c.execute(text(statement))
+            except Exception as exc:
+                assert "append-only" in str(exc)
+            else:
+                raise AssertionError("Audit mutation was allowed")
         after_feeds = await snapshot(("fx_rates", "outbound_clicks"))
         for table, rows in before_feeds.items():
             for before, current in zip(rows, after_feeds[table], strict=True):
@@ -364,6 +420,18 @@ async def main():
                 "downgrade",
                 "b7c21a48d903",
                 success=False,
+                contains="Export merchant program audit",
+            )
+            async with engine.begin() as c:
+                # Synthetic audit export verified above; administrative cleanup only in scratch DB.
+                await c.execute(text("TRUNCATE merchant_program_audits"))
+                await c.execute(
+                    text("DELETE FROM merchant_programs WHERE id=:id"), {"id": legacy_program_id}
+                )
+            migrate(
+                "downgrade",
+                "b7c21a48d903",
+                success=False,
                 contains="Remove/export merchant programs",
             )
             async with engine.begin() as c:
@@ -421,12 +489,13 @@ async def main():
         finally:
             await container.close()
         print(
-            "PASS: M3A -> real M3B -> M4A -> M4A.1 -> M4B; "
+            "PASS: M3A -> real M3B -> M4A -> M4A.1 -> M4B -> M4C; "
             "users/products/identifiers/stores/offers/"
             "observations/trackers/watches/discoveries/best states/history/outbox/"
             "subscriptions/payments/FX/outbound clicks preserved; "
             "BE/DE market migration; nullable direct URL; "
             "ambiguous history preserved; scoped baselines rebuilt without alerts; "
+            "existing merchant review preserved; version/audit backfill; append-only guard; "
             "guarded downgrade/re-upgrade; schema check"
         )
     finally:

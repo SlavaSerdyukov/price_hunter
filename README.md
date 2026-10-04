@@ -2,7 +2,7 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0–M4B: tracking, Stars subscriptions, discovery, international commerce and merchant feeds**. Billing is tested with
+**M0–M4C: tracking, Stars subscriptions, discovery, international commerce and merchant feeds**. Billing is tested with
 a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
@@ -152,18 +152,23 @@ For clothing, send a [Hemptees product link](https://hemptees.be/product/short-s
 and choose a size/color in the bot. Amazon remains disabled pending API access and a
 separate tracking agreement; see [Amazon setup](docs/amazon-setup.md).
 
-## Merchant feeds: Awin and TradeDoubler
+## Merchant feeds: Awin, TradeDoubler and CJ
 
 [The feed engine](docs/commerce-feeds.md) imports approved merchant catalogs into separate
 PostgreSQL staging. Search and shared watch discovery select relevant items for the
 existing canonical catalog. The customer sees the merchant name, not the network name.
 Each merchant/market has its own reviewed catalog, tracking, history and affiliate rights.
 
-Both networks default disabled and are fixture-tested; no Awin/TradeDoubler merchant is
+All three networks default disabled and are fixture-tested; no network merchant is
 claimed live. Start with [merchant onboarding](docs/merchant-programs.md), then configure
-[Awin](docs/awin-setup.md) or [TradeDoubler](docs/tradedoubler-setup.md), approved program
+[Awin](docs/awin-setup.md), [TradeDoubler](docs/tradedoubler-setup.md) or [CJ](docs/cj-setup.md), approved program
 UUIDs in `FEED_PROGRAM_IDS`, and run `feed-sync PROGRAM_UUID --dry-run`. Secrets stay in
 local environment configuration. Existing direct providers require no MerchantProgram.
+
+[M4C coverage diagnostics](docs/coverage-engine.md) add bounded partial search outcomes,
+provider health, market reports and possible duplicate-merchant reports. Merchant changes
+use expected versions, explicit confirmation and an append-only audit. Discovery and
+templates never approve advertisers. No real network activation is claimed.
 
 ## Architecture
 

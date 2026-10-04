@@ -113,7 +113,20 @@ See [design and acceptance](docs/m4a1-market-correctness.md). No new networks ar
 See [feed operations](docs/commerce-feeds.md), [onboarding matrix](docs/merchant-programs.md)
 and [verification](docs/verification.md). Named onboarding targets are not live integrations.
 
-## M4C — Approved merchant pilot and delivery context — proposed
+## M4C — Coverage engine, CJ and safe merchant onboarding — implemented
+
+- [x] Official CJ schema audit; disabled-by-default bounded GraphQL feed adapter and fixtures.
+- [x] Pending imports, deliberate review/approval/activation, version conflicts and audit trail.
+- [x] Confirmed operator mutations, fail-closed candidates/templates and reversible disable.
+- [x] Per-item search isolation, internal outcomes, deduplication and bounded global work.
+- [x] Provider health, market/product coverage and possible duplicate-merchant diagnostics.
+- [x] Four-network strong identity/native market prices, twenty-program and shared-rate tests.
+- [x] New version/audit migration with preservation and guarded downgrade verification.
+- [ ] Real account configuration, approvals, rights review and live feed/link verification.
+
+See [coverage engine](docs/coverage-engine.md) and [CJ setup](docs/cj-setup.md).
+
+## M4D — Approved merchant pilot and delivery context — proposed
 
 - Onboard a small approved BE/DE merchant set; verify real feed completeness, quotas,
   identifiers, variants, update cadence, permissions and affiliate attribution.

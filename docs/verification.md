@@ -708,3 +708,119 @@ typing, Alembic and migration-verifier steps passed. This result was recorded on
 after fetching the completed run and its logs. M4B is merge-ready on this evidence;
 the documentation-only commit recording it must also pass the same Checks workflow.
 No merge, deployment or live merchant activation is claimed.
+
+## M4C — Coverage engine, CJ and safe merchant onboarding — 2026-10-03
+
+Baseline started from merged M4B/M4B.1 main
+`4de62c5e9ce033f7ec375294498f133aa4cb9751` on `feat/m4c-coverage-engine`:
+**583 passed, no skips, 90.51% statement coverage**, with all required gates passing.
+The four initial acceptance cases failed before implementation: stale operator version,
+per-item persistence rejection falsely marking a network unavailable, missing CJ network
+identity, and nondeterministic claims for twenty equal-due programs.
+
+The [design](m4c-design.md) records inspected existing boundaries and deliberate reuse of
+the feed/staging/catalog pipeline. [CJ setup](cj-setup.md) records the current official
+documentation and Developer Portal schema asset, audit date/hash, exact fields, pagination,
+unknown quotas and unsupported capabilities. CI needs no real publisher credentials.
+
+Final local verification: **620 passed, no skips, 90.42% statement coverage**. The 85%
+gate and coverage scope are unchanged. Ruff lint/format (195 Python files), strict mypy
+(114 source files), Alembic upgrade/check and the complete disposable migration verifier
+passed. Dedicated PostgreSQL `pricehunter_test`, Redis DB 15 and fake remote transports
+were used; the only warning remains the upstream ARQ Redis `close()` deprecation.
+The updated CJ shared-budget unit contract also passed separately: 23 CJ unit cases.
+Documentation links and diff whitespace checks passed.
+
+Acceptance includes four-network strong-GTIN matching with BE €319 / DE €299, BE watch
+market isolation, unrelated weak-title separation, commission/payout neutrality, normalized
+source timestamps during deduplication, one rejected merchant without a network outage,
+ten valid CJ products plus one malformed row through the real adapter/staging/materialization
+path, request failures preserving a completed generation, and bounded search work/errors.
+Lifecycle checks cover fail-closed candidates/templates, explicit confirmation and dry-run,
+review/approval followed by activation, idempotent imports, stale writes, UPDATE/DELETE
+rejection on the audit table, immediate tracking/catalog/affiliate revocation, and reversible
+disable requiring a new completed feed. Coverage and duplicate diagnostics are read-only.
+Twenty-program claims continue past failed merchants; distinct advertiser requests share
+one network Redis budget. The migration verifier preserves existing reviews and all earlier
+catalog/history/billing/market/FX/outbound records and exercises guarded downgrade/re-upgrade.
+
+Real Awin/TradeDoubler/CJ credentials, merchant approvals, contract reviews and live feed/link
+verification remain operator work. No real network activation, `.env` change, Amazon change,
+shipping/tax ranking, automatic merge, deployment or frontend is claimed. Hosted results
+are recorded below only after inspecting the completed run and actual job logs.
+
+**Verified hosted implementation result:** [GitHub Actions run 37122515480](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37122515480)
+completed with **success** for commit `0ed3dd8732edfeced4af894a0d46b2d1061646fb`
+on `feat/m4c-coverage-engine`. Actual job logs report **620 passed, no skips, 90.45%
+statement coverage** and the existing single upstream ARQ test warning. Dependency
+installation, Ruff lint/format, strict mypy, Alembic upgrade/check and the complete
+migration verifier all passed. The hosted measurement is separate from local 90.42%.
+This record was written only after fetching the completed run and its job logs. The
+subsequent documentation commit must also pass the unchanged Checks workflow before
+final merge-readiness is reported; no merge or deployment is performed by this task.
+
+**Verified final M4C result:** the documentation commit
+`7e875364ecb0daf8c99ca1bb2a0ac326e503ddbb` subsequently passed
+[GitHub Actions run 37123004411](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37123004411).
+The completed job logs report **620 passed, no skips, 90.45% statement coverage** and all
+required Checks steps successful. This supersedes the earlier outstanding documentation
+check; M4C.1 verification is recorded separately below.
+
+## M4C.1 — Relevance-preserving bounded search — 2026-10-04
+
+Started on `feat/m4c-coverage-engine` from verified M4C head
+`7e875364ecb0daf8c99ca1bb2a0ac326e503ddbb`. Before changing production code, five
+deterministic acceptance cases **failed**: the exact model was omitted by the early-UUID
+comparison cutoff among 100 canonical candidates; provider relevance was replaced by
+store/external-ID sorting under the persistence cap; two multi-provider model/GTIN cases
+lost strong candidates; and ordered duplicate replacement lost its useful first slot.
+The tests control canonical UUIDs explicitly rather than depending on random ordering.
+
+Provider deduplication now preserves returned order, the original raw candidate rank and
+the first listing slot, selecting content with the existing deterministic version rule.
+The reusable domain `query_evidence_rank` prioritizes validated trade identifiers,
+MPN/model, brand plus model, normalized exact/contained titles and other retrievals.
+It uses existing normalization/validation and never supplies canonical merge evidence.
+For each successfully persisted Product, search retains the best evidence across merchants,
+then provider rank and interleaved position, to select at most search_comparison_limit
+Products before comparison construction. UUIDs and commercial metadata do not choose
+this shortlist. Existing final comparison_rank, entitlement output limits, round-robin
+persistence, market/currency filtering and provider-health semantics remain in place.
+
+Added **35 cases**: 34 unit cases and one integration case using the actual CatalogResolver,
+PostgreSQL and counted ComparisonProduct construction. The integration case persists 100
+distinct Products/StoreOffers, gives the exact product the highest controlled UUID, builds
+only ten comparisons and returns the exact model first. Other new cases cover multi-provider
+model/GTIN survival, newest snapshot selection in both input orders, commission neutrality,
+best evidence across merchants sharing one Product, all work/output caps, equal-evidence
+provider ranks, BE/DE and currency isolation, fashion variants and invalid/conflicting IDs.
+Existing partial-failure, health, feed, strong-GTIN, variant, market and lifecycle regressions
+remain part of the unchanged full suite.
+
+Final local verification: **655 passed, no skips, 90.49% statement coverage** (148.84s).
+The unchanged 85% gate passed. Ruff lint/format (198 Python files), strict mypy (114 source
+files), Alembic upgrade/check and the full disposable migration verifier passed. The only
+warning is the existing upstream ARQ Redis close() deprecation. Dedicated PostgreSQL
+pricehunter_test and Redis DB 15 were used; no live credentials or merchant APIs are needed.
+Diff whitespace validation passed. No schema, dependency or configuration changes were
+required. The two-stage ranking and hard-budget limits are documented in
+[coverage-engine.md](coverage-engine.md). Hosted evidence is recorded only after fetching
+the completed Checks run and actual job logs.
+
+**Verified hosted M4C.1 result:** [GitHub Actions run 37167926855](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37167926855)
+completed with **success** for commit `1af1a2610b6a61028d9bd6bc9394e8e91b777141`
+on `feat/m4c-coverage-engine`. Actual job logs report **655 passed, no skips, 90.48%
+statement coverage** (307.47s), with the existing single upstream ARQ warning. All required
+dependency, Ruff, mypy, Alembic and migration-verifier steps succeeded. The hosted coverage
+measurement is separate from local 90.49%. This record was written after fetching the
+completed workflow, all job step conclusions and actual logs.
+
+**Verified final M4C.1 result:** the documentation commit
+`193d4a37ca7e977001c84586462a3b6ecf5ddac5` subsequently passed
+[GitHub Actions run 37168328318](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37168328318).
+Actual completed job logs report **655 passed, no skips, 90.49% statement coverage**
+(385.53s), with the existing single upstream ARQ warning. Every required Checks step
+completed successfully. This records the final M4C.1 result separately from the
+implementation run's 90.48% measurement.
+The completed run, all step conclusions and actual logs were rechecked before adding
+this record; M4C.1 satisfies its hosted verification requirements.

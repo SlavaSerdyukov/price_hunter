@@ -1,6 +1,6 @@
 # Commerce feeds
 
-M4B keeps one catalog pipeline. FeedSource handles remote formats and yields bounded
+M4B/M4C keep one catalog pipeline. FeedSource handles remote formats and yields bounded
 FeedProductData streams. FeedStoreProvider searches local PostgreSQL staging and passes
 selected ProductOfferData through CatalogResolver and SnapshotUpdater. Affiliate behavior
 is metadata/policy; the unused AffiliateProvider hierarchy was removed.
@@ -98,7 +98,7 @@ uv run python -m pricehunter.apps.admin merchant-programs
 uv run python -m pricehunter.apps.admin feed-list awin
 uv run python -m pricehunter.apps.admin merchant-program-check PROGRAM_UUID
 uv run python -m pricehunter.apps.admin feed-sync PROGRAM_UUID --dry-run
-uv run python -m pricehunter.apps.admin feed-sync PROGRAM_UUID
+uv run python -m pricehunter.apps.admin feed-sync PROGRAM_UUID --confirm
 uv run python -m pricehunter.apps.admin feed-status PROGRAM_UUID
 uv run python -m pricehunter.apps.admin feed-diagnostics PROGRAM_UUID
 uv run python -m pricehunter.apps.admin feed-search PROGRAM_UUID "Sony WH-1000XM6"
@@ -107,3 +107,17 @@ uv run python -m pricehunter.apps.admin feed-search PROGRAM_UUID "Sony WH-1000XM
 See [merchant onboarding](merchant-programs.md), [Awin](awin-setup.md),
 [TradeDoubler](tradedoubler-setup.md), [design](m4b-design.md) and
 [verification](verification.md). Fixtures do not establish live retailer coverage.
+
+## M4C operations
+
+CJ uses this same pipeline; see [the official audit and setup](cj-setup.md). All three
+network adapters default disabled and work in CI with fake HTTP only. Onboarding now
+creates pending programs, with explicit review/approval and activation commands, optimistic
+versions, reasons and append-only audit. Feed reference changes clear existing approval;
+disable invalidates cached presence while retaining canonical IDs/history. See
+[merchant commands](merchant-programs.md).
+
+[Coverage diagnostics](coverage-engine.md) distinguish retained materialized data from
+currently eligible coverage and report partial search outcomes without false network
+outages. Claims use stable due-time/UUID order; network request pacing is shared by every
+program/page. Products still require strong matching evidence and native market ranking.

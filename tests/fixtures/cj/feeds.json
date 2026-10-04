@@ -1,0 +1,21 @@
+{
+  "data": {
+    "shoppingProductFeeds": {
+      "resultList": [
+        {
+          "adId": "501",
+          "advertiserId": "101",
+          "advertiserName": "Example shop",
+          "advertiserCountry": "DE",
+          "currency": "EUR",
+          "language": "en",
+          "lastUpdated": "2026-10-01T10:00:00Z",
+          "productCount": 1,
+          "feedName": "Electronics"
+        }
+      ],
+      "count": 1,
+      "totalCount": 1
+    }
+  }
+}

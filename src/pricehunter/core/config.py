@@ -165,6 +165,14 @@ class Settings(BaseSettings):
     feed_max_record_bytes: int = Field(131072, ge=1024, le=1_000_000)
     feed_page_size: int = Field(500, ge=1, le=1000)
     feed_max_pages: int = Field(2000, ge=1)
+    cj_enabled: bool = False
+    cj_api_token: SecretStr = SecretStr("")
+    cj_company_id: str = Field(default="", pattern=r"^(?:[0-9]{1,30})?$")
+    cj_website_id: str = Field(default="", pattern=r"^(?:[0-9]{1,30})?$")
+    search_provider_candidate_limit: int = Field(100, ge=1, le=200)
+    search_persistence_limit: int = Field(200, ge=1, le=1000)
+    search_comparison_limit: int = Field(100, ge=1, le=200)
+    search_error_limit: int = Field(20, ge=1, le=100)
 
     def data_policy(self, provider: str) -> ProviderDataPolicy:
         if provider == "mock":
@@ -173,6 +181,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_safety(self) -> "Settings":
+        if self.cj_enabled and not (
+            self.cj_api_token.get_secret_value().strip()
+            and self.cj_company_id
+            and self.cj_website_id
+        ):
+            raise ValueError("CJ requires CJ_API_TOKEN, CJ_COMPANY_ID and CJ_WEBSITE_ID (PID)")
         if "default" not in self.offer_freshness_seconds:
             raise ValueError("OFFER_FRESHNESS_SECONDS requires a default policy")
         if set(self.discovery_plan_seconds) != {"free", "pro", "power"}:
