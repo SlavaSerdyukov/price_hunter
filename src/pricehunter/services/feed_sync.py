@@ -27,12 +27,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricehunter.core.config import Settings
 from pricehunter.db.base import utcnow
-from pricehunter.db.models import FeedPendingItem, FeedSyncState, MerchantFeedItem, MerchantProgram
+from pricehunter.db.models import (
+    FeedPendingItem,
+    FeedPublicationAudit,
+    FeedSyncState,
+    MerchantFeedItem,
+    MerchantProgram,
+)
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.feeds import FeedError, FeedProductData, FeedReport, RejectedFeedRow
 from pricehunter.domain.products import model_code, normalized
 from pricehunter.providers.feeds.base import FeedSource
 from pricehunter.services.feed_materialization import FeedMaterializationService
+from pricehunter.services.feed_quality import FeedQualityEvaluator, version_digest
 from pricehunter.services.policy_resolver import PolicyResolver
 from pricehunter.services.product_service import ProductService
 
@@ -42,6 +49,7 @@ class FeedSyncService:
         self, sessions: SessionFactory, settings: Settings, products: ProductService
     ) -> None:
         self.sessions, self.settings, self.products = sessions, settings, products
+        self.quality = FeedQualityEvaluator(settings)
 
     def _next_sync_at(self, program: MerchantProgram, confirmed_at: datetime) -> datetime:
         ttl = PolicyResolver(self.settings).program(program).max_cache_seconds
@@ -114,12 +122,19 @@ class FeedSyncService:
         *,
         dry_run: bool = False,
         token: UUID | None = None,
+        allow_shrink: bool = False,
+        reason: str = "",
+        confirm: bool = False,
     ) -> FeedReport:
+        if allow_shrink and (not confirm or dry_run or not reason.strip() or len(reason) > 500):
+            raise ValueError("Shrink override requires --confirm and a reason of 1..500 characters")
         async with self.sessions() as session:
             program = await session.get(MerchantProgram, program_id)
             if program is None or source.name != program.network:
                 raise FeedError("unknown_program")
             PolicyResolver(self.settings).program(program).require("catalog_persistence_allowed")
+            if program.feed_mode != "full":
+                raise FeedError("unsupported_feed_mode")
         if dry_run:
             return await self._dry_run(program, source)
         if token is None:
@@ -139,7 +154,7 @@ class FeedSyncService:
         log.info("feed_sync_started")
         try:
             async with self._heartbeat(program_id, token):
-                version = await source.source_version(program)
+                version = version_digest(await source.source_version(program))
                 async with self.sessions() as session:
                     state = await session.get(FeedSyncState, program_id)
                     current_program = await session.get(MerchantProgram, program_id)
@@ -174,7 +189,7 @@ class FeedSyncService:
                         self._count(report, item, program)
                         if isinstance(item, RejectedFeedRow):
                             if report.invalid_rows <= 10:
-                                log.info("feed_item_rejected", code=item.code)
+                                log.info("feed_item_rejected", code="invalid_product")
                             continue
                         batch.append(self._pending(program_id, token, item))
                         if len(batch) >= self.settings.feed_batch_size:
@@ -182,7 +197,7 @@ class FeedSyncService:
                             batch = []
                     if batch:
                         await self._write(program_id, token, batch, report)
-                    if version != await source.source_version(program):
+                    if version != version_digest(await source.source_version(program)):
                         raise FeedError("source_changed_during_sync")
             if unchanged:
                 async with self.sessions.begin() as session:
@@ -193,7 +208,9 @@ class FeedSyncService:
                     assert current_program is not None and state.last_success_at is not None
                     state.next_sync_at = self._next_sync_at(current_program, state.last_success_at)
                 return FeedReport.model_validate(state.report)
-            await self._complete(program, token, version, report)
+            await self._complete(
+                program, token, version, report, allow_shrink=allow_shrink, reason=reason
+            )
             log.info("feed_generation_completed", rows=report.valid_rows)
         except BaseException as exc:
             async with self.sessions.begin() as session:
@@ -202,10 +219,31 @@ class FeedSyncService:
                     state.failure_count += 1
                     state.last_failure_at = utcnow()
                     state.error_code = exc.code if isinstance(exc, FeedError) else "sync_failed"
+                    report.failure_kind = (
+                        "publication_quality_failed"
+                        if state.error_code.startswith("quality_")
+                        else "network_failed"
+                        if state.error_code.startswith("http_")
+                        or state.error_code == "transport_error"
+                        else "technical_validation_failed"
+                    )
+                    state.rejected_report = {
+                        "candidate_generation": state.generation + 1,
+                        "previous_rows": state.row_count,
+                        "rejected_at": utcnow().isoformat(),
+                        "error_code": state.error_code,
+                        "report": report.model_dump(mode="json"),
+                    }
                     state.status, state.lease_token, state.lease_until = "failed", None, None
                     state.next_sync_at = utcnow() + timedelta(
                         seconds=min(86400, 300 * 2 ** min(state.failure_count, 8))
                     )
+                await session.execute(
+                    delete(FeedPendingItem).where(
+                        FeedPendingItem.merchant_program_id == program_id,
+                        FeedPendingItem.attempt == token,
+                    )
+                )
             log.warning(
                 "feed_sync_failed", code=exc.code if isinstance(exc, FeedError) else "sync_failed"
             )
@@ -217,21 +255,7 @@ class FeedSyncService:
     def _count(
         self, report: FeedReport, item: FeedProductData | RejectedFeedRow, program: MerchantProgram
     ) -> None:
-        report.rows_parsed += 1
-        if report.rows_parsed > self.settings.feed_max_rows:
-            raise FeedError("row_limit")
-        if isinstance(item, RejectedFeedRow):
-            report.invalid_rows += 1
-            return
-        if item.currency != program.currency:
-            raise FeedError("wrong_currency")
-        if item.source_updated_at and item.source_updated_at > utcnow():
-            raise FeedError("future_source_version")
-        report.valid_rows += 1
-        report.identifier_coverage += bool(item.gtin or item.ean or item.upc or item.mpn)
-        report.variant_coverage += bool(item.variant)
-        report.availability_coverage += item.availability != "unknown"
-        report.currencies[item.currency] = report.currencies.get(item.currency, 0) + 1
+        self.quality.count(report, item, program)
 
     @staticmethod
     def _pending(program_id: UUID, token: UUID, item: FeedProductData) -> dict[str, Any]:
@@ -276,11 +300,36 @@ class FeedSyncService:
                 raise FeedError("conflicting_duplicate")
 
     async def _complete(
-        self, program: MerchantProgram, token: UUID, version: str | None, report: FeedReport
+        self,
+        program: MerchantProgram,
+        token: UUID,
+        version: str | None,
+        report: FeedReport,
+        *,
+        allow_shrink: bool = False,
+        reason: str = "",
     ) -> None:
         p, item = FeedPendingItem, MerchantFeedItem
         async with self.sessions.begin() as session:
             state = await self._fence(session, program.id, token)
+            overridden = self.quality.evaluate(
+                report,
+                previous_rows=state.row_count if state.last_success_at else 0,
+                previous_report=state.report,
+                allow_shrink=allow_shrink,
+            )
+            if overridden:
+                session.add(
+                    FeedPublicationAudit(
+                        merchant_program_id=program.id,
+                        generation=state.generation + 1,
+                        previous_rows=state.row_count,
+                        candidate_rows=report.valid_rows - report.duplicates,
+                        invalid_rows=report.invalid_rows,
+                        guard="quality_shrink",
+                        reason=reason.strip(),
+                    )
+                )
             if report.valid_rows >= 1000:
                 # Bulk staging can arrive before autovacuum updates statistics. Stale
                 # tiny-table estimates otherwise select quadratic nested-loop plans.
@@ -395,11 +444,12 @@ class FeedSyncService:
 
     async def _dry_run(self, program: MerchantProgram, source: FeedSource) -> FeedReport:
         report = FeedReport()
-        version = await source.source_version(program)
+        version = version_digest(await source.source_version(program))
         with tempfile.TemporaryDirectory(prefix="pricehunter-feed-") as directory:
             scratch = sqlite3.connect(Path(directory) / "dry-run.sqlite")
             try:
                 scratch.execute("CREATE TABLE items (id TEXT PRIMARY KEY, fingerprint TEXT)")
+                scratch.execute("PRAGMA cache_size=-1024")
                 async for item in source.stream_items(program):
                     self._count(report, item, program)
                     if isinstance(item, RejectedFeedRow):
@@ -446,10 +496,14 @@ class FeedSyncService:
                         )
                     )
                     report.would_deactivate = int(active or 0) - present_active
+                    state = await session.get(FeedSyncState, program.id)
+                    previous_rows = state.row_count if state and state.last_success_at else 0
+                    previous_report = state.report if state else {}
             finally:
                 scratch.close()
-        if version != await source.source_version(program):
+        if version != version_digest(await source.source_version(program)):
             raise FeedError("source_changed_during_sync")
+        self.quality.evaluate(report, previous_rows=previous_rows, previous_report=previous_report)
         return report
 
     async def retain(self) -> int:

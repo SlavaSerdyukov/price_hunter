@@ -36,6 +36,7 @@ def feed_clock(monkeypatch):
     clock = Clock()
     for name in (
         "services.feed_sync",
+        "services.feed_quality",
         "services.feed_materialization",
         "services.policy_resolver",
         "services.snapshot_ingestion",

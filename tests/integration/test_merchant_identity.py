@@ -190,7 +190,6 @@ async def retailers(container, *, policy_a=SYNTHETIC_POLICY):
             )
         )
         p = await programs.review(p.id, policy, expected_version=p.version, reason="Fixture review")
-        p = await programs.activate(p.id, expected_version=p.version, reason="Fixture activation")
         affiliate = {
             "awin": "https://www.awin1.com/cread.php?source=awin",
             "cj": "https://www.kqzyfj.com/click-source-cj",
@@ -207,6 +206,8 @@ async def retailers(container, *, policy_a=SYNTHETIC_POLICY):
             ],
         )
         feed.name = network
+        await container.feed_validation.run(p.id, feed)
+        p = await programs.activate(p.id, expected_version=p.version, reason="Fixture activation")
         await sync.run(p.id, feed)
         provider = FeedStoreProvider(network, container.sessions, container.settings)
         data = (await provider.search("Sony WH-1000XM6", country="BE"))[0]

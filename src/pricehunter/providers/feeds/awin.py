@@ -7,6 +7,7 @@ from pydantic import SecretStr, ValidationError
 from pricehunter.db.models import MerchantProgram
 from pricehunter.domain.errors import PriceHunterError
 from pricehunter.domain.feeds import FeedError, FeedProductData, FeedReference, RejectedFeedRow
+from pricehunter.domain.markets import validate_country
 from pricehunter.providers.feeds.base import FeedSource
 from pricehunter.providers.feeds.normalization import stock, timestamp, validate_links
 from pricehunter.providers.feeds.streaming import FeedHTTP, csv_rows
@@ -97,6 +98,14 @@ class AwinFeedSource(FeedSource):
         )
         if reference is None:
             raise FeedError("feed_not_authorized")
+        # Primary Region is catalog metadata, unlike CJ's advertiser domicile.
+        if reference.market_country:
+            try:
+                region = validate_country(reference.market_country)
+            except ValueError:
+                region = None  # Region labels such as EU are not country claims.
+            if region is not None and region != program.market_country:
+                raise FeedError("wrong_market")
         return reference.version
 
     async def stream_items(

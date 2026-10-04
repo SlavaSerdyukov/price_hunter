@@ -18,6 +18,9 @@ async def setup_feeds(container):
     from pricehunter.services.merchant_programs import MerchantProgramService
 
     container.settings.awin_enabled = True
+    # Explicitly exercise legacy empty generation and tolerated malformed-row cases.
+    container.settings.feed_min_valid_rows = 0
+    container.settings.feed_max_invalid_ratio = Decimal("0.5")
     provider = FeedStoreProvider("awin", container.sessions, container.settings)
     container.registry.providers = {"awin": provider}
     programs = MerchantProgramService(container.sessions, container.settings)
@@ -64,9 +67,25 @@ async def program(service, merchant, country="BE", policy=SYNTHETIC_POLICY):
         expected_version=pending.version,
         reason="Synthetic fixture policy review",
     )
+    await validate_fixture(service, reviewed)
     return await service.activate(
         reviewed.id, expected_version=reviewed.version, reason="Synthetic fixture activation"
     )
+
+
+async def validate_fixture(service, p):
+    from pricehunter.providers.feeds.base import FeedSource
+    from pricehunter.services.feed_validation import FeedValidationService
+
+    affiliate = {
+        "awin": "https://www.awin1.com/cread.php?test=fixture",
+        "cj": "https://www.kqzyfj.com/fixture",
+        "tradedoubler": "https://clk.tradedoubler.com/fixture",
+    }[p.network]
+    feed = source(FeedSource, [row(affiliate_url=affiliate, currency=p.currency)])
+    feed.name = p.network
+    report = await FeedValidationService(service.sessions, service.settings).run(p.id, feed)
+    assert report.status == "passed", report.error_code
 
 
 def source(base, rows, fail=False):

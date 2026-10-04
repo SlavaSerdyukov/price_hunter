@@ -141,7 +141,7 @@ async def main():
                     table: [
                         dict(r)
                         for r in (
-                            await c.execute(text(f"SELECT * FROM {table} ORDER BY id"))
+                            await c.execute(text(f"SELECT * FROM {table} ORDER BY 1"))
                         ).mappings()
                     ]
                     for table in (
@@ -329,6 +329,56 @@ async def main():
                 "payment_events",
             )
         )
+        migrate("upgrade", "6bde2194a7c0")
+        await engine.dispose()
+        m4d_tables = tuple(merchant_baseline) + (
+            "merchants",
+            "merchant_audits",
+            "merchant_program_audits",
+            "feed_sync_states",
+            "merchant_feed_items",
+            "fx_rates",
+        )
+        m4d_before = await snapshot(m4d_tables)
+        migrate("upgrade", "head")
+        await engine.dispose()
+        m4e_after = await snapshot(m4d_tables)
+        for table, rows in m4d_before.items():
+            for before, current in zip(rows, m4e_after[table], strict=True):
+                assert before == {key: current[key] for key in before}, table
+        async with engine.begin() as c:
+            assert await c.scalar(text("SELECT count(*) FROM merchant_program_validations")) == 0
+            assert await c.scalar(text("SELECT count(*) FROM feed_publication_audits")) == 0
+            await c.execute(
+                text("""INSERT INTO merchant_program_validations
+                (id,merchant_program_id,status,configuration_fingerprint,started_at,completed_at,
+                valid_rows,invalid_rows,duplicate_rows,sampled_rows,warnings,metrics,adapter_revision)
+                VALUES (gen_random_uuid(),:p,'passed',repeat('a',64),now(),now(),
+                    1,0,0,0,'[]','{}','migration-fixture')"""),
+                {"p": legacy_program_id},
+            )
+            await c.execute(
+                text("""INSERT INTO feed_publication_audits
+                (id,merchant_program_id,generation,previous_rows,candidate_rows,invalid_rows,guard,reason)
+                VALUES (gen_random_uuid(),:p,1,1000,10,0,'quality_shrink','Synthetic override')"""),
+                {"p": legacy_program_id},
+            )
+        for table in ("merchant_program_validations", "feed_publication_audits"):
+            for operation in (f"UPDATE {table} SET created_at=now()", f"DELETE FROM {table}"):
+                try:
+                    async with engine.begin() as c:
+                        await c.execute(text(operation))
+                except Exception as exc:
+                    assert "append-only" in str(exc)
+                else:
+                    raise AssertionError("Pilot evidence mutation was allowed")
+        migrate(
+            "downgrade", "6bde2194a7c0", success=False, contains="Export merchant pilot evidence"
+        )
+        # Export only synthetic evidence in this disposable scratch database.
+        async with engine.begin() as c:
+            await c.execute(text("TRUNCATE merchant_program_validations, feed_publication_audits"))
+        migrate("downgrade", "6bde2194a7c0")
         migrate("upgrade", "head")
         await engine.dispose()
         merchant_after = await snapshot(tuple(merchant_baseline))
@@ -602,7 +652,7 @@ async def main():
         finally:
             await container.close()
         print(
-            "PASS: M3A -> real M3B -> M4A -> M4A.1 -> M4B -> M4C -> M4D; "
+            "PASS: M3A -> real M3B -> M4A -> M4A.1 -> M4B -> M4C -> M4D -> M4E; "
             "users/products/identifiers/stores/offers/"
             "observations/trackers/watches/discoveries/best states/history/outbox/"
             "subscriptions/payments/FX/outbound clicks preserved; "
@@ -612,6 +662,8 @@ async def main():
             "canonical merchant 1:1 backfill and source IDs preserved; "
             "pre-link BE/DE customer comparisons equivalent; "
             "canonical append-only audit and used-identity downgrade guard; "
+            "M4D data/audits preserved; immutable pilot reports/override audit; "
+            "evidence downgrade guard; "
             "guarded downgrade/re-upgrade; schema check"
         )
     finally:

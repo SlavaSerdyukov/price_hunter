@@ -6,10 +6,10 @@ from dataclasses import asdict
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from pricehunter.core.container import Container
-from pricehunter.db.models import FeedSyncState, MerchantFeedItem, MerchantProgram
+from pricehunter.db.models import MerchantProgram
 from pricehunter.domain.feeds import (
     FEED_NETWORKS,
     FeedError,
@@ -18,6 +18,7 @@ from pricehunter.domain.feeds import (
 )
 from pricehunter.domain.provider_policy import ProviderDataPolicy
 from pricehunter.providers.feeds.local import FeedStoreProvider
+from pricehunter.services.feed_validation import validation_summary
 from pricehunter.services.policy_resolver import PolicyResolver
 
 MUTATIONS = {
@@ -43,6 +44,9 @@ COMMANDS = MUTATIONS | {
     "coverage-report",
     "coverage-product",
     "duplicate-merchants",
+    "merchant-program-validate",
+    "merchant-program-validations",
+    "merchant-program-validation-show",
 }
 
 
@@ -88,13 +92,19 @@ def add_commands(commands: argparse._SubParsersAction) -> None:  # type: ignore[
         "feed-sync",
         "feed-diagnostics",
         "feed-search",
+        "merchant-program-validate",
+        "merchant-program-validations",
     ):
         command = commands.add_parser(name)
         command.add_argument("program", type=UUID)
         if name == "feed-sync":
             confirmation(command)
+            command.add_argument("--allow-shrink", action="store_true")
+            command.add_argument("--reason", default="")
         elif name == "feed-search":
             command.add_argument("query")
+    validation = commands.add_parser("merchant-program-validation-show")
+    validation.add_argument("validation", type=UUID)
     commands.add_parser(
         "coverage-report", help="Read-only market and network coverage, no customer data"
     )
@@ -247,13 +257,26 @@ async def run(container: Container, args: argparse.Namespace) -> None:
                 output = matched[0].template()
     elif args.command == "coverage-report":
         output = await container.coverage.report()
+    elif args.command == "merchant-program-validation-show":
+        output = await container.feed_validation.show(args.validation)
     elif args.command == "coverage-product":
         output = await container.coverage.product(args.query, args.country)
     elif args.command == "duplicate-merchants":
         output = await container.coverage.duplicate_merchants(args.limit)
     else:
         program = await container.merchant_programs.get(args.program)
-        if args.command == "merchant-program-history":
+        if args.command == "merchant-program-validate":
+            source = container.feed_sources.get(program.network) or container.create_feed_source(
+                program.network
+            )
+            evidence = await container.feed_validation.run(program.id, source)
+            output = validation_summary(evidence, program)
+            if evidence.status == "failed":
+                emit(output)
+                raise FeedError(evidence.error_code or "technical_validation_failed")
+        elif args.command == "merchant-program-validations":
+            output = await container.feed_validation.history(program.id)
+        elif args.command == "merchant-program-history":
             output = [
                 {
                     "action": a.action,
@@ -266,37 +289,7 @@ async def run(container: Container, args: argparse.Namespace) -> None:
                 for a in await container.merchant_programs.history(program.id)
             ]
         elif args.command in {"feed-status", "feed-diagnostics"}:
-            async with container.sessions() as session:
-                state = await session.get(FeedSyncState, program.id)
-                active = await session.scalar(
-                    select(func.count())
-                    .select_from(MerchantFeedItem)
-                    .where(
-                        MerchantFeedItem.merchant_program_id == program.id,
-                        MerchantFeedItem.active.is_(True),
-                    )
-                )
-                output = {
-                    "program_id": str(program.id),
-                    "active_rows": active,
-                    **(
-                        {
-                            key: getattr(state, key)
-                            for key in (
-                                "status",
-                                "generation",
-                                "row_count",
-                                "last_success_at",
-                                "next_sync_at",
-                                "failure_count",
-                                "error_code",
-                                "report",
-                            )
-                        }
-                        if state
-                        else {}
-                    ),
-                }
+            output = await container.coverage.program(program.id)
         elif args.command == "feed-search":
             results = await FeedStoreProvider(
                 program.network, container.sessions, container.settings
@@ -341,6 +334,13 @@ async def run(container: Container, args: argparse.Namespace) -> None:
                 )
                 require_confirmation(args)
                 output = (
-                    await container.feed_sync.run(program.id, enabled_source, dry_run=args.dry_run)
+                    await container.feed_sync.run(
+                        program.id,
+                        enabled_source,
+                        dry_run=args.dry_run,
+                        allow_shrink=getattr(args, "allow_shrink", False),
+                        reason=getattr(args, "reason", ""),
+                        confirm=getattr(args, "confirm", False),
+                    )
                 ).model_dump(mode="json")
     emit(output)
