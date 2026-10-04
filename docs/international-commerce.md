@@ -1,5 +1,10 @@
 # International commerce (M4A)
 
+M5B now introduces separate [delivery context](delivery-context.md): shopping market
+does not imply destination eligibility. Item price != delivered total; unknown cost
+is not zero; reference FX does not authorize landed-cost ranking. Existing watches
+stay in their original markets and retain native item-price semantics.
+
 M4A extends the existing comparison/discovery engine. It does not change Stars
 billing, deterministic matching or authoritative native-currency price ranking.
 Implementation decisions and the pre-change baseline are in [m4a-design.md](m4a-design.md).
@@ -33,7 +38,7 @@ eligibility. Comparison/history now filter by market first, then group by native
 currency. BE/EUR and DE/EUR cannot supply each other's best price, schedule or alert.
 Authenticated search, product, offers, history and refresh accept validated `country`;
 explicit country overrides the saved profile, and neither means `country_required`.
-StoreOffer has optional delivery_country, postal_code, shipping_price and tax
+M4A introduced optional delivery_country, postal_code, shipping_price and tax
 columns for M4B; M4A does not populate an invented delivered total.
 
 ## Provider data policy
@@ -156,6 +161,6 @@ export/reconcile merchant data before considering a downgrade. Canonical history
 cascaded away by staging cleanup.
 
 Both integrations remain disabled by default. See [onboarding](merchant-programs.md);
-fixtures do not establish advertiser approval, live access or attribution. Proposed M4C
-starts with an approved merchant pilot, then destination input and documented shipping/tax
-semantics. Unknown costs stay unknown; native ranking and billing remain unchanged.
+fixtures do not establish advertiser approval, live access or attribution. M5B now supplies
+separate destination settings and delivered-cost logic; approved real provider evidence
+remains future pilot work. Unknown costs stay unknown; native ranking and billing remain unchanged.

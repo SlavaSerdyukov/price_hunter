@@ -12,6 +12,7 @@ class Capability(StrEnum):
     REFRESH = "refresh"
     SNAPSHOT_REFRESH = "snapshot_refresh"
     VARIANTS = "variants"
+    DELIVERY_QUOTE = "delivery_quote"
 
 
 @dataclass(frozen=True)

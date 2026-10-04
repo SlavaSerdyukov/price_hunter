@@ -7,8 +7,9 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from pricehunter.domain.delivery import AncillaryMoney, DeliveryScope
 from pricehunter.domain.markets import CountryCode
 from pricehunter.domain.products import Availability, Money, ProductOfferData
 from pricehunter.domain.provider_policy import ProviderDataPolicy
@@ -137,12 +138,21 @@ class FeedProductData(BaseModel):
     original_price: Money | None = None
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     availability: Availability = Availability.UNKNOWN
-    delivery_cost: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=4)
+    delivery_cost: AncillaryMoney | None = None
+    delivery_country: CountryCode | None = None
+    delivery_scope: DeliveryScope = DeliveryScope.UNKNOWN
+    delivery_currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     affiliate_url: str = Field(min_length=1, max_length=2048)
     direct_url: str | None = Field(default=None, max_length=2048)
     image_url: str | None = Field(default=None, max_length=2048)
     source_updated_at: AwareDatetime | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("delivery_cost", mode="before")
+    @classmethod
+    def stored_delivery_decimal(cls, value: object) -> object:
+        # Staged JSON encodes Decimal as strings. Wire adapters already parse Decimal.
+        return Decimal(value) if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def validate_product(self) -> "FeedProductData":
@@ -172,11 +182,12 @@ class FeedProductData(BaseModel):
         market: str,
         generation: int = 0,
     ) -> ProductOfferData:
-        fields = self.model_dump(exclude={"parent_external_id", "delivery_cost"})
+        fields = self.model_dump(
+            exclude={"parent_external_id", "delivery_cost", "delivery_currency"}
+        )
         fields["metadata"] = {
             **self.metadata,
             "feed_parent_id": self.parent_external_id,
-            "delivery_cost": str(self.delivery_cost) if self.delivery_cost is not None else None,
         }
         return ProductOfferData(
             **fields,
@@ -189,6 +200,12 @@ class FeedProductData(BaseModel):
             affiliate_network=network,
             merchant_program_id=program_id,
             feed_generation=generation,
+            shipping_price=self.delivery_cost
+            if self.delivery_currency in (None, self.currency)
+            else None,
+            delivery_currency=self.delivery_currency
+            if self.delivery_currency == self.currency
+            else None,
         )
 
     def fingerprint(self) -> str:

@@ -107,6 +107,11 @@ def settings_keyboard(language: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             *[languages[i : i + 2] for i in range(0, len(languages), 2)],
             [button(language, key, "setting", key) for key in ("country", "currency", "timezone")],
+            [
+                button(language, "delivery_country", "setting", "delivery_country"),
+                button(language, "delivery_postal", "setting", "delivery_postal"),
+            ],
+            [button(language, "delivery_clear", "dclear")],
             [button(language, "back", "menu")],
         ]
     )

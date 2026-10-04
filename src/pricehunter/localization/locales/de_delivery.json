@@ -1,0 +1,17 @@
+{
+  "settings_text": "<b>Einstellungen</b>\nSprache: {language}\nEinkaufsmarkt: {country}\nLieferung nach: {delivery}\nBevorzugte Währung: {currency}\nZeitzone: {timezone}\n\nDie Lieferadresse ändert bestehende Preisbeobachtungen nicht.",
+  "country": "Einkaufsmarkt",
+  "comparison_best_label": "Bester Artikelpreis:",
+  "delivery_country": "Lieferland",
+  "delivery_postal": "Postleitzahl",
+  "delivery_clear": "Lieferziel löschen",
+  "delivery_country_prompt": "Wähle das Lieferland oder sende dessen ISO-Code mit zwei Buchstaben. Mit - löschen. Markt und Preisbeobachtungen bleiben unverändert.",
+  "delivery_postal_prompt": "Sende eine optionale Postleitzahl (höchstens 20 Zeichen) oder - zum Löschen. Lege zuerst das Lieferland fest.",
+  "invalid_delivery_context": "Lege in /settings ein Lieferland fest, bevor du eine Postleitzahl oder den Vergleich mit Versand nutzt.",
+  "delivery_compare": "Gesamtpreis vergleichen",
+  "delivery_quote": "Versandkosten anfragen",
+  "delivery_heading": "<b>Geliefert nach {country}</b>",
+  "delivery_best": "{store}: Artikel {item} + Versand {shipping} → Gesamtpreis {total} (gegebenenfalls einschließlich zusätzlicher Steuern).",
+  "delivery_open": "Lieferangebot öffnen",
+  "delivery_incomplete": "Der Gesamtpreis ist für einige Shops nicht verfügbar. Unbekannte Versandkosten oder Steuern sind nicht null."
+}

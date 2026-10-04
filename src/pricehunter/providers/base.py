@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+from pricehunter.domain.delivery import DeliveryContext, DeliveryOfferReference, DeliveryQuoteData
 from pricehunter.domain.discovery import Capability, DiscoveryQuery
 from pricehunter.domain.products import ProductOfferData
 
@@ -23,6 +24,15 @@ class StoreProvider(ABC):
     discovery_countries: frozenset[str] = frozenset()
     # Multi-page APIs account for every HTTP request internally using the shared limiter.
     manages_request_limits: bool = False
+    # Safe default for future implementations: request-scoped quotes only. A
+    # reviewed adapter must explicitly opt in, in addition to deployment policy.
+    delivery_quote_cacheable: bool = False
+
+    async def quote_delivery(
+        self, offer: DeliveryOfferReference, context: DeliveryContext
+    ) -> DeliveryQuoteData | None:
+        """Optional authoritative destination operation; no generic API is assumed."""
+        return None
 
     async def discover(self, query: DiscoveryQuery) -> list[ProductOfferData]:
         return await self.search(query.text, country=query.country, currency=query.currency)

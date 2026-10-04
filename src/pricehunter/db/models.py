@@ -61,11 +61,19 @@ class OutboundClick(UUIDPrimaryKey, Base):
 
 class User(UUIDPrimaryKey, Timestamps, Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "delivery_postal_code IS NULL OR delivery_country IS NOT NULL",
+            name="delivery_country_required",
+        ),
+    )
     telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True)
     username: Mapped[str | None] = mapped_column(String(100))
     first_name: Mapped[str | None] = mapped_column(String(200))
     language_code: Mapped[str] = mapped_column(String(10), default="en")
     country_code: Mapped[str | None] = mapped_column(String(2))
+    delivery_country: Mapped[str | None] = mapped_column(String(2))
+    delivery_postal_code: Mapped[str | None] = mapped_column(String(20))
     preferred_currency: Mapped[str] = mapped_column(String(3), default="EUR")
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -189,9 +197,22 @@ class StoreOffer(UUIDPrimaryKey, Timestamps, Base):
         JSONB, default=dict, server_default="{}"
     )
     delivery_country: Mapped[str | None] = mapped_column(String(2))
-    postal_code: Mapped[str | None] = mapped_column(String(20))
     shipping_price: Mapped[Decimal | None] = mapped_column(MONEY)
     tax: Mapped[Decimal | None] = mapped_column(MONEY)
+    delivery_scope: Mapped[str] = mapped_column(
+        String(20), default="unknown", server_default="unknown"
+    )
+    delivery_destination_key: Mapped[str | None] = mapped_column(String(64))
+    delivery_currency: Mapped[str | None] = mapped_column(String(3))
+    tax_amount: Mapped[Decimal | None] = mapped_column(MONEY)
+    tax_status: Mapped[str] = mapped_column(String(20), default="unknown", server_default="unknown")
+    delivery_availability: Mapped[str] = mapped_column(
+        String(20), default="unknown", server_default="unknown"
+    )
+    delivery_quoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivery_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivery_item_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    delivery_total: Mapped[Decimal | None] = mapped_column(Numeric(30, 4))
     title: Mapped[str] = mapped_column(String(500))
     image_url: Mapped[str | None] = mapped_column(String(2048))
     price: Mapped[Decimal] = mapped_column(MONEY)
@@ -216,6 +237,54 @@ class StoreOffer(UUIDPrimaryKey, Timestamps, Base):
     maximum_price: Mapped[Decimal] = mapped_column(MONEY)
     total_price: Mapped[Decimal] = mapped_column(Numeric(30, 4))
     observation_count: Mapped[int] = mapped_column(BigInteger, default=1)
+
+
+class DeliveryQuote(UUIDPrimaryKey, Base):
+    """Latest bounded source/destination cache; no raw postal or history events."""
+
+    __tablename__ = "delivery_quotes"
+    __table_args__ = (
+        UniqueConstraint("offer_id", "destination_key", "scope", "currency"),
+        CheckConstraint(
+            "shipping_price IS NULL OR shipping_price >= 0", name="nonnegative_shipping"
+        ),
+        CheckConstraint("tax_amount IS NULL OR tax_amount >= 0", name="nonnegative_tax"),
+        CheckConstraint(
+            "tax_status IN ('included','additional','not_applicable','unknown')", name="tax_status"
+        ),
+        CheckConstraint(
+            "tax_status != 'additional' OR tax_amount IS NOT NULL", name="additional_tax_required"
+        ),
+        CheckConstraint("scope IN ('country','exact')", name="destination_scope"),
+        CheckConstraint(
+            "status IN ('unsupported','incomplete','stale','failed','complete')",
+            name="quote_status",
+        ),
+        CheckConstraint(
+            "expires_at > quoted_at AND expires_at <= quoted_at + interval '1 day'",
+            name="quote_interval",
+        ),
+        Index("ix_delivery_quotes_expiry", "expires_at"),
+    )
+    offer_id: Mapped[UUID] = mapped_column(
+        ForeignKey("store_offers.id", ondelete="CASCADE"), index=True
+    )
+    snapshot_key: Mapped[str] = mapped_column(String(64))
+    item_price: Mapped[Decimal] = mapped_column(MONEY)
+    offer_url: Mapped[str] = mapped_column(String(2048))
+    country: Mapped[str] = mapped_column(String(2))
+    destination_key: Mapped[str] = mapped_column(String(64))
+    scope: Mapped[str] = mapped_column(String(20))
+    currency: Mapped[str] = mapped_column(String(3))
+    shipping_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    tax_status: Mapped[str] = mapped_column(String(20))
+    tax_amount: Mapped[Decimal | None] = mapped_column(MONEY)
+    availability: Mapped[str] = mapped_column(String(20))
+    quoted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(20))
+    delivered_total: Mapped[Decimal | None] = mapped_column(Numeric(30, 4))
 
 
 class PriceObservation(UUIDPrimaryKey, Base):

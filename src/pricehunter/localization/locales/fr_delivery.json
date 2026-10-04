@@ -1,0 +1,17 @@
+{
+  "settings_text": "<b>Paramètres</b>\nLangue : {language}\nMarché d’achat : {country}\nLivraison à : {delivery}\nDevise préférée : {currency}\nFuseau horaire : {timezone}\n\nChanger la livraison ne modifie pas les suivis existants.",
+  "country": "Marché d’achat",
+  "comparison_best_label": "Meilleur prix de l’article :",
+  "delivery_country": "Pays de livraison",
+  "delivery_postal": "Code postal",
+  "delivery_clear": "Effacer la destination",
+  "delivery_country_prompt": "Choisissez le pays de livraison ou envoyez son code ISO à deux lettres. Envoyez - pour effacer. Le marché et les suivis restent inchangés.",
+  "delivery_postal_prompt": "Envoyez un code postal facultatif (20 caractères maximum), ou - pour l’effacer. Définissez d’abord le pays de livraison.",
+  "invalid_delivery_context": "Définissez un pays de livraison dans /settings avant d’utiliser un code postal ou la comparaison avec livraison.",
+  "delivery_compare": "Comparer avec livraison",
+  "delivery_quote": "Demander les frais de livraison",
+  "delivery_heading": "<b>Livré en {country}</b>",
+  "delivery_best": "{store} : article {item} + livraison {shipping} → total livré {total} (taxes supplémentaires incluses, le cas échéant).",
+  "delivery_open": "Ouvrir l’offre livrée",
+  "delivery_incomplete": "Le coût total est indisponible pour certaines boutiques. Des frais de livraison ou taxes inconnus ne valent pas zéro."
+}

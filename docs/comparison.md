@@ -1,4 +1,10 @@
-# Product comparison — M3A through M4D
+# Product comparison — M3A through M5B
+
+M5B adds an explicit [delivered view](delivery-context.md) with its own source
+representatives and native-currency winner/spread/count. Item price != delivered total;
+market != destination; unknown != zero; reference FX != landed-cost ranking. Existing
+watch/history alerts remain item-price based. A delivered link and all costs come
+from the same underlying source; ordinary comparison never requests shipping.
 
 A `Product` is one canonical purchasable product/variant. A `StoreOffer` is a listing
 in a persisted `Store` merchant/marketplace and one catalog market. `Tracker` watches
@@ -222,6 +228,6 @@ and paginated offer bodies.
 Operator diagnostics and read-only duplicate candidates are available; merging is deferred
 until audited identity redirects and watch/outbox/history reconciliation are designed.
 See [operations and limitations](discovery.md). [M4A](international-commerce.md) adds
-durable markets, affiliate links and timestamped reference FX. M4B should add confirmed
+durable markets, affiliate links and timestamped reference FX. M5B adds explicit
 delivery/shipping/tax context without weakening native-currency comparisons. Amazon activation
 retains its separate approval gate.

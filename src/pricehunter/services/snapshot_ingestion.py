@@ -84,6 +84,8 @@ class SnapshotUpdater:
             "sku",
         ):
             setattr(offer, field, getattr(data, field))
+        for field, value in data.delivery_values().items():
+            setattr(offer, field, value)
         offer.metadata_json = data.metadata
         offer.source_updated_at = data.source_updated_at
         offer.last_checked_at = revalidation.confirmed_at if revalidation else now

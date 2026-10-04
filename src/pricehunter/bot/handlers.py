@@ -145,6 +145,10 @@ async def show_settings(message: Message, user: User) -> None:
             country=user.country_code or "—",
             currency=user.preferred_currency,
             timezone=user.timezone,
+            delivery=" ".join(
+                value for value in (user.delivery_country, user.delivery_postal_code) if value
+            )
+            or "—",
         ),
         reply_markup=settings_keyboard(user.language_code),
     )
@@ -324,12 +328,32 @@ def build_router() -> Router:
         elif action == "country":
             user = await container.users.settings(user.id, UserSettingsPatch(country_code=value))
             await show_settings(message, user)
-        elif action == "setting" and value in ("country", "currency", "timezone"):
+        elif action == "dcountry":
+            user = await container.users.settings(
+                user.id, UserSettingsPatch(delivery_country=value)
+            )
+            await show_settings(message, user)
+        elif action == "dclear":
+            user = await container.users.settings(
+                user.id, UserSettingsPatch(delivery_country=None, delivery_postal_code=None)
+            )
+            await show_settings(message, user)
+        elif action == "setting" and value in (
+            "country",
+            "currency",
+            "timezone",
+            "delivery_country",
+            "delivery_postal",
+        ):
             await state.set_state(Conversation.setting)
             await state.update_data(setting=value)
             await message.answer(
                 tr(language, value + "_prompt"),
-                reply_markup=country_keyboard(language) if value == "country" else None,
+                reply_markup=country_keyboard(
+                    language, action="dcountry" if value == "delivery_country" else "country"
+                )
+                if value in ("country", "delivery_country")
+                else None,
             )
         elif action in ("track", "otarget"):
             if action == "otarget":
@@ -429,11 +453,16 @@ def build_router() -> Router:
             "country": "country_code",
             "currency": "preferred_currency",
             "timezone": "timezone",
+            "delivery_country": "delivery_country",
+            "delivery_postal": "delivery_postal_code",
         }[data["setting"]]
         value = (message.text or "").strip()
-        patch = UserSettingsPatch.model_validate(
-            {field: value if field == "timezone" else value.upper()}
-        )
+        values: dict[str, object] = {field: value if field == "timezone" else value.upper()}
+        if field in ("delivery_country", "delivery_postal_code") and value == "-":
+            values[field] = None
+            if field == "delivery_country":
+                values["delivery_postal_code"] = None
+        patch = UserSettingsPatch.model_validate(values)
         user = await container.users.settings(user.id, patch)
         await state.clear()
         await message.answer(tr(language, "settings_saved"))

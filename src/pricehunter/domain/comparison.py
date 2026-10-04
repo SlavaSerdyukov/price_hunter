@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from pricehunter.domain.delivery import DeliveryStatus, TaxStatus
 from pricehunter.domain.freshness import Freshness
 from pricehunter.domain.products import Availability, model_code, normalized
 
@@ -38,6 +39,13 @@ class ComparisonOffer(BaseModel):
     delivery_country: str | None = None
     tax_included: bool | None = None
     total_price: Decimal | None = None
+    delivered_total: Decimal | None = None
+    tax_status: TaxStatus = TaxStatus.UNKNOWN
+    additional_tax: Decimal | None = None
+    delivery_quote_status: DeliveryStatus = DeliveryStatus.UNSUPPORTED
+    delivery_quote_at: datetime | None = None
+    delivery_quote_expires_at: datetime | None = None
+    delivery_availability: str = "unknown"
 
 
 class CurrencyComparison(BaseModel):
@@ -50,6 +58,9 @@ class CurrencyComparison(BaseModel):
     stale_offer_count: int = 0
     failed_offer_count: int = 0
     fresh_out_of_stock_count: int = 0
+    best_delivered_offer: ComparisonOffer | None = None
+    delivered_price_spread: Decimal | None = None
+    delivered_offer_count: int = 0
 
 
 class DiscoveryStatus(BaseModel):
@@ -83,6 +94,8 @@ class ComparisonProduct(BaseModel):
     discovery: list[DiscoveryStatus] = []
     page: int = 0
     page_size: int = 10
+    delivery_country: str | None = None
+    delivered_offers: list[ComparisonOffer] = []
 
 
 def offer_order(offer: ComparisonOffer) -> tuple[str, int, Decimal, str, str]:

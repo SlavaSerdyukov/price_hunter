@@ -1,5 +1,21 @@
 # First iteration verification
 
+M5B baseline: merged main `b8da550ab973731a794b4e6f40e937534fcfd4a5`, **812 passed,
+91.58% coverage**, no skips, one existing ARQ Redis close warning. Eight delivery
+acceptances failed before implementation. See [design](m5b-design.md) and
+[delivery contract](delivery-context.md) for final verification evidence.
+All previous gates remain mandatory, including the migration preservation verifier
+and final-head hosted CI. Tests use synthetic providers and dedicated PostgreSQL/Redis.
+No live credentials or merchant activation are required.
+
+Final M5B local suite: **896 passed, no skips, 91.94% statement coverage**, 314.37s;
+84 new cases retain all 812 previous tests. Ruff/format passed (236 files, including
+199 Python files), strict mypy passed for 125 production modules. Final Alembic
+upgrade/check and full migration preservation/guarded rollback verifier passed,
+as did Markdown file links and whitespace checks. Only the existing upstream ARQ
+Redis close deprecation remains. Hosted final-head proof is linked in the PR and
+final delivery report; local success alone is not a merge-readiness claim.
+
 Automated checks ran locally on 2026-09-18 with Python 3.12.14, isolated PostgreSQL 15
 and Redis 7.4.6. They used no production database, Telegram account or retailer API
 credentials. A subsequent live Telegram connection check is recorded below.

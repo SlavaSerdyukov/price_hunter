@@ -1,0 +1,17 @@
+{
+  "settings_text": "<b>Settings</b>\nLanguage: {language}\nShopping market: {country}\nDelivery to: {delivery}\nPreferred currency: {currency}\nTimezone: {timezone}\n\nChanging delivery does not change existing watches.",
+  "country": "Shopping market",
+  "comparison_best_label": "Best item price:",
+  "delivery_country": "Delivery country",
+  "delivery_postal": "Postal code",
+  "delivery_clear": "Clear delivery destination",
+  "delivery_country_prompt": "Choose a delivery country or send its two-letter ISO code. Send - to clear. Shopping market and watches stay unchanged.",
+  "delivery_postal_prompt": "Send an optional postal code (up to 20 characters), or - to clear. Set delivery country first.",
+  "invalid_delivery_context": "Set a delivery country in /settings before using a postal code or delivery comparison.",
+  "delivery_compare": "Compare delivered cost",
+  "delivery_quote": "Request delivery quotes",
+  "delivery_heading": "<b>Delivered to {country}</b>",
+  "delivery_best": "{store}: item {item} + shipping {shipping} → {total} delivered (includes any additional tax).",
+  "delivery_open": "Open delivered offer",
+  "delivery_incomplete": "Delivered total unavailable for some stores. Unknown shipping or tax is not zero."
+}
