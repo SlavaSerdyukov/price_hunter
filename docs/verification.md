@@ -806,3 +806,13 @@ Diff whitespace validation passed. No schema, dependency or configuration change
 required. The two-stage ranking and hard-budget limits are documented in
 [coverage-engine.md](coverage-engine.md). Hosted evidence is recorded only after fetching
 the completed Checks run and actual job logs.
+
+**Verified hosted M4C.1 result:** [GitHub Actions run 37167926855](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37167926855)
+completed with **success** for commit `1af1a2610b6a61028d9bd6bc9394e8e91b777141`
+on `feat/m4c-coverage-engine`. Actual job logs report **655 passed, no skips, 90.48%
+statement coverage** (307.47s), with the existing single upstream ARQ warning. All required
+dependency, Ruff, mypy, Alembic and migration-verifier steps succeeded. The hosted coverage
+measurement is separate from local 90.49%. This record was written after fetching the
+completed workflow, all job step conclusions and actual logs. Final merge-readiness also
+requires the branch head containing this verification record to pass the unchanged Checks
+workflow; that head is checked separately before reporting readiness.
