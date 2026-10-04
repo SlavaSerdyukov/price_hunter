@@ -885,8 +885,15 @@ Dedicated PostgreSQL pricehunter_test, Redis DB 15 and synthetic remote transpor
 used. Changed Markdown links and diff whitespace checks passed. No credentials or running
 application configuration were read/changed for M4D.
 
-Hosted evidence is recorded after inspecting the completed Checks run and actual job logs.
-Final branch-head Checks success is required before reporting merge-readiness.
+**Verified hosted M4D implementation result:** [GitHub Actions run 37201916739](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37201916739)
+completed with **success** for `7f9a0d891dab432da939e0bba40e2ab5cb799bd4`
+on `feat/m4d-canonical-merchants`. Actual completed job logs report **699 passed, no
+skips, 90.70% statement coverage** (461.88s), with the single existing upstream ARQ warning.
+Every dependency/Ruff/mypy/Alembic/migration-verifier/test step completed successfully.
+Hosted coverage is measured separately from local 90.68%. The completed workflow, exact
+commit, all step conclusions and actual logs were checked before writing this record.
+The subsequent documentation commit must also pass Checks before final merge-readiness
+is reported; its final branch-head result is checked and linked in the delivery report.
 Real retailer approvals/rights and live feed/link verification remain operator work;
 M4D adds no live activation or automatic reconciliation. Existing `store_slug` remains
 source provenance; consumers should use merchant_id/merchant_slug for canonical identity.
