@@ -1,8 +1,23 @@
 import json
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 import structlog
+
+
+@contextmanager
+def correlation_context(**values: object) -> Iterator[None]:
+    """A top-level operation gets a fresh context, restored even on cancellation."""
+    previous = structlog.contextvars.get_contextvars()
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(**values)
+    try:
+        yield
+    finally:
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(**previous)
 
 
 class JSONFormatter(logging.Formatter):
@@ -13,6 +28,11 @@ class JSONFormatter(logging.Formatter):
                 "level": record.levelname.lower(),
                 "logger": record.name,
                 "event": record.getMessage(),
+                **{
+                    key: value
+                    for key, value in structlog.contextvars.get_contextvars().items()
+                    if key in {"request_id", "telegram_update_id", "job_id", "operation"}
+                },
             }
         )
 

@@ -73,6 +73,7 @@ FEED_ERROR_CODES = frozenset(
         "unsupported_encoding",
         "unsupported_feed_mode",
         "validation_busy",
+        "validation_lease_lost",
         "validation_configuration_changed",
         "validation_rights_changed",
         "wrong_advertiser",

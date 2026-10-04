@@ -43,7 +43,6 @@ class SearchService:
     ) -> SearchResult:
         async with self.products.sessions() as session:
             country = await user_market(session, user_id, country)
-        await self.limiter.user(user_id)
         limits = (await self.entitlements.for_user(user_id)).entitlements
         limits.require(Feature.COMPARISON_SEARCH)
         await self.limiter.check(f"search:{user_id}", limit=limits.search_limit, seconds=86400)

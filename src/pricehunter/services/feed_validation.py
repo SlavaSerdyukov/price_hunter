@@ -1,13 +1,14 @@
 """Read-only acquisition with immutable evidence, independent of activation."""
 
+import asyncio
 import sqlite3
 import tempfile
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import select, text
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pricehunter.core.config import Settings
@@ -99,22 +100,83 @@ class FeedValidationService:
         self.quality = FeedQualityEvaluator(settings)
 
     async def run(self, program_id: UUID, source: FeedSource) -> MerchantProgramValidation:
+        token, started = uuid4(), utcnow()
+        # Consistent lock order with operator changes: state, then program. No network here.
         async with self.sessions.begin() as session:
-            # Transaction-scoped lock releases even after cancellation/connection loss.
-            # No catalog or program row lock is held during HTTP streaming.
-            locked = await session.scalar(
-                text("SELECT pg_try_advisory_xact_lock(hashtextextended(:key, 0))"),
-                {"key": "feed-validation:" + str(program_id)},
-            )
-            if not locked:
-                raise FeedError("validation_busy")
-            program = await session.get(MerchantProgram, program_id)
-            if program is None or program.network != source.name:
+            state = await session.get(FeedSyncState, program_id, with_for_update=True)
+            program = await session.get(MerchantProgram, program_id, with_for_update=True)
+            if state is None or program is None or program.network != source.name:
                 raise FeedError("unknown_program")
             reviewed_policy(program)
-            fingerprint, started = configuration_fingerprint(program), utcnow()
-            report, version, error = FeedReport(), None, None
-            try:
+            if state.validation_lease_until and state.validation_lease_until > started:
+                raise FeedError("validation_busy")
+            fingerprint = configuration_fingerprint(program)
+            state.validation_token = token
+            state.validation_lease_until = started + timedelta(
+                seconds=self.settings.validation_lease_seconds
+            )
+        try:
+            report, version, error = await self._acquire(program, source)
+            async with self.sessions.begin() as session:
+                state = await session.get(FeedSyncState, program_id, with_for_update=True)
+                if (
+                    state is None
+                    or state.validation_token != token
+                    or state.validation_lease_until is None
+                    or state.validation_lease_until <= utcnow()
+                ):
+                    # Never append even failed evidence after a successor: it would shadow its pass.
+                    raise FeedError("validation_lease_lost")
+                current = await session.get(MerchantProgram, program_id, with_for_update=True)
+                assert current is not None
+                if fingerprint != configuration_fingerprint(current):
+                    error = "validation_configuration_changed"
+                try:
+                    reviewed_policy(current)
+                except Exception:
+                    error = "validation_rights_changed"
+                report.completed_at = utcnow()
+                if error:
+                    report.failure_kind = "technical_validation_failed"
+                evidence = MerchantProgramValidation(
+                    merchant_program_id=program_id,
+                    status="failed" if error else "passed",
+                    configuration_fingerprint=fingerprint,
+                    source_version=version,
+                    started_at=started,
+                    completed_at=report.completed_at,
+                    valid_rows=report.valid_rows,
+                    invalid_rows=report.invalid_rows,
+                    duplicate_rows=report.duplicates,
+                    sampled_rows=0,
+                    warnings=report.warnings,
+                    metrics=report.model_dump(mode="json"),
+                    error_code=error,
+                    adapter_revision=ADAPTER_REVISION,
+                )
+                state.validation_token, state.validation_lease_until = None, None
+                session.add(evidence)
+                await session.flush()
+                return evidence
+        except BaseException:
+            # Cancellation releases only our own claim; process death relies on expiry.
+            async with self.sessions.begin() as session:
+                await session.execute(
+                    update(FeedSyncState)
+                    .where(
+                        FeedSyncState.merchant_program_id == program_id,
+                        FeedSyncState.validation_token == token,
+                    )
+                    .values(validation_token=None, validation_lease_until=None)
+                )
+            raise
+
+    async def _acquire(
+        self, program: MerchantProgram, source: FeedSource
+    ) -> tuple[FeedReport, str | None, str | None]:
+        report, version, error = FeedReport(), None, None
+        try:
+            async with asyncio.timeout(self.settings.validation_timeout_seconds):
                 if program.feed_mode != "full":
                     raise FeedError("unsupported_feed_mode")
                 version = version_digest(await source.source_version(program))
@@ -148,43 +210,9 @@ class FeedValidationService:
                 if version != version_digest(await source.source_version(program)):
                     raise FeedError("source_changed_during_sync")
                 self.quality.evaluate(report)
-            except Exception as exc:
-                error = exc.code if isinstance(exc, FeedError) else "technical_validation_failed"
-            # Refresh and serialize completion with operator configuration/activation.
-            await session.get(FeedSyncState, program_id, with_for_update=True)
-            current = await session.get(
-                MerchantProgram, program_id, with_for_update=True, populate_existing=True
-            )
-            assert current is not None
-            if fingerprint != configuration_fingerprint(current):
-                error = "validation_configuration_changed"
-            try:
-                reviewed_policy(current)
-            except Exception:
-                # Rights might have been revoked while acquisition was in progress.
-                error = "validation_rights_changed"
-            report.completed_at = utcnow()
-            if error:
-                report.failure_kind = "technical_validation_failed"
-            evidence = MerchantProgramValidation(
-                merchant_program_id=program_id,
-                status="failed" if error else "passed",
-                configuration_fingerprint=fingerprint,
-                source_version=version,
-                started_at=started,
-                completed_at=report.completed_at,
-                valid_rows=report.valid_rows,
-                invalid_rows=report.invalid_rows,
-                duplicate_rows=report.duplicates,
-                sampled_rows=0,
-                warnings=report.warnings,
-                metrics=report.model_dump(mode="json"),
-                error_code=error,
-                adapter_revision=ADAPTER_REVISION,
-            )
-            session.add(evidence)
-            await session.flush()
-            return evidence
+        except Exception as exc:
+            error = exc.code if isinstance(exc, FeedError) else "technical_validation_failed"
+        return report, version, error
 
     async def history(self, program_id: UUID, limit: int = 100) -> list[dict[str, Any]]:
         async with self.sessions() as session:

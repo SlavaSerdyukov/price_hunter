@@ -30,6 +30,7 @@ async def current_user(
         raise HTTPException(
             status_code=401, detail="Unauthorized", headers={"WWW-Authenticate": "Bearer"}
         )
+    await container.limiter.user(user.id)
     return user
 
 

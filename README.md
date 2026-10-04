@@ -2,7 +2,7 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0–M4E: tracking, Stars subscriptions, discovery, merchant feeds and canonical retailers**. Billing is tested with
+**M0–M5A: tracking, Stars subscriptions, discovery, merchant feeds, canonical retailers and beta runtime hardening**. Billing is tested with
 a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
@@ -32,6 +32,10 @@ a simulated Telegram transport; real Stars purchases/renewals/refunds remain man
 - Canonical retailer identity, explicit audited source linking and cross-network offer deduplication.
 - Optional timestamped ECB reference conversion; native-currency rankings stay authoritative.
 - Durable PostgreSQL state, migrations, Docker, CI, health checks and operator commands.
+- Exact schema/Redis/config startup preflight, shared API/Telegram user throttling,
+  safe correlation and private response headers, recoverable technical validation leases.
+- Read-only `runtime-preflight` / `runtime-status`, production boot/schema acceptance,
+  explicit database pool/timeouts and owned-resource shutdown.
 - Free/Pro/Power entitlements; recurring Stars checkout, expiry, upgrades, cancellation,
   refunds, durable payment intake and operator reconciliation. `/plans` and `/subscription`.
 
@@ -446,3 +450,25 @@ codes and one-time referrer attribution; reward/conversion workflows remain late
 
 **Slava Serdiukov**
 Machine Learning / Backend Engineering Portfolio Project
+
+## Public beta runtime (M5A)
+
+API, polling bot and ARQ worker refuse startup unless the database is at the exact
+packaged Alembic head and Redis/configuration checks pass. Startup never migrates
+or contacts a retailer. Run the deployment hook after migration:
+
+```sh
+uv run alembic upgrade head
+uv run python -m pricehunter.apps.admin runtime-preflight
+uv run python -m pricehunter.apps.admin runtime-status
+```
+
+Ordinary authenticated API requests and Telegram commands/callbacks share
+`USER_REQUESTS_PER_MINUTE` for the same internal user. Financial updates retain
+durable intake and bypass the conversation limiter. Readiness is bounded and
+returns no dependency details; liveness remains dependency-free. The Docker image
+HTTP healthcheck is for the API; Compose disables that probe for bot/worker.
+
+See [runtime contracts](docs/runtime-hardening.md), [beta release/recovery steps](docs/beta-operations.md)
+and [M5A design and evidence](docs/m5a-design.md). Use a maintenance deployment
+across this exact-schema boundary; do not overlap M4E and M5A validators.

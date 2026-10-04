@@ -1,4 +1,3 @@
-import asyncio
 import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -10,10 +9,12 @@ from aiogram.types import Update
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import ValidationError
-from sqlalchemy import text
+from redis.exceptions import RedisError
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as DatabaseTimeoutError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from pricehunter.api.middleware import BodyLimitMiddleware
+from pricehunter.api.middleware import BodyLimitMiddleware, RuntimeAPI
 from pricehunter.api.routes import router
 from pricehunter.bot.app import create_bot, create_dispatcher
 from pricehunter.core.config import Settings, get_settings
@@ -32,17 +33,28 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         nonlocal bot, dispatcher
-        await resources.validate_feeds()
-        if settings.telegram_mode == "webhook" and settings.telegram_bot_token.get_secret_value():
-            bot, dispatcher = create_bot(resources), create_dispatcher(resources)
-        yield
-        if bot:
-            await bot.session.close()
-        if dispatcher:
-            await dispatcher.storage.close()
-        await resources.close()
+        try:
+            await resources.runtime.run()
+            if (
+                settings.telegram_mode == "webhook"
+                and settings.telegram_bot_token.get_secret_value()
+            ):
+                bot = create_bot(resources)
+                dispatcher = create_dispatcher(resources)
+            yield
+        finally:
+            try:
+                if dispatcher:
+                    await dispatcher.storage.close()
+            finally:
+                try:
+                    if bot:
+                        await bot.session.close()
+                finally:
+                    if container is None:
+                        await resources.close()
 
-    app = FastAPI(
+    app = RuntimeAPI(
         title="PriceHunter",
         version="0.1.0",
         lifespan=lifespan,
@@ -61,6 +73,13 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         return JSONResponse(
             status_code=exc.status_code, content={"error": exc.code}, headers=headers
         )
+
+    async def infrastructure_error(request: Request, exc: Exception) -> JSONResponse:
+        structlog.get_logger().warning("api_dependency_unavailable", error_type=type(exc).__name__)
+        return JSONResponse(status_code=503, content={"error": "service_unavailable"})
+
+    for failure in (RedisError, OperationalError, DatabaseTimeoutError):
+        app.add_exception_handler(failure, infrastructure_error)
 
     @app.exception_handler(Exception)
     async def internal_error(request: Request, exc: Exception) -> JSONResponse:
@@ -84,22 +103,11 @@ def create_app(settings: Settings | None = None, container: Container | None = N
 
     @app.get("/health/ready")
     async def ready() -> JSONResponse:
-        try:
-            async with asyncio.timeout(5):
-                async with resources.sessions() as session:
-                    await session.execute(text("SELECT 1 FROM alembic_version LIMIT 1"))
-                    await session.execute(text("SELECT 1 FROM users LIMIT 1"))
-                    await session.execute(text("SELECT 1 FROM checkout_intents LIMIT 1"))
-                    await session.execute(text("SELECT 1 FROM product_identifiers LIMIT 1"))
-                    await session.execute(text("SELECT 1 FROM product_watches LIMIT 1"))
-                    await session.execute(text("SELECT 1 FROM product_discoveries LIMIT 1"))
-                    await session.execute(
-                        text("SELECT refresh_requested_at FROM store_offers LIMIT 1")
-                    )
-                await resources.redis.ping()
-        except Exception:
-            return JSONResponse(status_code=503, content={"status": "not_ready"})
-        return JSONResponse(content={"status": "ready"})
+        available = await resources.runtime.ready()
+        return JSONResponse(
+            status_code=200 if available else 503,
+            content={"status": "ready" if available else "not_ready"},
+        )
 
     @app.post("/telegram/webhook", include_in_schema=False)
     async def webhook(

@@ -49,6 +49,8 @@ services:
     env_file: .env
     environment: *app_environment
     command: ["python", "-m", "pricehunter.apps.bot"]
+    healthcheck:
+      disable: true  # Image HTTP probe belongs to the API process.
     depends_on: *dependencies
     restart: unless-stopped
   worker:
@@ -57,6 +59,8 @@ services:
     env_file: .env
     environment: *app_environment
     command: ["arq", "pricehunter.jobs.worker.WorkerSettings"]
+    healthcheck:
+      disable: true  # Worker has shared startup preflight, no HTTP listener.
     depends_on: *dependencies
     restart: unless-stopped
 volumes:

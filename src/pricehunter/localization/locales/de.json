@@ -161,5 +161,6 @@
   "provider_policy": "Diese Nutzung des Anbieters ist noch nicht freigegeben.",
   "affiliate_disclosure": "Einige Händlerlinks sind Affiliate-Links. PriceHunter kann eine Provision erhalten; sie beeinflusst niemals die Reihenfolge.",
   "fx_reference": "≈ {price} · {source}-Referenzkurs, {date}",
-  "provider_attribution": "{attribution}"
+  "provider_attribution": "{attribution}",
+  "service_unavailable": "Der Dienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut."
 }
