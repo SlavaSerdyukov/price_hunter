@@ -86,8 +86,8 @@ failure never deletes a product or changes general stock. Stale evidence cannot 
 | --- | --- | --- |
 | DELIVERY_QUOTE_LIMIT | 12 | 1–20 globally, across merchants/currencies |
 | DELIVERY_QUOTE_TTL_SECONDS | 900 | 30–86400, further capped by policy |
-| DELIVERY_QUOTE_TIMEOUT_SECONDS | 3 | 1–5 per candidate, including queue wait |
-| DELIVERY_OPERATION_TIMEOUT_SECONDS | 10 | 1–15 for the provider stage |
+| DELIVERY_QUOTE_TIMEOUT_SECONDS | 3 | 1–5 per candidate after acquiring a concurrency slot |
+| DELIVERY_OPERATION_TIMEOUT_SECONDS | 10 | 1–15 for the provider stage, including queue wait |
 | DELIVERY_QUOTE_CONCURRENCY | 4 | 1–4 |
 
 SQL bounds fresh in-stock candidates before loading: one per merchant first, then
