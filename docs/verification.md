@@ -824,3 +824,76 @@ completed successfully. This records the final M4C.1 result separately from the
 implementation run's 90.48% measurement.
 The completed run, all step conclusions and actual logs were rechecked before adding
 this record; M4C.1 satisfies its hosted verification requirements.
+
+## M4D — Canonical merchants and cross-network offers — 2026-10-04
+
+Started `feat/m4d-canonical-merchants` from merged main
+`3fa77a686e71acddee53098a33e47d2be21c128a`. Baseline checks passed with
+**655 tests, no skips, 90.48% local statement coverage** (151.12s); the prior verified
+hosted measurement is 90.49%. Seven acceptance cases failed before implementation and
+the real-merchant-switch positive control passed. See [design and baseline](m4d-design.md)
+and [operator identity workflow](merchant-identity.md).
+
+Merchant is the canonical retailer; Store remains acquisition identity, MerchantProgram
+the reviewed market/network contract and StoreOffer the source snapshot. Migration
+`6bde2194a7c0` gives every existing/new Store a distinct 1:1 default identity, never a
+domain/name inference. Operator preview/dry-run/confirmation checks both endpoint versions
+and current assignment, appending guarded audit on both sides. Unlink creates a fresh
+identity, disable is reversible and contracts/history/source rows remain intact. Current
+watch/history pointers are rebased under affected Product locks; historical snapshots
+are not rewritten.
+
+Effective selection applies the requested surface's policy before a materialized SQL
+window over Product/Merchant/market/native currency. Freshness, stock, native price,
+confidence, observation time and stable source/offer IDs choose the representative; network,
+commission and URL availability do not. Canonical counts, summary statistics and pagination
+use that result. Price and destination retain one exact source snapshot. Watch/best state
+stores Merchant and offer IDs: same-retailer price changes stay ordinary price events,
+identical-price source changes only update provenance, real retailer switches retain
+idempotent merchant notifications. Clicks add non-PII canonical attribution.
+
+Acceptance covers linked Awin/CJ EUR329/335 versus MediaMarkt EUR339, stale/failed cheaper
+sources, stock priority, confidence/time/UUID ties, independent catalog/tracking grants,
+commission neutrality and no URL borrowing. The three-network fixture materializes **100
+raw StoreOffers** through actual staging/catalog services, returning one retailer row while
+diagnostics keep three source Stores/programs. The 100/500/1000 duplicate-source load
+fixtures retain 20/100/200 effective Merchants, six reader queries per page, stable pages
+and **WindowAgg Actual Loops = 1** in EXPLAIN ANALYZE. Materialization prevents the planner
+from repeatedly executing the window when row estimates are low.
+
+Lifecycle acceptance includes concurrent source/default/explicit identity creation,
+stale operator receipts, concurrent reconciliation, serialization with in-flight product
+evaluation, immutable audit, non-null identity, safe unlink and reversible disable without
+contract changes. Market/currency/variant isolation and a canonical Telegram offer row/link
+are checked. Existing seven-language bot/history/tracking flows remain covered. The old
+raw pagination fixture now uses distinct default Merchants so its original assertions
+remain meaningful. eBay discovery now checks one effective marketplace row, two retained
+exact listings and a normal price drop; click privacy explicitly allows only the new
+Merchant UUID alongside existing attribution.
+
+The extended scratch migration verifier passed: all old catalog/source/watch/history/outbox/
+click/billing rows and IDs are preserved, initial BE/DE customer comparisons are equivalent,
+canonical audit rejects UPDATE/DELETE, used identities block downgrade and guarded export/
+re-upgrade/schema checks succeed. Only disposable test databases were migrated.
+
+Final local verification: **699 passed, no skips, 90.68% statement coverage** (213.33s).
+This adds 44 acceptance cases (35 integration, nine unit) to the 655-case baseline. The
+85% threshold and production coverage scope are unchanged. Ruff lint/format (207 Python
+files), strict mypy (117 source files), Alembic upgrade/check and the complete migration
+verifier passed. The only warning remains upstream ARQ Redis close() deprecation.
+Dedicated PostgreSQL pricehunter_test, Redis DB 15 and synthetic remote transports were
+used. Changed Markdown links and diff whitespace checks passed. No credentials or running
+application configuration were read/changed for M4D.
+
+**Verified hosted M4D implementation result:** [GitHub Actions run 37201916739](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37201916739)
+completed with **success** for `7f9a0d891dab432da939e0bba40e2ab5cb799bd4`
+on `feat/m4d-canonical-merchants`. Actual completed job logs report **699 passed, no
+skips, 90.70% statement coverage** (461.88s), with the single existing upstream ARQ warning.
+Every dependency/Ruff/mypy/Alembic/migration-verifier/test step completed successfully.
+Hosted coverage is measured separately from local 90.68%. The completed workflow, exact
+commit, all step conclusions and actual logs were checked before writing this record.
+The subsequent documentation commit must also pass Checks before final merge-readiness
+is reported; its final branch-head result is checked and linked in the delivery report.
+Real retailer approvals/rights and live feed/link verification remain operator work;
+M4D adds no live activation or automatic reconciliation. Existing `store_slug` remains
+source provenance; consumers should use merchant_id/merchant_slug for canonical identity.

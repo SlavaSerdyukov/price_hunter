@@ -456,5 +456,10 @@ async def test_ebay_discovery_fetches_actual_identity_instead_of_assuming_query_
         assert search.calls[0].request.url.params["gtin"] == "04006381333931"
         assert details.call_count == 1
         product = await container.products.product(a.product_id, user.id)
-        assert product.offer_count == 2 and product.best_available_offer.price == Decimal("79.99")
-        assert await event_types(container) == ["merchant_became_cheapest"]
+        # eBay remains one canonical marketplace, without a seller identity model.
+        # Both exact listings persist while the effective retailer row follows the drop.
+        assert product.offer_count == product.store_count == 1
+        assert product.best_available_offer.price == Decimal("79.99")
+        async with container.sessions() as session:
+            assert await session.scalar(select(func.count()).select_from(StoreOffer)) == 2
+        assert await event_types(container) == ["new_best_price"]

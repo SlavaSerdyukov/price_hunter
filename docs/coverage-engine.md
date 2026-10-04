@@ -96,6 +96,12 @@ last failure and consecutive failures in an expiring Redis hash per provider. Fe
 is aggregated from existing sync states; last_failure_at survives later successful syncs.
 A Redis health outage is diagnostic and never invalidates successful search results.
 
+M4D adds `merchant_coverage` per market: `canonical_merchants`, `source_stores`,
+`merchant_programs`, `raw_source_offers` and `effective_offers`. Raw counts include retained
+records; effective catalog counts use the same surface-policy SQL representative selection
+as customer comparison. Empty orphan Merchant identities are not coverage. Network sections
+continue to measure acquisition and contract coverage independently.
+
 coverage-product makes bounded provider retrieval and read-only catalog queries, reporting
 merchant/candidate/materialized/fresh counts and current policy eligibility. Candidate
 visibility alone is not a canonical match or persistence grant. The command does not
@@ -103,9 +109,11 @@ materialize candidates or expose customer data. Local feed providers only search
 Direct API providers may make their normal bounded retrieval request.
 
 duplicate-merchants checks normalized domain/name across networks. Results are possible
-duplicates only, limited to 100 pairs. Stores and StoreOffers remain separate; the same
-merchant/listing acquired through two networks may consequently appear twice. There is
-no automatic merge or assertion that the two contracts are interchangeable.
+duplicates only, limited to 100 pairs. Source IDs/slugs/network, canonical Merchant IDs
+and normalized domain/name evidence make review explicit. Already linked pairs are omitted.
+Raw Stores/StoreOffers and contracts stay independent; effective customer offers are
+deduplicated by canonical Merchant. No automatic linking or contract equivalence is inferred.
+See [operator merchant reconciliation](merchant-identity.md).
 
 ## Lifecycle, scheduling and migration
 
@@ -132,7 +140,8 @@ databases; it does not migrate or deploy your running application.
 
 ## Next milestone
 
-M4D should begin with a small explicitly approved BE/DE merchant pilot: verify account
+After canonical identity reconciliation, a small explicitly approved BE/DE merchant pilot
+should verify account
 visibility, complete generations, actual quotas, currency/variant/stock fidelity, reviewed
 cache/history/tracking rights and affiliate attribution. Only after that evidence should
 explicit destination/postal shipping/tax inputs and complete delivered-cost comparison be

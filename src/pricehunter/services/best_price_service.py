@@ -31,6 +31,7 @@ class BestHistoryPoint(BaseModel):
     timestamp: datetime
     price: Decimal | None
     offer_id: UUID | None
+    merchant_id: UUID | None = None
     store: str | None
     event_type: str
 
@@ -98,7 +99,24 @@ class BestPriceService:
                 session.add(state)
             state.next_evaluation_at = summary.next_expiry
             current = (best.offer_id, best.price) if best else (None, None)
-            if not is_new and (state.store_offer_id, state.price) == current:
+            merchant_id = best.merchant_id if best else None
+            previous_merchant, previous_price = state.merchant_id, state.price
+            if not is_new and (state.store_offer_id, state.price, state.merchant_id) == (
+                *current,
+                merchant_id,
+            ):
+                continue
+            if (
+                not is_new
+                and state.store_offer_id
+                and best
+                and previous_merchant == merchant_id
+                and previous_price == best.price
+            ):
+                # Same retailer/price, new acquisition source: retain exact current
+                # provenance without inventing a merchant/history transition.
+                state.store_offer_id = best.offer_id
+                state.observed_at = now
                 continue
             event_type = (
                 "initial_best"
@@ -108,10 +126,11 @@ class BestPriceService:
                 else "restored"
                 if state.store_offer_id is None
                 else "merchant_changed"
-                if state.store_offer_id != best.offer_id
+                if state.merchant_id != merchant_id
                 else "price_changed"
             )
             state.store_offer_id, state.price = current
+            state.merchant_id = merchant_id
             state.sequence += 1
             state.observed_at = now
             session.add(
@@ -121,6 +140,7 @@ class BestPriceService:
                     currency=currency,
                     sequence=state.sequence,
                     store_offer_id=state.store_offer_id,
+                    merchant_id=state.merchant_id,
                     price=state.price,
                     store=best.store if best else None,
                     event_type=event_type,
@@ -199,6 +219,7 @@ class BestPriceService:
                     timestamp=e.observed_at,
                     price=e.price,
                     offer_id=e.store_offer_id,
+                    merchant_id=e.merchant_id,
                     store=e.store,
                     event_type=e.event_type,
                 )
@@ -211,6 +232,7 @@ class BestPriceService:
                         timestamp=cutoff,
                         price=anchor.price,
                         offer_id=anchor.store_offer_id,
+                        merchant_id=anchor.merchant_id,
                         store=anchor.store,
                         event_type="window_start",
                     ),

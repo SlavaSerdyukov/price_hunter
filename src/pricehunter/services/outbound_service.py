@@ -82,7 +82,7 @@ class OutboundLinkService:
 
     def offer_view(self, offer: StoreOffer, store: Store, *, surface: str = "api") -> OfferView:
         result = OfferView.model_validate(offer)
-        result.store = store.name
+        result.store = store.merchant.display_name if store.merchant else store.name
         result.attribution = (
             PolicyResolver(self.settings).offer(offer, store).display_attribution_required
         )
@@ -188,6 +188,7 @@ class OutboundLinkService:
                 OutboundClick(
                     offer_id=offer.id,
                     store_id=store.id,
+                    merchant_id=store.merchant_id,
                     affiliate_network=network,
                     surface=surface,
                     market_country=market,

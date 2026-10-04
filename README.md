@@ -2,7 +2,7 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0–M4C: tracking, Stars subscriptions, discovery, international commerce and merchant feeds**. Billing is tested with
+**M0–M4D: tracking, Stars subscriptions, discovery, merchant feeds and canonical retailers**. Billing is tested with
 a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
@@ -29,6 +29,7 @@ a simulated Telegram transport; real Stars purchases/renewals/refunds remain man
 - Credential/policy-gated Rakuten Product Search, signed outbound links and minimal click records.
 - Awin CSV/gzip and TradeDoubler feed adapters, disabled until credentials/programs are configured.
 - Merchant-specific permissions, bounded generational sync and indexed local feed search.
+- Canonical retailer identity, explicit audited source linking and cross-network offer deduplication.
 - Optional timestamped ECB reference conversion; native-currency rankings stay authoritative.
 - Durable PostgreSQL state, migrations, Docker, CI, health checks and operator commands.
 - Free/Pro/Power entitlements; recurring Stars checkout, expiry, upgrades, cancellation,
@@ -46,6 +47,9 @@ Manage watches in `/watches`; existing exact trackers remain in `/my`. Watches p
 search configured providers for new matching offers. **History** shows best-price transitions;
 **Refresh prices** schedules a bounded background update. All seven languages are supported.
 See [discovery and freshness operations](docs/discovery.md) for cadences, settings and diagnostics.
+Multiple reviewed acquisition sources for one retailer produce one effective offer per
+Product/market/native currency. Store counts use canonical retailers; raw source snapshots,
+policies and exact trackers remain independent. See [canonical merchant operations](docs/merchant-identity.md).
 
 Watches and trackers share the plan quota. Search/comparison/history/refresh require an
 explicit or saved country. Profile changes never move an existing watch, its history,
@@ -194,7 +198,10 @@ Telegram/database/HTTP libraries. `services` own transactions and business workf
 SQLAlchemy rather than generic CRUD abstractions. REST DTOs live under `schemas`.
 
 A canonical `Product` identifies a real product/variant. A `StoreOffer` identifies a
-listing within a marketplace. Many `Tracker` rows share that offer; `ProductWatch`
+source listing. `Merchant` identifies the customer-visible retailer; `Store` identifies
+an acquisition source and `MerchantProgram` its reviewed network/market contract.
+Explicit operator linking is versioned and audited; names/domains never auto-link sources.
+Many `Tracker` rows share that offer; `ProductWatch`
 tracks a Product with a durable market country and native comparison currency. Schedulers claim
 due offers with `SKIP LOCKED`; short database leases and fencing tokens recover stale
 workers and lost enqueue operations. A Redis lease prevents concurrent duplicate

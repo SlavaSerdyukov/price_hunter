@@ -9,6 +9,7 @@ from sqlalchemy import (
     Computed,
     Date,
     DateTime,
+    FetchedValue,
     ForeignKey,
     Index,
     Numeric,
@@ -46,6 +47,9 @@ class OutboundClick(UUIDPrimaryKey, Base):
         ForeignKey("store_offers.id", ondelete="SET NULL")
     )
     store_id: Mapped[UUID | None] = mapped_column(ForeignKey("stores.id", ondelete="SET NULL"))
+    merchant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("merchants.id", ondelete="RESTRICT")
+    )
     affiliate_network: Mapped[str | None] = mapped_column(String(80))
     surface: Mapped[str] = mapped_column(String(20))
     market_country: Mapped[str | None] = mapped_column(String(2))
@@ -78,8 +82,22 @@ class APIKey(UUIDPrimaryKey, Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class Merchant(UUIDPrimaryKey, Timestamps, Base):
+    __tablename__ = "merchants"
+    __table_args__ = (CheckConstraint("version >= 1", name="positive_version"),)
+    slug: Mapped[str] = mapped_column(String(80), unique=True)
+    display_name: Mapped[str] = mapped_column(String(100))
+    primary_domain: Mapped[str | None] = mapped_column(String(200))
+    active: Mapped[bool] = mapped_column(default=True, server_default="true")
+    version: Mapped[int] = mapped_column(default=1, server_default="1")
+
+
 class Store(UUIDPrimaryKey, Timestamps, Base):
     __tablename__ = "stores"
+    merchant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("merchants.id", ondelete="RESTRICT"), server_default=FetchedValue(), index=True
+    )
+    merchant: Mapped[Merchant] = relationship(lazy="joined")
     slug: Mapped[str] = mapped_column(String(80), unique=True)
     name: Mapped[str] = mapped_column(String(100))
     domain: Mapped[str] = mapped_column(String(200))
@@ -88,6 +106,28 @@ class Store(UUIDPrimaryKey, Timestamps, Base):
     country: Mapped[str] = mapped_column(String(2))
     supported: Mapped[bool] = mapped_column(default=True)
     active: Mapped[bool] = mapped_column(default=True)
+
+
+class MerchantAudit(UUIDPrimaryKey, Base):
+    __tablename__ = "merchant_audits"
+    __table_args__ = (
+        UniqueConstraint("merchant_id", "new_version"),
+        CheckConstraint("new_version = previous_version + 1", name="audit_version_step"),
+        Index("ix_merchant_audit_history", "merchant_id", "created_at"),
+    )
+    merchant_id: Mapped[UUID] = mapped_column(ForeignKey("merchants.id", ondelete="RESTRICT"))
+    store_id: Mapped[UUID | None] = mapped_column(ForeignKey("stores.id", ondelete="RESTRICT"))
+    related_merchant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("merchants.id", ondelete="RESTRICT")
+    )
+    action: Mapped[str] = mapped_column(String(40))
+    previous_version: Mapped[int]
+    new_version: Mapped[int]
+    changed_fields: Mapped[list[str]] = mapped_column(JSONB)
+    reason: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
 
 
 class Product(UUIDPrimaryKey, Timestamps, Base):
@@ -230,6 +270,9 @@ class ProductWatch(UUIDPrimaryKey, Timestamps, Base):
     notify_on_price_drop: Mapped[bool] = mapped_column(default=True)
     enabled: Mapped[bool] = mapped_column(default=True)
     best_offer_id: Mapped[UUID | None] = mapped_column(ForeignKey("store_offers.id"))
+    best_merchant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("merchants.id", ondelete="RESTRICT")
+    )
     best_price: Mapped[Decimal | None] = mapped_column(MONEY)
     best_absence_reason: Mapped[str | None] = mapped_column(String(30))
     evaluation_sequence: Mapped[int] = mapped_column(default=0)
@@ -439,6 +482,9 @@ class ProductBestState(UUIDPrimaryKey, Base):
     market_country: Mapped[str | None] = mapped_column(String(2))
     currency: Mapped[str] = mapped_column(String(3))
     store_offer_id: Mapped[UUID | None] = mapped_column(ForeignKey("store_offers.id"))
+    merchant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("merchants.id", ondelete="RESTRICT")
+    )
     price: Mapped[Decimal | None] = mapped_column(MONEY)
     sequence: Mapped[int] = mapped_column(default=0)
     next_evaluation_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -463,6 +509,9 @@ class BestPriceEvent(UUIDPrimaryKey, Base):
     currency: Mapped[str] = mapped_column(String(3))
     sequence: Mapped[int]
     store_offer_id: Mapped[UUID | None] = mapped_column(ForeignKey("store_offers.id"))
+    merchant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("merchants.id", ondelete="RESTRICT")
+    )
     price: Mapped[Decimal | None] = mapped_column(MONEY)
     store: Mapped[str | None] = mapped_column(String(100))
     event_type: Mapped[str] = mapped_column(String(30))

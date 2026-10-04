@@ -10,7 +10,7 @@ from uuid import UUID
 from pydantic import ValidationError
 from sqlalchemy import select, update
 
-from pricehunter.apps import feed_admin
+from pricehunter.apps import feed_admin, merchant_admin
 from pricehunter.core.config import get_settings
 from pricehunter.core.container import Container
 from pricehunter.core.security import new_api_key, token_digest
@@ -24,6 +24,14 @@ from pricehunter.services.catalog_diagnostics import CatalogDiagnostics
 async def run(args: argparse.Namespace) -> None:
     container = Container(get_settings())
     try:
+        if args.command in merchant_admin.COMMANDS:
+            try:
+                await merchant_admin.run(container, args)
+            except ValidationError:
+                raise SystemExit("Invalid merchant document; inspect allowed fields") from None
+            except ValueError as exc:
+                raise SystemExit(f"Merchant change rejected: {exc}") from None
+            return
         if args.command in feed_admin.COMMANDS:
             try:
                 await feed_admin.run(container, args)
@@ -133,6 +141,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     feed_admin.add_commands(commands)
+    merchant_admin.add_commands(commands)
     create = commands.add_parser("create-api-user", help="Create an API-only account and key")
     create.add_argument("--label", default="local")
     issue = commands.add_parser("issue-api-key", help="Issue a key for an existing Telegram user")

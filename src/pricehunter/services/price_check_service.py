@@ -12,6 +12,7 @@ from pricehunter.core.config import Settings
 from pricehunter.core.limits import RateLimiter
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import (
+    Merchant,
     NotificationEvent,
     PriceObservation,
     Product,
@@ -123,6 +124,7 @@ class PriceCheckService:
                             ]
                         ),
                         Store.supported.is_(True),
+                        exists().where(Merchant.id == Store.merchant_id, Merchant.active.is_(True)),
                         or_(
                             StoreOffer.refresh_requested_at > now - timedelta(minutes=5),
                             StoreOffer.refresh_sequence == 0,
