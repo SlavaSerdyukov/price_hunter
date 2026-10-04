@@ -45,6 +45,8 @@ async def run(args: argparse.Namespace) -> None:
                 raise SystemExit("Reviewed catalog permission is required") from None
             except ValueError as exc:
                 raise SystemExit(f"Operator change rejected: {exc}") from None
+            except Exception:
+                raise SystemExit("Feed operation failed: internal_error") from None
             return
         if args.command in ("create-api-user", "issue-api-key"):
             key = new_api_key()

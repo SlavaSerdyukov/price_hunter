@@ -1,5 +1,13 @@
 # Commerce feeds
 
+M4E adds [inactive technical validation and the pilot lifecycle](merchant-pilot.md)
+and [shared publication quality gates](feed-quality.md). Rights review remains
+independent. All successful full generations pass distinct-row minimum, Decimal
+invalid-ratio and large-catalog shrink checks before current rows are replaced.
+Rejection cleans only the candidate attempt, preserves published generation/version,
+offers and stock, and records program-local safe diagnostics/backoff. Explicit
+one-shot shrink exceptions require operator reason/confirmation and immutable audit.
+
 M4B/M4C keep one catalog pipeline. FeedSource handles remote formats and yields bounded
 FeedProductData streams. FeedStoreProvider searches local PostgreSQL staging and passes
 selected ProductOfferData through CatalogResolver and SnapshotUpdater. Affiliate behavior

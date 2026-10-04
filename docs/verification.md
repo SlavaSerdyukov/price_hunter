@@ -897,3 +897,44 @@ is reported; its final branch-head result is checked and linked in the delivery 
 Real retailer approvals/rights and live feed/link verification remain operator work;
 M4D adds no live activation or automatic reconciliation. Existing `store_slug` remains
 source provenance; consumers should use merchant_id/merchant_slug for canonical identity.
+
+## M4E — Merchant pilot gate and feed publication safety — 2026-10-04
+
+Started from merged M4D PR #6 at `ce38e62b13633154737e5ae60dc936d9bc5590f7`.
+Final M4D and merged-main hosted checks passed. Local baseline reproduced **699
+passed, 90.68% coverage** (207.49s). Six required acceptances were executed red
+before implementation (6 failed, 4.40s), then green (6 passed, 5.90s).
+
+Rights review and immutable technical evidence are separate. Inactive reviewed
+programs validate with existing bounded adapters, a per-program advisory lock and
+disk-backed ID deduplication, without catalog/staging/history/notification writes.
+Activation checks latest passed, current fingerprint/revision, age and reviewed
+catalog permission under existing program locks. Tests cover feed-change races,
+stale re-enable, failed rerun, cosmetic renames and append-only database guards.
+
+Shared evaluator acceptance covers first-generation/minimum/invalid-ratio gates,
+100000 → 2000 quarantine, 1000 valid + 9000 malformed rejection, 5 → 3 publication,
+distinct-ID shrink and vertical-neutral fashion/electronics coverage. Confirmed
+shrink exception audit is atomic and one-shot; malformed/structural failures still
+block. Rejected attempts preserve generation/version, active staging, materialized
+prices/stock/cache and observations, clean candidate pending rows and record safe
+program-local rejection/backoff. No network-wide health failure is inferred.
+
+Pending ProductWatch delivery cancels a different current Merchant UUID; rename,
+legacy snapshots and sent history remain compatible. Exact trackers retain source
+semantics. Synthetic 100k validation asserts traced Python memory below 32 MiB,
+constant-size metrics below 8 KiB and bounded SQLite cache, with no timing threshold.
+The migration verifier now preserves M4D source/canonical identities, old billing,
+catalog, observations, watches, best events, clicks, FX and both older audit histories;
+it verifies new immutable evidence and evidence-preserving downgrade/export/re-upgrade.
+
+Final local suite: **752 passed, no skips, 90.92% statement coverage** (237.32s).
+53 new cases (37 integration, 16 unit); the 85% production coverage gate remains.
+Ruff lint/format (215 Python files), strict mypy (119 source files), Alembic
+upgrade/check, full migration verifier, Markdown link targets and diff whitespace
+all pass. The sole warning is the existing upstream ARQ close deprecation.
+Tests use isolated PostgreSQL `pricehunter_m4e_test`, Redis DB 15 and fake remote
+transports. No real application credentials/configuration or merchant activation
+was used. Final-head hosted Actions success is checked separately before readiness
+is reported. See [design](m4e-design.md), [quality](feed-quality.md) and
+[exact first-pilot steps](merchant-pilot.md).

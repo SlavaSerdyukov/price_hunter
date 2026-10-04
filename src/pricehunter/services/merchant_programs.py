@@ -19,6 +19,7 @@ from pricehunter.db.models import (
 from pricehunter.db.session import SessionFactory
 from pricehunter.domain.feeds import MerchantProgramInput, merchant_slug
 from pricehunter.domain.provider_policy import ProviderDataPolicy
+from pricehunter.services.feed_validation import require_validation
 
 
 class MerchantProgramService:
@@ -138,6 +139,7 @@ class MerchantProgramService:
                 if not program.approved or not policy.reviewed or not program.last_reviewed_at:
                     raise ValueError("Program needs explicit review and approval")
                 policy.require("catalog_persistence_allowed")
+                await require_validation(session, program, self.settings)
             if dry_run:
                 return program
             changed = sorted(k for k, v in changes.items() if getattr(program, k) != v)

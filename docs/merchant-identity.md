@@ -1,5 +1,13 @@
 # Canonical merchants — M4D
 
+M4E preserves these reconciliation rules. Technical validation fingerprints feed
+configuration, independently of canonical Merchant names/links. At notification
+claim, an unsent ProductWatch snapshot with a Merchant UUID different from the
+source's current assignment is cancelled. Same-UUID renames keep the historical
+name; legacy snapshots without Merchant UUID remain compatible. Already sent
+events and exact source tracker delivery remain unchanged. See
+[pilot operations](merchant-pilot.md) and [publication quality](feed-quality.md).
+
 `Merchant` is the customer-visible retailer. `Store` is the acquisition/provider source.
 `MerchantProgram` is a reviewed network/market contract attached to that source.
 `StoreOffer` is an exact source listing/snapshot for a canonical Product and market.

@@ -27,10 +27,13 @@ market-specific programs may share it. Cross-network merchant identities remain 
    tracking/refresh/affiliate use, attribution and cache age. Run merchant-program-review
    with current expected version, reason, --dry-run, then --confirm. This deliberate
    operation records review **and approval**; it does not activate the merchant.
-5. Activate with current expected version/reason/confirmation. Add the program UUID to
+5. Run `merchant-program-validate PROGRAM_UUID` while inactive. Require a passed,
+   current configuration-matching report; inspect `merchant-program-validations` and
+   `merchant-program-validation-show`. Review does not manufacture technical evidence.
+6. Activate with current expected version/reason/confirmation. Add the program UUID to
    FEED_PROGRAM_IDS and enable its network only after credentials and approvals are ready.
    Startup requires active reviewed programs for each enabled network.
-6. Inspect merchant-program-check and feed-sync --dry-run. Confirm the live sync separately,
+7. Inspect merchant-program-check and feed-sync --dry-run. Confirm the live sync separately,
    then verify completeness, variants, native prices, real destinations and attribution.
    Record date/evidence; fixtures do not prove live access or merchant permission.
 
@@ -43,6 +46,8 @@ uv run python -m pricehunter.apps.admin merchant-program-import pending-program.
 uv run python -m pricehunter.apps.admin merchant-program-import pending-program.json --confirm
 uv run python -m pricehunter.apps.admin merchant-program-review PROGRAM_UUID --expected-version 1 --policy-file reviewed-policy.json --reason "Contract reviewed" --dry-run
 uv run python -m pricehunter.apps.admin merchant-program-review PROGRAM_UUID --expected-version 1 --policy-file reviewed-policy.json --reason "Contract reviewed" --confirm
+uv run python -m pricehunter.apps.admin merchant-program-validate PROGRAM_UUID
+uv run python -m pricehunter.apps.admin merchant-program-validations PROGRAM_UUID
 uv run python -m pricehunter.apps.admin merchant-program-activate PROGRAM_UUID --expected-version 2 --reason "Approved pilot" --confirm
 uv run python -m pricehunter.apps.admin feed-sync PROGRAM_UUID --dry-run
 uv run python -m pricehunter.apps.admin feed-sync PROGRAM_UUID --confirm
@@ -95,4 +100,7 @@ cache limits and network download quotas. A cache-age increase requires policy a
 
 Names are prospective targets, not claims of network membership or live support. Record
 future transitions as **approval pending**, **credential configured**, **live verified**.
-No real account is required to run fixture tests.
+No real account is required to run fixture tests. Follow the complete
+[first-pilot procedure](merchant-pilot.md). [Quality guards](feed-quality.md) protect
+publication, including changed-version feeds. Re-enable requires current validation;
+feed-reference changes retain history but make old fingerprints ineligible.

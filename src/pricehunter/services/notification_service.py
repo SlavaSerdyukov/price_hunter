@@ -117,6 +117,14 @@ class NotificationService:
             if offer is None or store is None:
                 event.status = "cancelled"
                 return None
+            if event.product_watch_id is not None and "merchant_id" in snapshot:
+                try:
+                    same_merchant = UUID(str(snapshot["merchant_id"])) == store.merchant_id
+                except (ValueError, TypeError):
+                    same_merchant = False
+                if not same_merchant:
+                    event.status = "cancelled"
+                    return None
             if (
                 event.product_watch_id
                 and watch is not None

@@ -137,6 +137,19 @@ See [coverage engine](docs/coverage-engine.md) and [CJ setup](docs/cj-setup.md).
 
 See [merchant identity](docs/merchant-identity.md) and [verification evidence](docs/verification.md).
 
+## M4E — Merchant pilot gate and feed publication safety — implemented
+
+- [x] Append-only technical validation of inactive reviewed programs, independent of rights.
+- [x] Fresh configuration-matching activation/reactivation evidence and concurrency fencing.
+- [x] Shared streaming metrics, invalid-ratio/minimum/shrink publication gates and preserved current generation.
+- [x] Confirmed one-shot shrink override with atomic immutable audit and program-local diagnostics.
+- [x] Pending watch cancellation after canonical Merchant reassignment; rename/legacy compatibility.
+- [x] 100k bounded-memory acceptance and preservation/downgrade migration checks.
+- [ ] Operator-approved first live merchant pilot and independent real feed/link verification.
+
+See [pilot steps](docs/merchant-pilot.md), [quality gates](docs/feed-quality.md) and
+[M4E evidence](docs/m4e-design.md).
+
 ## Approved merchant pilot and delivery context — proposed
 
 - Onboard a small approved BE/DE merchant set; verify real feed completeness, quotas,

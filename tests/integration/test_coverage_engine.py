@@ -109,12 +109,16 @@ async def test_four_network_same_gtin_preserves_market_and_best_price(container)
         p = await programs.review(
             p.id, SYNTHETIC_POLICY, expected_version=p.version, reason="Synthetic review"
         )
-        p = await programs.activate(p.id, expected_version=p.version, reason="Synthetic activation")
         feed = source(
             base,
             [
                 row(
                     price=price,
+                    affiliate_url={
+                        "awin": "https://www.awin1.com/fixture",
+                        "cj": "https://www.kqzyfj.com/fixture",
+                        "tradedoubler": "https://clk.tradedoubler.com/fixture",
+                    }[network],
                     metadata={
                         "commission": 1000 if network == "awin" else 0,
                         "affiliate_program": network + "-fixture",
@@ -123,6 +127,8 @@ async def test_four_network_same_gtin_preserves_market_and_best_price(container)
             ],
         )
         feed.name = network
+        await container.feed_validation.run(p.id, feed)
+        p = await programs.activate(p.id, expected_version=p.version, reason="Synthetic activation")
         await sync.run(p.id, feed)
     user = await market_user(container, 780002, "BE")
     be = await container.search.search("Sony WH-1000XM6", user.id, country="BE")
@@ -230,6 +236,9 @@ async def test_lifecycle_import_is_idempotent_and_audit_cannot_be_edited(contain
     )
     assert reimport.version == reviewed.version and reimport.display_name == "Merchant"
     assert reimport.policy_data == reviewed.policy_data and not reimport.active
+    from tests.integration.test_commerce_feeds import validate_fixture
+
+    await validate_fixture(programs, reviewed)
     preview = await programs.activate(
         pending.id, expected_version=reviewed.version, reason="Preview", dry_run=True
     )
@@ -575,7 +584,6 @@ async def test_cj_fake_http_partial_feed_materializes_and_request_failure_preser
     p = await programs.review(
         p.id, SYNTHETIC_POLICY, expected_version=p.version, reason="Synthetic CJ review"
     )
-    p = await programs.activate(p.id, expected_version=p.version, reason="Synthetic CJ activation")
     failed = False
 
     def handler(request):
@@ -599,6 +607,10 @@ async def test_cj_fake_http_partial_feed_materializes_and_request_failure_preser
     provider = FeedStoreProvider("cj", container.sessions, container.settings)
     container.registry.providers = {"cj": provider}
     async with client:
+        assert (await container.feed_validation.run(p.id, adapter)).status == "passed"
+        p = await programs.activate(
+            p.id, expected_version=p.version, reason="Synthetic CJ activation"
+        )
         report = await container.feed_sync.run(p.id, adapter)
         assert report.valid_rows == 10 and report.invalid_rows == 1
         user = await market_user(container, 780007, "BE")

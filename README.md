@@ -2,7 +2,7 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0–M4D: tracking, Stars subscriptions, discovery, merchant feeds and canonical retailers**. Billing is tested with
+**M0–M4E: tracking, Stars subscriptions, discovery, merchant feeds and canonical retailers**. Billing is tested with
 a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
@@ -162,6 +162,12 @@ separate tracking agreement; see [Amazon setup](docs/amazon-setup.md).
 PostgreSQL staging. Search and shared watch discovery select relevant items for the
 existing canonical catalog. The customer sees the merchant name, not the network name.
 Each merchant/market has its own reviewed catalog, tracking, history and affiliate rights.
+
+Activation now also requires fresh immutable technical validation of the exact feed
+configuration. Complete generations pass malformed-row and catastrophic-shrink gates
+before publication. Follow [the exact first-pilot procedure](docs/merchant-pilot.md) and
+[feed quality safeguards](docs/feed-quality.md). Rights review, validation, activation,
+publication and live verification are separate steps.
 
 All three networks default disabled and are fixture-tested; no network merchant is
 claimed live. Start with [merchant onboarding](docs/merchant-programs.md), then configure

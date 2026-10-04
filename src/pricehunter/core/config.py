@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated, Literal
 
@@ -160,6 +161,11 @@ class Settings(BaseSettings):
     feed_sync_seconds: int = Field(21600, ge=300)
     feed_retention_days: int = Field(7, ge=1, le=90)
     feed_max_rows: int = Field(1_000_000, ge=1)
+    merchant_validation_max_age_seconds: int = Field(604800, ge=60)
+    feed_min_valid_rows: int = Field(1, ge=0)
+    feed_max_invalid_ratio: Decimal = Field(Decimal("0.25"), ge=0, le=1)
+    feed_shrink_guard_min_previous_rows: int = Field(1000, ge=1)
+    feed_max_shrink_ratio: Decimal = Field(Decimal("0.50"), ge=0, le=1)
     feed_max_compressed_bytes: int = Field(256_000_000, ge=1024)
     feed_max_decompressed_bytes: int = Field(2_000_000_000, ge=1024)
     feed_max_record_bytes: int = Field(131072, ge=1024, le=1_000_000)

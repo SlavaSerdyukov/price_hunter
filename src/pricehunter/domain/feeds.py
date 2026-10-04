@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -20,12 +21,78 @@ AFFILIATE_HOSTS = {
 }
 
 
+FEED_ERROR_CODES = frozenset(
+    [
+        "ambiguous_offers",
+        "compressed_size_limit",
+        "conflicting_duplicate",
+        "decompressed_size_limit",
+        "empty_feed",
+        "feed_list_limit",
+        "feed_not_authorized",
+        "field_size_limit",
+        "future_source_version",
+        "graphql_error_limit",
+        "graphql_request_failed",
+        "headers_size_limit",
+        "inconsistent_page",
+        "invalid_csv_record",
+        "invalid_destination_host",
+        "invalid_feed",
+        "invalid_feed_list",
+        "invalid_feed_reference",
+        "invalid_gzip",
+        "invalid_header",
+        "invalid_json",
+        "invalid_page",
+        "invalid_page_cursor",
+        "invalid_schema",
+        "invalid_source_version",
+        "invalid_utf8",
+        "json_nesting_limit",
+        "lease_lost",
+        "missing_page_cursor",
+        "multiple_gzip_members",
+        "network_disabled",
+        "page_limit",
+        "page_size_limit",
+        "quality_invalid_ratio",
+        "quality_min_rows",
+        "quality_shrink",
+        "query_size_limit",
+        "record_size_limit",
+        "row_limit",
+        "source_changed_during_sync",
+        "sync_busy",
+        "technical_validation_failed",
+        "transport_error",
+        "truncated_csv",
+        "truncated_gzip",
+        "truncated_page",
+        "unknown_program",
+        "unsupported_encoding",
+        "unsupported_feed_mode",
+        "validation_busy",
+        "validation_configuration_changed",
+        "validation_rights_changed",
+        "wrong_advertiser",
+        "wrong_currency",
+        "wrong_feed",
+        "wrong_market",
+    ]
+)
+
+
 class FeedError(Exception):
     """Stable diagnostics only; never wrap a remote URL or response body."""
 
     def __init__(self, code: str = "invalid_feed") -> None:
-        self.code = code
-        super().__init__(code)
+        self.code = (
+            code
+            if code in FEED_ERROR_CODES or re.fullmatch(r"http_[1-5][0-9]{2}", code)
+            else "invalid_feed"
+        )
+        super().__init__(self.code)
 
 
 class MerchantProgramInput(BaseModel):
@@ -171,6 +238,15 @@ class FeedReport(BaseModel):
     variant_coverage: int = 0
     availability_coverage: int = 0
     currencies: dict[str, int] = Field(default_factory=dict)
+    coverage: dict[str, int] = Field(default_factory=dict)
+    rejections: dict[str, int] = Field(default_factory=dict)
+    price_min: Decimal | None = None
+    price_max: Decimal | None = None
+    valid_ratio: Decimal = Decimal(0)
+    drift: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    quality_error: str | None = None
+    failure_kind: str | None = None
     would_insert: int = 0
     would_update: int = 0
     would_deactivate: int = 0

@@ -566,6 +566,53 @@ class MerchantProgramAudit(UUIDPrimaryKey, Base):
     )
 
 
+class MerchantProgramValidation(UUIDPrimaryKey, Base):
+    __tablename__ = "merchant_program_validations"
+    __table_args__ = (
+        CheckConstraint("status IN ('passed','failed')", name="validation_status"),
+        Index("ix_program_validation_history", "merchant_program_id", "completed_at"),
+    )
+    merchant_program_id: Mapped[UUID] = mapped_column(
+        ForeignKey("merchant_programs.id", ondelete="RESTRICT")
+    )
+    status: Mapped[str] = mapped_column(String(10))
+    configuration_fingerprint: Mapped[str] = mapped_column(String(64))
+    source_version: Mapped[str | None] = mapped_column(String(64))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    valid_rows: Mapped[int] = mapped_column(BigInteger)
+    invalid_rows: Mapped[int] = mapped_column(BigInteger)
+    duplicate_rows: Mapped[int] = mapped_column(BigInteger)
+    sampled_rows: Mapped[int] = mapped_column(BigInteger, default=0)
+    warnings: Mapped[list[str]] = mapped_column(JSONB)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    error_code: Mapped[str | None] = mapped_column(String(60))
+    adapter_revision: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+
+class FeedPublicationAudit(UUIDPrimaryKey, Base):
+    __tablename__ = "feed_publication_audits"
+    __table_args__ = (
+        UniqueConstraint("merchant_program_id", "generation"),
+        CheckConstraint("guard = 'quality_shrink'", name="publication_override_guard"),
+    )
+    merchant_program_id: Mapped[UUID] = mapped_column(
+        ForeignKey("merchant_programs.id", ondelete="RESTRICT")
+    )
+    generation: Mapped[int] = mapped_column(BigInteger)
+    previous_rows: Mapped[int] = mapped_column(BigInteger)
+    candidate_rows: Mapped[int] = mapped_column(BigInteger)
+    invalid_rows: Mapped[int] = mapped_column(BigInteger)
+    guard: Mapped[str] = mapped_column(String(60))
+    reason: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+
 class MerchantFeedItem(UUIDPrimaryKey, Base):
     __tablename__ = "merchant_feed_items"
     __table_args__ = (
@@ -633,3 +680,6 @@ class FeedSyncState(Base):
     error_code: Mapped[str | None] = mapped_column(String(60))
     row_count: Mapped[int] = mapped_column(BigInteger, default=0)
     report: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    rejected_report: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb")
+    )

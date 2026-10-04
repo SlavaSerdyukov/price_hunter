@@ -37,6 +37,7 @@ from pricehunter.services.coverage import CoverageDiagnostics
 from pricehunter.services.discovery_service import ProductDiscoveryService
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.feed_sync import FeedSyncService
+from pricehunter.services.feed_validation import FeedValidationService
 from pricehunter.services.fx_service import FxService
 from pricehunter.services.merchant_programs import MerchantProgramService
 from pricehunter.services.merchants import MerchantService
@@ -254,6 +255,7 @@ class Container:
             self.sessions, self.registry, self.limiter, settings, self.entitlements
         )
         self.merchant_programs = MerchantProgramService(self.sessions, settings)
+        self.feed_validation = FeedValidationService(self.sessions, settings)
         self.merchants = MerchantService(self.sessions)
         self.feed_sync = FeedSyncService(self.sessions, settings, self.products)
         self.coverage = CoverageDiagnostics(self.sessions, settings, self.registry, self.limiter)

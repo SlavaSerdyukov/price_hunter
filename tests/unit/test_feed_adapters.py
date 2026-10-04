@@ -117,6 +117,10 @@ async def test_awin_feed_list_does_not_return_credential_url(redis):
         wrong.external_merchant_id = "999"
         with pytest.raises(FeedError, match="feed_not_authorized"):
             await source.source_version(wrong)
+        wrong_market = program()
+        wrong_market.market_country = "DE"
+        with pytest.raises(FeedError, match="wrong_market"):
+            await source.source_version(wrong_market)
 
 
 async def test_tradedoubler_pagination_normalizes_and_checks_source_version(redis):

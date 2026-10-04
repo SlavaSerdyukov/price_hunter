@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import nullcontext
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select, tuple_
 from sqlalchemy.orm import aliased
@@ -21,6 +22,7 @@ from pricehunter.domain.markets import validate_country
 from pricehunter.domain.products import ProductOfferData
 from pricehunter.providers.registry import ProviderRegistry
 from pricehunter.services.comparison_service import ComparisonReader
+from pricehunter.services.feed_validation import FeedValidationService
 from pricehunter.services.policy_resolver import PolicyResolver
 from pricehunter.services.provider_health import ProviderHealth
 
@@ -56,6 +58,51 @@ class CoverageDiagnostics:
         if name == "tradedoubler":
             return bool(s.tradedoubler_token.get_secret_value().strip())
         return name in self.registry.providers
+
+    async def program(self, program_id: UUID) -> dict[str, Any]:
+        """Internal pilot evidence and generation health; never customer output."""
+        async with self.sessions() as session:
+            program = await session.get(MerchantProgram, program_id)
+            if program is None:
+                raise ValueError("Unknown merchant program")
+            state = await session.get(FeedSyncState, program_id)
+            active = await session.scalar(
+                select(func.count())
+                .select_from(MerchantFeedItem)
+                .where(
+                    MerchantFeedItem.merchant_program_id == program_id,
+                    MerchantFeedItem.active.is_(True),
+                )
+            )
+            validation = FeedValidationService(self.sessions, self.settings)
+            return {
+                "program_id": str(program_id),
+                "network": program.network,
+                "market": program.market_country,
+                "currency": program.currency,
+                "rights_reviewed": program.approved and bool(program.policy_data.get("reviewed")),
+                "active": program.active,
+                "active_rows": int(active or 0),
+                "last_validation": next(iter(await validation.history(program_id, limit=1)), None),
+                **(
+                    {
+                        key: getattr(state, key)
+                        for key in (
+                            "status",
+                            "generation",
+                            "row_count",
+                            "last_success_at",
+                            "next_sync_at",
+                            "failure_count",
+                            "error_code",
+                            "report",
+                            "rejected_report",
+                        )
+                    }
+                    if state
+                    else {}
+                ),
+            }
 
     async def report(self) -> dict[str, Any]:
         now = utcnow()
