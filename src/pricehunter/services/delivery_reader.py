@@ -115,27 +115,37 @@ class DeliveryReader:
             cached.c.expires_at > now,
             cached.c.quoted_at + interval > now,
         )
-        static_usable = and_(
-            static_current, o.delivery_total.is_not(None), o.delivery_availability == "in_stock"
+        # A current non-terminal tuple is authoritative even when it reports
+        # incomplete costs or destination unavailability. A failed lookup is not.
+        dynamic_priority = case(
+            (and_(dynamic_current, cached.c.status.not_in(["failed", "unsupported"])), 0),
+            (dynamic_current, 1),
+            else_=2,
         )
+        static_priority = case(
+            (static_current, 0),
+            (and_(static_match, o.delivery_quoted_at.is_not(None)), 2),
+            else_=3,
+        )
+        dynamic_scope = case((cached.c.scope == "exact", 0), else_=1)
+        static_scope = case((o.delivery_scope == "exact", 0), else_=1)
+        # Compare freshness, then scope, then time. Static wins an equal-time tie.
         # Select an entire evidence tuple, never coalesce individual source costs.
         use_dynamic = func.coalesce(
             and_(
                 dynamic_bound,
                 or_(
+                    dynamic_priority < static_priority,
                     and_(
-                        dynamic_current,
+                        dynamic_priority == static_priority,
                         or_(
-                            cached.c.status.not_in(["failed", "unsupported"]),
-                            ~func.coalesce(static_usable, False),
-                        ),
-                        or_(
-                            ~func.coalesce(static_current, False),
-                            cached.c.scope == "exact",
-                            cached.c.quoted_at >= o.delivery_quoted_at,
+                            dynamic_scope < static_scope,
+                            and_(
+                                dynamic_scope == static_scope,
+                                cached.c.quoted_at > o.delivery_quoted_at,
+                            ),
                         ),
                     ),
-                    ~func.coalesce(static_current, False),
                 ),
             ),
             False,

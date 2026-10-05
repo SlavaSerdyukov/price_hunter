@@ -93,7 +93,7 @@ merchant. Initial execution: **8 failed in 0.57s**, all rejected by the original
 ProductOfferData model because delivery evidence did not yet exist. Production
 implementation started only after this red run and the full baseline completed.
 
-## Final local verification
+## Initial M5B local verification
 
 **896 passed, no skips, 91.94% statement coverage**, 314.37 seconds. All 812
 previous tests retained; 84 new cases. The sole warning is the existing upstream
@@ -115,3 +115,20 @@ M5A merged-main hosted run also passed on the baseline merge commit
 M5B final-head hosted run results are verified and linked in the PR description and
 delivery report before merge readiness is claimed. No live merchant activation or
 real credentials were used; `.env` was not read or changed.
+
+## Delivery precedence review regression — 2026-10-05
+
+The review identified an unconditional dynamic EXACT preference and a timestamp
+comparison that could let newer COUNTRY evidence beat current static EXACT evidence.
+Evidence selection now compares current non-terminal validity, destination scope,
+then quote time. Static wins equal-scope/equal-time ties. Failed/unsupported lookup
+results cannot replace current static evidence. All displayed fields still use one
+chosen tuple; item, watch, event, tracker, commission and native-currency semantics
+retain their prior behavior.
+
+Before the fix, the new matrix produced **8 failures and 16 passes**. Its 24 cases
+cover A–H, both terminal failure states, freshness in both directions, and both
+equal-time scope ties. Each scenario makes the chosen source cheaper or more expensive
+than a competing merchant, checking shipping, tax, total, timestamps, availability,
+source URL, delivered winner, unchanged item winner and unchanged observation count.
+The targeted new and existing delivery suite passed **55 tests** after the fix.

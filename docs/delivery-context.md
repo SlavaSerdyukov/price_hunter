@@ -59,6 +59,12 @@ UNKNOWN. Destination stock is independent of general listing stock. Static and d
 evidence are selected as whole tuples: a current specific/newer compatible dynamic quote
 supersedes static evidence. Costs/price/tax/availability/link never mix source listings.
 
+Precedence is deterministic: current non-terminal evidence beats stale evidence;
+then EXACT beats COUNTRY; at equal scope the newer `quoted_at` wins. At equal scope
+and time, static evidence wins the tie. FAILED/UNSUPPORTED dynamic lookups cannot hide
+current static evidence. Current evidence can truthfully report incomplete costs or
+destination unavailability; completeness is checked after choosing the whole tuple.
+
 Static ingestion and dynamic acquisition cache the domain-calculated total and its item
 price binding. SQL validates policy, scope, currency, freshness and stock before ranking;
 it does not repeat the arithmetic. Changing item price invalidates an old quote. Obtaining
