@@ -155,7 +155,9 @@ async def discover_product(ctx: dict[str, Any], target_id: str, token: str) -> b
 
 @scoped_job
 async def maintain_comparisons(ctx: dict[str, Any]) -> int:
-    return await cast(Container, ctx["container"]).comparison_operations.maintain()
+    container = cast(Container, ctx["container"])
+    await container.delivery.purge_expired()
+    return await container.comparison_operations.maintain()
 
 
 @scoped_job

@@ -157,6 +157,11 @@ class Settings(BaseSettings):
     discovery_failure_threshold: int = Field(5, ge=1)
     discovery_suppression_seconds: int = Field(3600, ge=60)
     comparison_refresh_limit: int = Field(20, ge=1, le=100)
+    delivery_quote_ttl_seconds: int = Field(900, ge=30, le=86400)
+    delivery_quote_limit: int = Field(12, ge=1, le=20)
+    delivery_quote_timeout_seconds: int = Field(3, ge=1, le=5)
+    delivery_operation_timeout_seconds: int = Field(10, ge=1, le=15)
+    delivery_quote_concurrency: int = Field(4, ge=1, le=4)
     support_contact: str = "Contact the bot administrator for support."
     awin_enabled: bool = False
     awin_feed_api_key: SecretStr = SecretStr("")

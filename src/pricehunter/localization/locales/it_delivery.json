@@ -1,0 +1,17 @@
+{
+  "settings_text": "<b>Impostazioni</b>\nLingua: {language}\nMercato di acquisto: {country}\nConsegna in: {delivery}\nValuta preferita: {currency}\nFuso orario: {timezone}\n\nCambiare la destinazione non modifica i monitoraggi esistenti.",
+  "country": "Mercato di acquisto",
+  "comparison_best_label": "Miglior prezzo dell’articolo:",
+  "delivery_country": "Paese di consegna",
+  "delivery_postal": "Codice postale",
+  "delivery_clear": "Cancella destinazione",
+  "delivery_country_prompt": "Scegli il paese di consegna o invia il codice ISO di due lettere. Invia - per cancellare. Mercato e monitoraggi restano invariati.",
+  "delivery_postal_prompt": "Invia un codice postale facoltativo (fino a 20 caratteri) o - per cancellarlo. Imposta prima il paese di consegna.",
+  "invalid_delivery_context": "Imposta un paese di consegna in /settings prima di usare un codice postale o il confronto con spedizione.",
+  "delivery_compare": "Confronta costo con spedizione",
+  "delivery_quote": "Richiedi costi di spedizione",
+  "delivery_heading": "<b>Consegnato in {country}</b>",
+  "delivery_best": "{store}: articolo {item} + spedizione {shipping} → totale {total} (include eventuali imposte aggiuntive).",
+  "delivery_open": "Apri offerta con consegna",
+  "delivery_incomplete": "Il costo totale non è disponibile per alcuni negozi. Spedizione o imposte sconosciute non equivalgono a zero."
+}

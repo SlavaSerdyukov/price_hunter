@@ -24,7 +24,7 @@ from pricehunter.services.feed_quality import (
     version_digest,
 )
 
-ADAPTER_REVISION = "m4e-feed-v1"
+ADAPTER_REVISION = "m5b-feed-v1"
 
 
 def reviewed_policy(program: MerchantProgram) -> ProviderDataPolicy:

@@ -34,6 +34,7 @@ from pricehunter.services.billing_reconciliation import BillingReconciliation
 from pricehunter.services.billing_service import BillingService
 from pricehunter.services.comparison_operations import ComparisonOperations
 from pricehunter.services.coverage import CoverageDiagnostics
+from pricehunter.services.delivery_service import DeliveryService
 from pricehunter.services.discovery_service import ProductDiscoveryService
 from pricehunter.services.entitlement_service import EntitlementService
 from pricehunter.services.feed_sync import FeedSyncService
@@ -246,6 +247,9 @@ class Container:
             self.sessions, self.registry, self.limiter, settings, self.entitlements
         )
         self.watches = ProductWatchService(self.sessions, self.entitlements, settings)
+        self.delivery = DeliveryService(
+            self.sessions, self.registry, self.limiter, settings, self.entitlements
+        )
         self.comparison_operations = ComparisonOperations(
             self.sessions, self.registry, self.limiter, settings, self.entitlements
         )

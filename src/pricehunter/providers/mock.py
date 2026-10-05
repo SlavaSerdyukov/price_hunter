@@ -1,7 +1,10 @@
+from datetime import timedelta
 from decimal import Decimal
 from urllib.parse import urlsplit
 
 from pricehunter.core.security import canonical_url
+from pricehunter.db.base import utcnow
+from pricehunter.domain.delivery import DeliveryContext, DeliveryOfferReference, DeliveryQuoteData
 from pricehunter.domain.discovery import Capability, DiscoveryQuery
 from pricehunter.domain.errors import ProductNotFoundError
 from pricehunter.domain.products import Availability, ProductOfferData
@@ -58,9 +61,15 @@ COMPARISON_CATALOG = {
 
 class MockStoreProvider(StoreProvider):
     capabilities = StoreProvider.capabilities | frozenset(
-        {Capability.SEARCH_KEYWORD, Capability.SEARCH_GTIN, Capability.SEARCH_MODEL}
+        {
+            Capability.SEARCH_KEYWORD,
+            Capability.SEARCH_GTIN,
+            Capability.SEARCH_MODEL,
+            Capability.DELIVERY_QUOTE,
+        }
     )
     name = "mock"
+    delivery_quote_cacheable = True
     domains = {"mock.pricehunter.test"}
 
     def __init__(self, discovery_interval_seconds: int = 600) -> None:
@@ -75,6 +84,19 @@ class MockStoreProvider(StoreProvider):
         return urlsplit(url).hostname in self.domains
 
     def _offer(self, slug: str, sequence: int = 0) -> ProductOfferData:
+        if slug in ("delivery-alpha", "delivery-beta"):
+            alpha = slug == "delivery-alpha"
+            original = self._offer("sony-a" if alpha else "sony-b")
+            return ProductOfferData.model_validate(
+                original.model_dump()
+                | {
+                    "external_id": slug,
+                    "country": "BE",
+                    "price": Decimal("299" if alpha else "309"),
+                    "url": f"https://mock.pricehunter.test/products/{slug}",
+                    "direct_url": f"https://mock.pricehunter.test/products/{slug}",
+                }
+            )
         if slug in ("sony-new", "sony-old"):
             original = self._offer("sony-a")
             return original.model_copy(
@@ -183,3 +205,33 @@ class MockStoreProvider(StoreProvider):
 
     async def refresh_offer(self, offer: OfferReference) -> ProductOfferData:
         return self._offer(offer.external_id, offer.refresh_sequence + 1)
+
+    async def quote_delivery(
+        self, offer: DeliveryOfferReference, context: DeliveryContext
+    ) -> DeliveryQuoteData | None:
+        if offer.external_id not in ("delivery-alpha", "delivery-beta"):
+            return None
+        if context.country not in ("BE", "NL") or (
+            offer.external_id == "delivery-alpha" and context.country != "BE"
+        ):
+            return None
+        shipping = (
+            Decimal("25")
+            if offer.external_id == "delivery-alpha"
+            else Decimal("0" if context.country == "BE" else "8")
+        )
+        now = utcnow()
+        return DeliveryQuoteData(
+            offer_id=offer.offer_id,
+            snapshot_key=offer.snapshot_key,
+            country=context.country,
+            scope="exact",
+            destination_key=context.fingerprint,
+            currency=offer.currency,
+            shipping_price=shipping,
+            tax_status="included",
+            availability="in_stock",
+            quoted_at=now,
+            expires_at=now + timedelta(minutes=15),
+            source=self.name,
+        )

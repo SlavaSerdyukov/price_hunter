@@ -56,6 +56,10 @@ class CountryRequiredError(PriceHunterError):
     code = "country_required"
 
 
+class InvalidDeliveryContextError(PriceHunterError):
+    code = "invalid_delivery_context"
+
+
 class ProviderPolicyError(PriceHunterError):
     code = "provider_policy"
     status_code = 403

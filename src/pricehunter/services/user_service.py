@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 from pricehunter.db.base import utcnow
 from pricehunter.db.models import APIKey, User
 from pricehunter.db.session import SessionFactory
-from pricehunter.domain.errors import ProductNotFoundError
+from pricehunter.domain.errors import InvalidDeliveryContextError, ProductNotFoundError
 from pricehunter.localization.languages import DEFAULT_LANGUAGE, normalize_language
 from pricehunter.schemas.api import UserSettingsPatch
 
@@ -80,9 +80,18 @@ class UserService:
 
     async def settings(self, user_id: UUID, patch: UserSettingsPatch) -> User:
         async with self.sessions.begin() as session:
-            user = await session.get(User, user_id)
+            user = await session.get(User, user_id, with_for_update=True)
             if user is None:
                 raise ProductNotFoundError()
-            for field, value in patch.model_dump(exclude_unset=True).items():
+            values = patch.model_dump(exclude_unset=True)
+            if "delivery_country" in values and values["delivery_country"] != user.delivery_country:
+                # Never carry an old country's postal preference into a new country.
+                if "delivery_postal_code" not in values:
+                    values["delivery_postal_code"] = None
+            country = values.get("delivery_country", user.delivery_country)
+            postal = values.get("delivery_postal_code", user.delivery_postal_code)
+            if postal is not None and country is None:
+                raise InvalidDeliveryContextError()
+            for field, value in values.items():
                 setattr(user, field, value)
             return user

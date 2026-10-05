@@ -5,14 +5,13 @@ import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
-from typing import Annotated, Any
+from typing import Any
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import (
     AwareDatetime,
     BaseModel,
-    BeforeValidator,
     ConfigDict,
     Field,
     ValidationInfo,
@@ -21,20 +20,19 @@ from pydantic import (
 )
 
 from pricehunter.core.security import validate_url
+from pricehunter.domain.delivery import (
+    STATIC_DELIVERY_FIELDS,
+    AncillaryMoney,
+    DeliveryAvailability,
+    DeliveryContext,
+    DeliveryEvidence,
+    DeliveryScope,
+    Fingerprint,
+    TaxStatus,
+    delivered_total,
+)
 from pricehunter.domain.markets import CountryCode
-
-
-def decimal_input(value: object) -> object:
-    if isinstance(value, float):
-        raise ValueError("Money must arrive as a decimal string or Decimal")
-    return value
-
-
-Money = Annotated[
-    Decimal,
-    BeforeValidator(decimal_input),
-    Field(gt=0, max_digits=18, decimal_places=4, allow_inf_nan=False),
-]
+from pricehunter.domain.money import Money as Money
 
 
 class Availability(StrEnum):
@@ -74,6 +72,16 @@ class ProductOfferData(BaseModel):
     price: Money
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     availability: Availability = Availability.UNKNOWN
+    shipping_price: AncillaryMoney | None = None
+    delivery_country: CountryCode | None = None
+    delivery_scope: DeliveryScope = DeliveryScope.UNKNOWN
+    delivery_destination_key: Fingerprint | None = None
+    delivery_currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    tax_amount: AncillaryMoney | None = None
+    tax_status: TaxStatus = TaxStatus.UNKNOWN
+    delivery_availability: DeliveryAvailability = DeliveryAvailability.UNKNOWN
+    delivery_quoted_at: AwareDatetime | None = None
+    delivery_expires_at: AwareDatetime | None = None
     original_price: Money | None = None
     image_url: str | None = Field(default=None, max_length=2048)
     brand: str | None = Field(default=None, max_length=200)
@@ -111,6 +119,52 @@ class ProductOfferData(BaseModel):
         if len(json.dumps(self.affiliate_metadata)) > 4096:
             raise ValueError("Affiliate metadata exceeds budget")
         return self
+
+    @model_validator(mode="after")
+    def delivery_data(self) -> "ProductOfferData":
+        if self.tax_status == TaxStatus.ADDITIONAL and self.tax_amount is None:
+            raise ValueError("Additional tax requires an explicit amount")
+        if self.delivery_currency is not None and self.delivery_currency != self.currency:
+            raise ValueError("Ancillary costs must use item currency")
+        if self.delivery_scope != DeliveryScope.UNKNOWN and self.delivery_country is None:
+            raise ValueError("Scoped delivery evidence needs a country")
+        if self.delivery_scope == DeliveryScope.EXACT and self.delivery_destination_key is None:
+            raise ValueError("Exact delivery evidence needs a destination key")
+        if self.delivery_scope == DeliveryScope.COUNTRY:
+            key = DeliveryContext(country=self.delivery_country or "BE").fingerprint
+            if self.delivery_destination_key not in (None, key):
+                raise ValueError("Invalid country delivery key")
+            object.__setattr__(self, "delivery_destination_key", key)
+        if self.shipping_price is not None or self.tax_amount is not None:
+            object.__setattr__(self, "delivery_currency", self.delivery_currency or self.currency)
+        if self.delivery_expires_at is not None and (
+            self.delivery_quoted_at is None
+            or not 0 < (self.delivery_expires_at - self.delivery_quoted_at).total_seconds() <= 86400
+        ):
+            raise ValueError("Invalid delivery validity interval")
+        return self
+
+    def delivery_values(self) -> dict[str, object]:
+        values: dict[str, object] = {
+            field: getattr(self, field) for field in STATIC_DELIVERY_FIELDS
+        }
+        values.update(delivery_item_price=self.price, delivery_total=None)
+        if self.delivery_quoted_at is not None and self.delivery_expires_at is not None:
+            evidence = DeliveryEvidence(
+                country=self.delivery_country,
+                scope=self.delivery_scope,
+                destination_key=self.delivery_destination_key,
+                currency=self.delivery_currency or self.currency,
+                shipping_price=self.shipping_price,
+                tax_status=self.tax_status,
+                tax_amount=self.tax_amount,
+                availability=self.delivery_availability,
+                quoted_at=self.delivery_quoted_at,
+                expires_at=self.delivery_expires_at,
+                source=self.provider,
+            )
+            values["delivery_total"] = delivered_total(self.price, self.currency, evidence)
+        return values
 
     @field_validator("title")
     @classmethod

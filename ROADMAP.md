@@ -164,12 +164,22 @@ See [pilot steps](docs/merchant-pilot.md), [quality gates](docs/feed-quality.md)
 See [M5A design](docs/m5a-design.md), [runtime contracts](docs/runtime-hardening.md)
 and [beta operations](docs/beta-operations.md).
 
-## Approved merchant pilot and delivery context — proposed
+## M5B — Delivery context — implemented
+
+- [x] Separate private user delivery country/postal preferences.
+- [x] Zero-capable Decimal costs, explicit tax/scope/freshness and deterministic total.
+- [x] Separate delivered comparison and canonical merchant source selection.
+- [x] Explicit bounded authenticated quotes, latest cache, seven-language Telegram/API.
+- [x] Migration and acceptance preserving item watches/history/runtime leases.
+- [ ] Approved real destination quote providers and destination-aware watch milestone.
+
+See [delivery context](docs/delivery-context.md) and [design](docs/m5b-design.md).
+
+## Approved merchant pilot — proposed
 
 - Onboard a small approved BE/DE merchant set; verify real feed completeness, quotas,
   identifiers, variants, update cadence, permissions and affiliate attribution.
-- Explicit delivery country/postal input and documented shipping/tax/stock by destination.
-- Missing-cost semantics and separately labeled delivered-cost comparison when complete.
+- Verify real documented shipping/tax/stock by destination before enabling dynamic quoting.
 - Preserve native currency groups and deterministic matching; no automatic product merge.
 
 ## M5 — Platform

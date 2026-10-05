@@ -346,6 +346,8 @@ class PriceCheckService:
                     .on_conflict_do_nothing(index_elements=[PriceObservation.refresh_key])
                 )
             offer.price, offer.availability = data.price, data.availability
+            for field, value in data.delivery_values().items():
+                setattr(offer, field, value)
             offer.title, offer.image_url = data.title, data.image_url
             offer.original_price = data.original_price
             offer.direct_url, offer.affiliate_url = data.direct_url, data.affiliate_url

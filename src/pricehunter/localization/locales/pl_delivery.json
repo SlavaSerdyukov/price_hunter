@@ -1,0 +1,17 @@
+{
+  "settings_text": "<b>Ustawienia</b>\nJęzyk: {language}\nRynek zakupów: {country}\nDostawa do: {delivery}\nPreferowana waluta: {currency}\nStrefa czasowa: {timezone}\n\nZmiana dostawy nie zmienia istniejących obserwacji.",
+  "country": "Rynek zakupów",
+  "comparison_best_label": "Najlepsza cena produktu:",
+  "delivery_country": "Kraj dostawy",
+  "delivery_postal": "Kod pocztowy",
+  "delivery_clear": "Usuń cel dostawy",
+  "delivery_country_prompt": "Wybierz kraj dostawy lub wyślij dwuliterowy kod ISO. Wyślij -, aby usunąć. Rynek i obserwacje pozostają bez zmian.",
+  "delivery_postal_prompt": "Wyślij opcjonalny kod pocztowy (do 20 znaków) lub -, aby usunąć. Najpierw ustaw kraj dostawy.",
+  "invalid_delivery_context": "Ustaw kraj dostawy w /settings przed podaniem kodu pocztowego lub porównaniem kosztów z dostawą.",
+  "delivery_compare": "Porównaj koszt z dostawą",
+  "delivery_quote": "Zapytaj o koszty dostawy",
+  "delivery_heading": "<b>Z dostawą do {country}</b>",
+  "delivery_best": "{store}: produkt {item} + dostawa {shipping} → razem {total} (z uwzględnieniem dodatkowych podatków, jeśli mają zastosowanie).",
+  "delivery_open": "Otwórz ofertę z dostawą",
+  "delivery_incomplete": "Łączny koszt jest niedostępny w niektórych sklepach. Nieznana dostawa lub podatek nie oznaczają zera."
+}

@@ -11,6 +11,8 @@ from pricehunter.bot.keyboards import Action, button, country_keyboard
 from pricehunter.core.container import Container
 from pricehunter.db.models import User
 from pricehunter.domain.comparison import ComparisonOffer, ComparisonProduct
+from pricehunter.domain.delivery import DeliveryContext
+from pricehunter.domain.errors import InvalidDeliveryContextError
 from pricehunter.localization.messages import money, tr
 from pricehunter.schemas.watches import WatchCreate, WatchPatch
 
@@ -153,9 +155,58 @@ async def show_comparison(message: Message, product: ComparisonProduct, language
                 )
             )
     lines.extend(offer_line(offer, language) for offer in product.offers[:4])
+    if product.delivery_country:
+        lines.append(tr(language, "delivery_heading", country=product.delivery_country))
+        for group in product.currency_groups[:4]:
+            delivered = group.best_delivered_offer
+            if (
+                delivered is not None
+                and delivered.delivered_total is not None
+                and delivered.shipping_price is not None
+            ):
+                lines.append(
+                    tr(
+                        language,
+                        "delivery_best",
+                        store=delivered.store,
+                        item=money(delivered.price, delivered.currency, language),
+                        shipping=money(delivered.shipping_price, delivered.currency, language),
+                        total=money(delivered.delivered_total, delivered.currency, language),
+                    )
+                )
+                if delivered.url:
+                    rows.append(
+                        [
+                            InlineKeyboardButton(
+                                text=tr(language, "delivery_open"), url=delivered.url
+                            )
+                        ]
+                    )
+        if (
+            sum(g.delivered_offer_count for g in product.currency_groups) < product.offer_count
+            or not product.delivered_offers
+            or any(o.delivery_quote_status != "complete" for o in product.delivered_offers)
+        ):
+            lines.append(tr(language, "delivery_incomplete"))
     if any(d.status == "backed_off" for d in product.discovery):
         lines.append(tr(language, "discovery_partial"))
     lines.append(tr(language, "comparison_price_note"))
+    rows.append(
+        [
+            button(
+                language,
+                "delivery_compare",
+                "delcmp",
+                product.id.hex + (f"_{product.market_country}" if product.market_country else ""),
+            ),
+            button(
+                language,
+                "delivery_quote",
+                "delquote",
+                product.id.hex + (f"_{product.market_country}" if product.market_country else ""),
+            ),
+        ]
+    )
     rows.append(
         [
             button(
@@ -421,6 +472,8 @@ def build_comparison_router() -> Router:
                     "wdelete",
                     "besthist",
                     "refreshcmp",
+                    "delcmp",
+                    "delquote",
                 }
             )
         )
@@ -439,7 +492,24 @@ def build_comparison_router() -> Router:
         await query.answer()
         await state.clear()
         action, value = callback_data.action, callback_data.value
-        if action == "wcompare":
+        if action in ("delcmp", "delquote"):
+            if user.delivery_country is None:
+                raise InvalidDeliveryContextError()
+            parts = value.split("_")
+            context = DeliveryContext(
+                country=user.delivery_country, postal_code=user.delivery_postal_code
+            )
+            market = parts[1] if len(parts) == 2 else None
+            if action == "delquote":
+                product = await container.delivery.request(
+                    UUID(parts[0]), user.id, context, market_country=market
+                )
+            else:
+                product = await container.products.comparisons.get(
+                    UUID(parts[0]), user.id, market_country=market, delivery_context=context
+                )
+            await show_comparison(query.message, product, language)
+        elif action == "wcompare":
             watch = await container.watches.get(user.id, UUID(value))
             product = await container.products.comparisons.get(
                 watch.product_id,

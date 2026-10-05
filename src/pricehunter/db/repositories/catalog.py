@@ -103,6 +103,7 @@ class CatalogRepository:
                 observation_count=1,
                 last_checked_at=now,
                 next_check_at=now,
+                **data.delivery_values(),
             )
             .on_conflict_do_nothing(
                 index_elements=[

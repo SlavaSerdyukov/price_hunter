@@ -1,5 +1,12 @@
 # First real merchant pilot — operator procedure
 
+M5B [delivery context](delivery-context.md) is code/fixture only. No merchant activation
+or shipping endpoint is added. Awin/TradeDoubler shipping has unknown scope; audited
+CJ country shipping retains UNKNOWN tax. Item price != delivered total; market !=
+destination; unknown != zero; reference FX != landed-cost ranking; watches remain
+item-price based. Changed normalization revision `m5b-feed-v1` requires renewed
+technical validation before a pilot resumes. Existing policy/cache review still applies.
+
 M4E is fixture verified. No Awin/TradeDoubler/CJ merchant was activated live by this
 milestone. Use one approved retailer/catalog/market first. Rights reviewed,
 technically validated, activated, published and live verified are separate states.

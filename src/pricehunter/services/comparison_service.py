@@ -17,6 +17,7 @@ from pricehunter.domain.comparison import (
     CurrencyComparison,
     DiscoveryStatus,
 )
+from pricehunter.domain.delivery import DeliveryContext
 from pricehunter.domain.errors import PriceHunterError, ProductNotFoundError
 from pricehunter.domain.freshness import Freshness, OfferFreshnessPolicy
 from pricehunter.domain.subscriptions import Feature
@@ -387,6 +388,8 @@ class ComparisonService:
         size: int = 10,
         market_country: str | None = None,
         permission: str | None = None,
+        delivery_context: DeliveryContext | None = None,
+        delivery_quotes: list[dict[str, object]] | None = None,
     ) -> ComparisonProduct:
         (await self.entitlements.for_user(user_id)).entitlements.require(Feature.COMPARISON_SEARCH)
         async with self.sessions() as session:
@@ -398,6 +401,8 @@ class ComparisonService:
                 size=size,
                 market_country=market,
                 permission=permission,
+                delivery_context=delivery_context,
+                delivery_quotes=delivery_quotes,
             )
             user = await session.get(User, user_id)
             if user:
@@ -447,6 +452,8 @@ class ComparisonService:
         size: int = 10,
         market_country: str | None = None,
         permission: str | None = None,
+        delivery_context: DeliveryContext | None = None,
+        delivery_quotes: list[dict[str, object]] | None = None,
     ) -> ComparisonProduct:
         product = await session.get(Product, product_id)
         if product is None:
@@ -472,7 +479,7 @@ class ComparisonService:
                 .limit(100)
             )
         )
-        return ComparisonProduct(
+        result = ComparisonProduct(
             id=product.id,
             market_country=market_country,
             canonical_name=product.canonical_name,
@@ -514,3 +521,10 @@ class ComparisonService:
                 for d in discoveries
             ],
         )
+        if delivery_context is not None:
+            from pricehunter.services.delivery_reader import DeliveryReader
+
+            await DeliveryReader(reader, delivery_context, now, delivery_quotes).enrich(
+                session, result
+            )
+        return result

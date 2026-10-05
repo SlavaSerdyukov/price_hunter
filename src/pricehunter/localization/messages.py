@@ -271,6 +271,15 @@ for _code in ("fr", "de", "es", "it", "pl"):
         ),
     )
 
+for _code, _catalog in CATALOGS.items():
+    _catalog.update(
+        json.loads(
+            files("pricehunter.localization")
+            .joinpath(f"locales/{_code}_delivery.json")
+            .read_text("utf-8")
+        )
+    )
+
 
 def tr(locale: str, key: str, **values: object) -> str:
     messages = CATALOGS[normalize_language(locale)]

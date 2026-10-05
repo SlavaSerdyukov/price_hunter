@@ -4,8 +4,9 @@ from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from pricehunter.domain.delivery import PostalCode
 from pricehunter.domain.markets import CountryCode
 from pricehunter.domain.products import Money
 from pricehunter.localization.languages import LanguageCode
@@ -97,8 +98,20 @@ class HistoryView(BaseModel):
 class UserSettingsPatch(InputModel):
     language_code: LanguageCode | None = None
     country_code: CountryCode | None = None
+    delivery_country: CountryCode | None = None
+    delivery_postal_code: PostalCode | None = Field(default=None, repr=False)
     preferred_currency: Annotated[str, Field(pattern=r"^[A-Z]{3}$")] | None = None
     timezone: str | None = None
+
+    @model_validator(mode="after")
+    def destination_pair(self) -> "UserSettingsPatch":
+        if (
+            "delivery_country" in self.model_fields_set
+            and self.delivery_country is None
+            and self.delivery_postal_code is not None
+        ):
+            raise ValueError("Postal code requires delivery country")
+        return self
 
     @field_validator("language_code", "preferred_currency", "timezone")
     @classmethod

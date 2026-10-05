@@ -2,10 +2,15 @@
 
 International price tracking backend with a Telegram client. Python 3.12+, FastAPI,
 aiogram 3, PostgreSQL, SQLAlchemy async, Redis and ARQ. This release implements the
-**M0–M5A: tracking, Stars subscriptions, discovery, merchant feeds, canonical retailers and beta runtime hardening**. Billing is tested with
+**M0–M5B: tracking, Stars subscriptions, discovery, merchant feeds, canonical retailers, beta runtime hardening and delivery context**. Billing is tested with
 a simulated Telegram transport; real Stars purchases/renewals/refunds remain manual checks.
 
 ## What works
+
+M5B adds [delivery settings and separate delivered comparison](docs/delivery-context.md).
+Item price != delivered total; market != destination; unknown cost != zero;
+reference FX != landed-cost ranking. Existing watches remain item-price based.
+Only synthetic mock supports dynamic shipping quotes; real merchants stay unactivated.
 
 - Send a URL, inspect a product card and track it; paid plans add absolute/percentage targets.
 - Paginated `/my`, pause/resume/delete, price history and changes since tracking began.

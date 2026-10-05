@@ -5,7 +5,10 @@ from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
 from pricehunter.api.dependencies import ContainerDependency, UserDependency
+from pricehunter.db.models import User
 from pricehunter.domain.comparison import ComparisonProduct
+from pricehunter.domain.delivery import DeliveryContext
+from pricehunter.domain.errors import InvalidDeliveryContextError
 from pricehunter.domain.markets import CountryCode
 from pricehunter.schemas.api import (
     HistoryView,
@@ -23,6 +26,48 @@ from pricehunter.services.search_service import SearchResult
 from pricehunter.services.subscription_service import SubscriptionView
 
 router = APIRouter(prefix="/api/v1")
+
+
+def destination(user: User, data: DeliveryContext | None) -> DeliveryContext:
+    if data is not None:
+        return data
+    if user.delivery_country is None:
+        raise InvalidDeliveryContextError()
+    return DeliveryContext(country=user.delivery_country, postal_code=user.delivery_postal_code)
+
+
+@router.post("/products/{product_id}/delivery-comparison", response_model=ComparisonProduct)
+async def delivery_comparison(
+    product_id: UUID,
+    container: ContainerDependency,
+    user: UserDependency,
+    data: DeliveryContext | None = None,
+    country: CountryCode | None = None,
+    page: Annotated[int, Query(ge=0, le=10000)] = 0,
+    size: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> ComparisonProduct:
+    # Destination belongs in the request body, never a postal-bearing access-log URL.
+    return await container.products.comparisons.get(
+        product_id,
+        user.id,
+        market_country=country,
+        delivery_context=destination(user, data),
+        page=page,
+        size=size,
+    )
+
+
+@router.post("/products/{product_id}/delivery-quote", response_model=ComparisonProduct)
+async def delivery_quote(
+    product_id: UUID,
+    container: ContainerDependency,
+    user: UserDependency,
+    data: DeliveryContext | None = None,
+    country: CountryCode | None = None,
+) -> ComparisonProduct:
+    return await container.delivery.request(
+        product_id, user.id, destination(user, data), market_country=country
+    )
 
 
 @router.post("/products/resolve", response_model=OfferView)
@@ -186,10 +231,18 @@ async def subscription(container: ContainerDependency, user: UserDependency) -> 
 
 
 class SettingsView(BaseModel):
+    model_config = {"from_attributes": True}
     language_code: str
     country_code: str | None
     preferred_currency: str
     timezone: str
+    delivery_country: str | None
+    delivery_postal_code: str | None
+
+
+@router.get("/users/me/settings", response_model=SettingsView)
+async def read_settings(user: UserDependency) -> SettingsView:
+    return SettingsView.model_validate(user)
 
 
 @router.patch("/users/me/settings", response_model=SettingsView)
@@ -199,9 +252,4 @@ async def settings(
     user: UserDependency,
 ) -> SettingsView:
     updated = await container.users.settings(user.id, data)
-    return SettingsView(
-        language_code=updated.language_code,
-        country_code=updated.country_code,
-        preferred_currency=updated.preferred_currency,
-        timezone=updated.timezone,
-    )
+    return SettingsView.model_validate(updated)

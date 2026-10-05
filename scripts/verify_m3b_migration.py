@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -138,12 +139,23 @@ async def main():
         async def snapshot(extra=()):
             async with engine.connect() as c:
                 return {
-                    table: [
-                        dict(r)
-                        for r in (
-                            await c.execute(text(f"SELECT * FROM {table} ORDER BY 1"))
-                        ).mappings()
-                    ]
+                    table: sorted(
+                        [
+                            {
+                                key: value
+                                for key, value in dict(r).items()
+                                if not (table == "store_offers" and key == "postal_code")
+                            }
+                            for r in (
+                                await c.execute(text(f"SELECT * FROM {table} ORDER BY 1"))
+                            ).mappings()
+                        ],
+                        key=lambda row: str(
+                            row.get("id")
+                            or row.get("merchant_program_id")
+                            or json.dumps(row, sort_keys=True, default=str)
+                        ),
+                    )
                     for table in (
                         "users",
                         "stores",
@@ -340,7 +352,7 @@ async def main():
             "fx_rates",
         )
         m4d_before = await snapshot(m4d_tables)
-        migrate("upgrade", "head")
+        migrate("upgrade", "b65a7012c904")
         await engine.dispose()
         m4e_after = await snapshot(m4d_tables)
         for table, rows in m4d_before.items():
@@ -379,6 +391,68 @@ async def main():
                 (merchant_program_id,status,generation,next_sync_at,failure_count,row_count,report)
                 VALUES (:p,'pending',0,now(),0,0,'{}') ON CONFLICT DO NOTHING"""),
                 {"p": legacy_program_id},
+            )
+        # M5B preserves all M0-M5A rows, including a live validator lease.
+        async with engine.begin() as c:
+            await c.execute(
+                text(
+                    "UPDATE feed_sync_states SET validation_token=gen_random_uuid(), "
+                    "validation_lease_until=now()+interval '1 hour' WHERE merchant_program_id=:p"
+                ),
+                {"p": legacy_program_id},
+            )
+            await c.execute(
+                text(
+                    "UPDATE store_offers SET shipping_price=12, tax=3, "
+                    "delivery_country='BE', postal_code='2000' WHERE id=:id"
+                ),
+                {"id": ids[3]},
+            )
+        delivery_before = await snapshot(
+            m4d_tables + ("merchant_program_validations", "feed_publication_audits")
+        )
+        migrate("upgrade", "head")
+        await engine.dispose()
+        delivery_after = await snapshot(tuple(delivery_before))
+        for table, rows in delivery_before.items():
+            for before, current in zip(rows, delivery_after[table], strict=True):
+                assert before == {key: current[key] for key in before}, table
+        async with engine.begin() as c:
+            row = (
+                (await c.execute(text("SELECT * FROM store_offers WHERE id=:id"), {"id": ids[3]}))
+                .mappings()
+                .one()
+            )
+            assert row["shipping_price"] == 12 and row["tax"] == 3
+            assert row["delivery_scope"] == row["tax_status"] == "unknown"
+            assert row["delivery_total"] is None and row["delivery_quoted_at"] is None
+            assert len(row["delivery_destination_key"]) == 64 and "postal_code" not in row
+            assert await c.scalar(text("SELECT count(*) FROM delivery_quotes")) == 0
+            assert (
+                await c.scalar(
+                    text("SELECT count(*) FROM users WHERE delivery_country IS NOT NULL")
+                )
+                == 0
+            )
+        migrate(
+            "downgrade", "b65a7012c904", success=False, contains="Export delivery settings/evidence"
+        )
+        async with engine.begin() as c:
+            # Reconcile only synthetic placeholders before historical downgrade audits.
+            await c.execute(
+                text(
+                    "UPDATE store_offers SET shipping_price=NULL, tax=NULL, "
+                    "delivery_country=NULL, delivery_destination_key=NULL WHERE id=:id"
+                ),
+                {"id": ids[3]},
+            )
+        migrate("downgrade", "b65a7012c904")
+        migrate("upgrade", "head")
+        async with engine.begin() as c:
+            await c.execute(
+                text(
+                    "UPDATE feed_sync_states SET validation_token=NULL, validation_lease_until=NULL"
+                )
             )
         runtime_before = await snapshot(
             ("merchant_program_validations", "feed_publication_audits", "feed_sync_states")
@@ -420,7 +494,14 @@ async def main():
         merchant_after = await snapshot(tuple(merchant_baseline))
         for table, rows in merchant_baseline.items():
             for before, current in zip(rows, merchant_after[table], strict=True):
-                assert before == {key: current[key] for key in before}, table
+                assert before == {key: current[key] for key in before}, (
+                    table,
+                    {
+                        key: (value, current[key])
+                        for key, value in before.items()
+                        if value != current[key]
+                    },
+                )
         async with engine.connect() as c:
             stores = (
                 await c.execute(text("SELECT id,merchant_id,name FROM stores ORDER BY id"))
@@ -701,6 +782,8 @@ async def main():
             "M4D data/audits preserved; immutable pilot reports/override audit; "
             "evidence downgrade guard; "
             "M4E evidence preserved through M5A lease upgrade/guarded rollback; "
+            "M5B preserved all state/live lease, kept placeholder costs unknown, "
+            "redacted duplicate postal, guarded rollback; "
             "guarded downgrade/re-upgrade; schema check"
         )
     finally:
