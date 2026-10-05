@@ -1,0 +1,65 @@
+name: Synthetic recovery and load
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: pricehunter
+          POSTGRES_PASSWORD: pricehunter
+          POSTGRES_DB: recovery_source_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pricehunter -d recovery_source_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      ENVIRONMENT: test
+      REHEARSAL_REDIS_URL: redis://localhost:6379/14
+      RESTORE_DATABASE_URL: postgresql+asyncpg://pricehunter:pricehunter@localhost:5432/recovery_target_test
+      DATABASE_URL: postgresql+asyncpg://pricehunter:pricehunter@localhost:5432/recovery_source_test
+      REHEARSAL_DATABASE_URL: postgresql+asyncpg://pricehunter:pricehunter@localhost:5432/recovery_source_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.16"
+          enable-cache: true
+      - run: uv sync --frozen --python 3.12
+      - name: Matching PostgreSQL clients
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+      - name: Create isolated empty targets
+        run: |
+          docker exec "${{ job.services.postgres.id }}" createdb -U pricehunter recovery_target_test
+          docker exec "${{ job.services.postgres.id }}" createdb -U pricehunter load_source_test
+      - run: uv run alembic upgrade head
+      - name: Recovery, replay and crash rehearsal
+        run: uv run python scripts/restore_rehearsal.py --report recovery-report.json
+      - name: Prepare separate load database
+        env:
+          DATABASE_URL: postgresql+asyncpg://pricehunter:pricehunter@localhost:5432/load_source_test
+        run: uv run alembic upgrade head
+      - name: Beta medium authenticated TCP HTTP
+        env:
+          REHEARSAL_DATABASE_URL: postgresql+asyncpg://pricehunter:pricehunter@localhost:5432/load_source_test
+        run: uv run python scripts/load_beta.py --profile beta-medium --report load-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sanitized-rehearsal-reports
+          path: |
+            recovery-report.json
+            load-report.json
+          if-no-files-found: error
+          retention-days: 7

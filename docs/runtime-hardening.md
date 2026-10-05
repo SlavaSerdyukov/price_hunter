@@ -82,3 +82,10 @@ diagnostics omit tokens; no CLI silently clears live ownership.
 
 See [release and recovery](beta-operations.md), [design](m5a-design.md) and
 [verification evidence](verification.md).
+
+M5C adds [real PostgreSQL backup/restore](disaster-recovery.md) and
+[authenticated HTTP load rehearsal](load-rehearsal.md) without changing these runtime
+budgets or business semantics. Synthetic acceptance covers lease succession, Redis loss,
+uncertain notification non-resend, pool pressure, shared-rate isolation and post-load
+integrity. Hosting-specific capacity, encrypted backup transport/retention and live beta
+acceptance remain deployment work; no production RPO/RTO or throughput SLA is promised.

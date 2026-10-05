@@ -13,3 +13,7 @@ dist/
 *.egg-info/
 .DS_Store
 .local/
+# Confidential local backup archives; never upload as CI artifacts.
+*.dump
+*.dump.manifest.json
+*-report.json

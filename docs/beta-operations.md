@@ -105,6 +105,9 @@ according to their existing instructions; never truncate production evidence to
 force downgrade. Destructive export/truncate in the verifier occurs only in its
 disposable synthetic database.
 
-Beta launch still needs selected hosting/TLS and backups, restore/load rehearsal,
-provider approvals/real feed/link verification and live Stars acceptance. See
+M5C supplies verified synthetic backup/restore/replay, Redis/lease crash recovery and
+bounded authenticated HTTP load rehearsal. See [disaster recovery](disaster-recovery.md)
+and [load profiles](load-rehearsal.md) for operator commands and the manual heavier workflow.
+Beta launch still needs selected hosting/TLS, production backup encryption/transport/
+retention/cadence, provider approvals/real feed/link verification and live Stars acceptance. See
 [runtime limits](runtime-hardening.md) and [merchant pilot](merchant-pilot.md).

@@ -32,6 +32,11 @@ jobs:
           version: "0.12.16"
           enable-cache: true
       - run: uv sync --frozen --python 3.12
+      - name: Matching PostgreSQL backup clients
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy

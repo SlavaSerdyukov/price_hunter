@@ -1,0 +1,136 @@
+{
+  "observed_on": "2026-10-05",
+  "environment": "local synthetic PostgreSQL 17.11, clients 17.11, Redis 7; no production capacity claim",
+  "baseline_revision": "0447353d87f8f6a44d0e3652e508c0efabb0225e",
+  "recovery": {
+    "backup_size_bytes": 148313,
+    "backup_seconds": 0.29086754098534584,
+    "restore_seconds": 0.5445382919861004,
+    "tables": 33,
+    "checksums_matched": true,
+    "schema_compatible": true,
+    "domain_smoke_passed": true
+  },
+  "replay_idempotent": true,
+  "redis_loss_passed": true,
+  "crashes": {
+    "offer_refresh": true,
+    "product_discovery": true,
+    "feed_sync": true,
+    "technical_validation": true,
+    "notification_uncertain": true
+  },
+  "load": {
+    "profile": "beta-medium",
+    "concurrency": 24,
+    "synthetic_users": 30,
+    "requests": 1400,
+    "successes": 300,
+    "expected_rate_limits": 1100,
+    "unexpected_failures": 0,
+    "seconds": 14.164,
+    "requests_per_second": 98.844,
+    "latency": {
+      "p50_ms": 38.479,
+      "p95_ms": 878.552,
+      "p99_ms": 4335.398,
+      "max_ms": 5218.867
+    },
+    "routes": {
+      "comparison": {
+        "requests": 200,
+        "statuses": {
+          "200": 60,
+          "429": 140
+        },
+        "latency": {
+          "p50_ms": 41.041,
+          "p95_ms": 216.857,
+          "p99_ms": 926.464,
+          "max_ms": 935.34
+        }
+      },
+      "offers": {
+        "requests": 200,
+        "statuses": {
+          "200": 59,
+          "429": 141
+        },
+        "latency": {
+          "p50_ms": 40.447,
+          "p95_ms": 216.775,
+          "p99_ms": 931.877,
+          "max_ms": 942.737
+        }
+      },
+      "search": {
+        "requests": 200,
+        "statuses": {
+          "200": 56,
+          "429": 144
+        },
+        "latency": {
+          "p50_ms": 40.81,
+          "p95_ms": 4375.842,
+          "p99_ms": 4969.748,
+          "max_ms": 5218.867
+        }
+      },
+      "settings": {
+        "requests": 200,
+        "statuses": {
+          "200": 35,
+          "429": 165
+        },
+        "latency": {
+          "p50_ms": 36.442,
+          "p95_ms": 126.017,
+          "p99_ms": 217.703,
+          "max_ms": 519.734
+        }
+      },
+      "subscription": {
+        "requests": 200,
+        "statuses": {
+          "200": 30,
+          "429": 170
+        },
+        "latency": {
+          "p50_ms": 38.056,
+          "p95_ms": 243.338,
+          "p99_ms": 765.44,
+          "max_ms": 1099.779
+        }
+      },
+      "history": {
+        "requests": 200,
+        "statuses": {
+          "200": 30,
+          "429": 170
+        },
+        "latency": {
+          "p50_ms": 38.264,
+          "p95_ms": 237.252,
+          "p99_ms": 643.854,
+          "max_ms": 925.4
+        }
+      },
+      "delivery": {
+        "requests": 200,
+        "statuses": {
+          "200": 30,
+          "429": 170
+        },
+        "latency": {
+          "p50_ms": 38.25,
+          "p95_ms": 369.662,
+          "p99_ms": 1325.251,
+          "max_ms": 1475.967
+        }
+      }
+    },
+    "integrity_passed": true,
+    "response_bounds_passed": true,
+    "checked_out_connections": 0
+  }
+}
