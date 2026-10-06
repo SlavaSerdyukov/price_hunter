@@ -159,7 +159,8 @@ See [pilot steps](docs/merchant-pilot.md), [quality gates](docs/feed-quality.md)
 - [x] Read-only operational backlog/lease diagnostics and stale notification recovery without resend.
 - [x] Explicit pool/query limits, operation-specific worker timeouts and owned-resource shutdown.
 - [x] Production lifespan and disposable stale-schema CI acceptances; operator release/recovery docs.
-- [ ] Public beta hosting, restore rehearsal, load test and real merchant/Stars acceptance.
+- [x] Synthetic backup/restore and bounded HTTP load rehearsal (M5C).
+- [ ] Public beta hosting, production backup operations and real merchant/Stars acceptance.
 
 See [M5A design](docs/m5a-design.md), [runtime contracts](docs/runtime-hardening.md)
 and [beta operations](docs/beta-operations.md).
@@ -174,6 +175,18 @@ and [beta operations](docs/beta-operations.md).
 - [ ] Approved real destination quote providers and destination-aware watch milestone.
 
 See [delivery context](docs/delivery-context.md) and [design](docs/m5b-design.md).
+
+## M5C — Backup, restore, recovery and load rehearsal — implemented
+
+- [x] Reviewed durability inventory, same-snapshot custom pg_dump and private checksum manifest.
+- [x] Confirmed empty disposable pg_restore, exact schema/data/protection and domain verification.
+- [x] Identity-preserving billing/outbox/catalog/feed replay, Redis loss and crash fencing acceptance.
+- [x] Authenticated HTTP smoke/small/medium profiles, pool/rate/search/delivery and integrity gates.
+- [x] Bounded ordinary CI smoke and manual synthetic heavier rehearsal; reports only, no dump artifacts.
+- [ ] Hosting/TLS, production encryption/transport/retention/cadence, live Stars and real merchant pilot.
+
+See [recovery](docs/disaster-recovery.md), [load](docs/load-rehearsal.md),
+[M5C design](docs/m5c-design.md) and [verification](docs/verification.md).
 
 ## Approved merchant pilot — proposed
 

@@ -449,7 +449,8 @@ codes and one-time referrer attribution; reward/conversion workflows remain late
 - Shared offers use the fastest eligible tracker/watch interval. Future commercial
   policies can additionally govern per-tracker alert cadence.
 - No production load test, Amazon live access validation, production deployment,
-  automated backups, live Stars lifecycle verification or public account signup is claimed here.
+  scheduled production backups, live Stars lifecycle verification or public account signup
+  is claimed here. M5C verifies synthetic local backup/restore and authenticated HTTP load.
   
 ## 👤 Author
 
@@ -477,3 +478,20 @@ HTTP healthcheck is for the API; Compose disables that probe for bot/worker.
 See [runtime contracts](docs/runtime-hardening.md), [beta release/recovery steps](docs/beta-operations.md)
 and [M5A design and evidence](docs/m5a-design.md). Use a maintenance deployment
 across this exact-schema boundary; do not overlap M4E and M5A validators.
+
+## Recovery and load rehearsal (M5C)
+
+Local operator tools create real custom PostgreSQL archives and a same-snapshot manifest
+with all reviewed table identity/payload digests. Restore requires a confirmed distinct,
+empty disposable database and checks exact schema, data, constraints/triggers and normal
+domain reads before traffic. Synthetic acceptance proves billing/outbox/catalog/feed
+replay, Redis loss, expired worker fencing and uncertain notification non-resend.
+
+Authenticated HTTP profiles (`smoke`, `beta-small`, `beta-medium`) measure a fixed mixed
+workload, expected throttling and observed latency. Ordinary CI gates bounded semantic
+smoke and integrity; a separate manual workflow runs heavier restore/load and uploads only
+sanitized reports. These measurements do not establish production capacity or RPO/RTO.
+
+See [recovery commands](docs/disaster-recovery.md), [load harness](docs/load-rehearsal.md)
+and [design/durability inventory](docs/m5c-design.md). Hosting/TLS, production backup
+encryption/transport/retention/cadence, live Stars and a real approved merchant pilot remain open.

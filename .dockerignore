@@ -8,3 +8,6 @@
 !alembic.ini
 **/__pycache__
 **/*.pyc
+*.dump
+*.dump.manifest.json
+*-report.json

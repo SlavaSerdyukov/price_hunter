@@ -1,5 +1,40 @@
 # First iteration verification
 
+M5C baseline: merged `0447353d87f8f6a44d0e3652e508c0efabb0225e`, all existing
+gates passed locally, **920 tests / 91.95% statement coverage**, 393.12s. Hosted
+post-merge baseline was 920 / 91.96%; see [design](m5c-design.md).
+
+M5C local full candidate: **966 passed, no skips, 91.55% coverage**, 553.65s;
+all gates completed in 578.65s. Ruff/format, strict mypy (136 production modules),
+Alembic upgrade/check and full migration preservation/guarded rollback verifier passed.
+The eight requested recovery/load acceptances were written first and failed before
+implementation (six test functions grouped those eight checks). Final strengthened
+search/entitlement/claim/non-resend and operator paths also passed affected acceptance.
+Only the existing upstream ARQ Redis-close warning remained in the full candidate run.
+Hosted final-head proof, including the full suite for the published code, is recorded
+in the PR; local success alone does not establish merge readiness.
+
+Real pg_dump/pg_restore round-trip verifies all 33 table counts/ordered identity/full-row
+digests from one exported snapshot, exact RuntimePreflight schema head without upgrade,
+DB protections and domain reads. Acceptance deliberately corrupts archives/manifests,
+uses non-empty/same/unconfirmed targets, missing/mismatched clients, a failed actual
+restore transaction, stale archive schema and wrong critical-table digest. Concurrent
+application writes do not break the exported-snapshot invariant. Replayed billing,
+notification/catalog/feed identities remain stable. Redis loss, deterministic crash
+lease succession and uncertain notification non-resend are exercised with synthetic data.
+
+HTTP acceptance covers normal authenticated request mix, real loopback TCP lifespan,
+pool pressure/safe 503/recovery/zero leaks, concurrent read/worker claims, abusive-user
+isolation/TTL, 500 extra stored offers, concurrent search work/entitlement caps and
+persisted delivery with zero quote calls plus explicit mock global quote bounds.
+Manual beta-medium: 1400 completed, 300 successful, 1100 expected 429, zero unexpected
+errors, integrity/bounds passed and zero checked-out connections. Observed backup:
+148313 bytes / 0.291s; restore/verification: 0.545s. These describe local synthetic
+conditions, not production capacity or RPO/RTO. See [machine-readable evidence](m5c-rehearsal-evidence.json),
+[recovery](disaster-recovery.md) and [load/CI split](load-rehearsal.md).
+Hosting/TLS, production backup transport/encryption/retention/cadence, live Stars and
+a real reviewed merchant pilot remain open.
+
 M5B baseline: merged main `b8da550ab973731a794b4e6f40e937534fcfd4a5`, **812 passed,
 91.58% coverage**, no skips, one existing ARQ Redis close warning. Eight delivery
 acceptances failed before implementation. See [design](m5b-design.md) and
