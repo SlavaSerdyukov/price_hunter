@@ -1,6 +1,14 @@
-# PriceHunter roadmap
+# PriceHunter — historical development record
 
-M0, M1, M2, M3A, M3B, M4A, M4A.1 and M4B are implemented. Live Stars payment verification remains an explicit operator check; later milestones retain their individual integration gates.
+**Active product development is complete. PriceHunter is preserved as a completed
+engineering portfolio project; no public production service is operated.**
+
+This file records iterative implementation and verification, not an active roadmap.
+Unchecked external integrations and launch prerequisites were intentionally deferred /
+not pursued and are **not current commitments**. Historical phase labels are retained
+so the associated PRs, migrations and design documents remain understandable.
+See the [case study](docs/portfolio-case-study.md), [audited snapshot](docs/portfolio-audit.md)
+and [portfolio release preparation](CHANGELOG.md).
 
 ## M0 — Foundation — implemented
 
@@ -172,7 +180,7 @@ and [beta operations](docs/beta-operations.md).
 - [x] Separate delivered comparison and canonical merchant source selection.
 - [x] Explicit bounded authenticated quotes, latest cache, seven-language Telegram/API.
 - [x] Migration and acceptance preserving item watches/history/runtime leases.
-- [ ] Approved real destination quote providers and destination-aware watch milestone.
+- [ ] Real destination quote providers and destination-aware watches — intentionally not pursued.
 
 See [delivery context](docs/delivery-context.md) and [design](docs/m5b-design.md).
 
@@ -188,16 +196,19 @@ See [delivery context](docs/delivery-context.md) and [design](docs/m5b-design.md
 See [recovery](docs/disaster-recovery.md), [load](docs/load-rehearsal.md),
 [M5C design](docs/m5c-design.md) and [verification](docs/verification.md).
 
-## Approved merchant pilot — proposed
+## Deferred / intentionally not pursued
 
-- Onboard a small approved BE/DE merchant set; verify real feed completeness, quotas,
-  identifiers, variants, update cadence, permissions and affiliate attribution.
-- Verify real documented shipping/tax/stock by destination before enabling dynamic quoting.
-- Preserve native currency groups and deterministic matching; no automatic product merge.
+These were product/launch possibilities, not missing guarantees of the implemented backend:
 
-## M5 — Platform
+- Public hosting/TLS and production backup storage, encryption, transport, cadence and retention.
+- Live Stars purchase/renewal/cancellation/refund acceptance.
+- Real affiliate merchant onboarding, approved BE/DE pilot feeds and live attribution verification.
+- Amazon API access and separately approved tracking/storage/display terms.
+- Real dynamic shipping providers and destination-aware alerts.
+- Mini App, web/mobile end-user clients and public self-service account/key signup.
+- Additional external billing, sale/conversion attribution, referral rewards and B2B reporting.
 
-- Mini App, web/mobile clients, external billing and public API credentials.
-- Sale/conversion attribution, referral rewards and B2B reports.
-
-See README for tested release capabilities and explicit limitations.
+The final action is owner-controlled repository release/freeze after the portfolio PR,
+not another development milestone. Existing authenticated API keys are already implemented;
+the deferred platform idea referred to public self-service distribution.
+See [README](README.md) for the final capabilities and factual limitations.

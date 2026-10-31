@@ -1,5 +1,10 @@
 # Beta release and recovery
 
+This is a preserved technical operating procedure for the completed portfolio snapshot,
+not a scheduled public launch. No public service is operated; production hosting,
+affiliate merchant activation and live Stars acceptance were intentionally not pursued.
+See [status and evidence](portfolio-audit.md).
+
 ## Release sequence
 
 1. Back up PostgreSQL and verify that the backup can be restored. Retain immutable
@@ -108,6 +113,7 @@ disposable synthetic database.
 M5C supplies verified synthetic backup/restore/replay, Redis/lease crash recovery and
 bounded authenticated HTTP load rehearsal. See [disaster recovery](disaster-recovery.md)
 and [load profiles](load-rehearsal.md) for operator commands and the manual heavier workflow.
-Beta launch still needs selected hosting/TLS, production backup encryption/transport/
-retention/cadence, provider approvals/real feed/link verification and live Stars acceptance. See
+An actual deployment would require selected hosting/TLS, production backup encryption/transport/
+retention/cadence, provider approvals/real feed/link verification and live Stars acceptance.
+These are intentionally unpursued boundaries of the portfolio snapshot. See
 [runtime limits](runtime-hardening.md) and [merchant pilot](merchant-pilot.md).

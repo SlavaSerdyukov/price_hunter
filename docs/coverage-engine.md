@@ -1,5 +1,8 @@
 # Coverage engine — M4C
 
+This guide describes implemented coverage/search diagnostics. Phase names identify
+historical changes; active product development is complete.
+
 M4C extends the existing catalog and feed engine. CJ uses FeedSource → bounded acquisition
 → MerchantFeedItem → FeedStoreProvider → ProductOfferData → CatalogResolver →
 SnapshotUpdater → StoreOffer. No second product/comparison database or service is added.
@@ -138,11 +141,11 @@ Apply `uv run alembic upgrade head` to the intended application database before 
 updated API/bot/worker services. Automated verification upgrades only disposable test
 databases; it does not migrate or deploy your running application.
 
-## Next milestone
+## Final snapshot boundaries
 
-After canonical identity reconciliation, a small explicitly approved BE/DE merchant pilot
-should verify account
-visibility, complete generations, actual quotas, currency/variant/stock fidelity, reviewed
-cache/history/tracking rights and affiliate attribution. Only after that evidence should
-explicit destination/postal shipping/tax inputs and complete delivered-cost comparison be
-designed. M4C introduces no real activation, shipping/tax ranking, Amazon change or frontend.
+Canonical [merchant identity](merchant-identity.md), [publication validation](feed-quality.md)
+and [delivery evidence](delivery-context.md) were subsequently implemented. Coverage
+diagnostics do not themselves authorize account access, complete-feed claims, quotas,
+cache/history/tracking rights or affiliate attribution. Real BE/DE affiliate merchant
+pilots, real dynamic quote providers, Amazon activation and frontend clients were
+intentionally not pursued. See the [historical roadmap](../ROADMAP.md).

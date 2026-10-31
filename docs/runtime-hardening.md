@@ -88,4 +88,5 @@ M5C adds [real PostgreSQL backup/restore](disaster-recovery.md) and
 budgets or business semantics. Synthetic acceptance covers lease succession, Redis loss,
 uncertain notification non-resend, pool pressure, shared-rate isolation and post-load
 integrity. Hosting-specific capacity, encrypted backup transport/retention and live beta
-acceptance remain deployment work; no production RPO/RTO or throughput SLA is promised.
+acceptance are intentionally unpursued portfolio boundaries; no production RPO/RTO or
+throughput SLA is promised. See [snapshot status](portfolio-audit.md).

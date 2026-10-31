@@ -1,4 +1,7 @@
-# Product comparison — M3A through M5B
+# Product identity and multi-merchant comparison
+
+This is the implemented comparison contract of the completed portfolio snapshot.
+Historical migration labels remain as technical references, not future commitments.
 
 M5B adds an explicit [delivered view](delivery-context.md) with its own source
 representatives and native-currency winner/spread/count. Item price != delivered total;
@@ -217,7 +220,7 @@ subject (Tracker or ProductWatch). Existing billing/offer/tracker/history data i
 Downgrade refuses to discard existing watches: export and explicitly remove them first,
 or restore the pre-upgrade backup; never force a downgrade over live watch data.
 
-## Limits and next milestone
+## Limits and scope boundaries
 
 Matching deliberately favors duplicates over false positives. Existing WooCommerce
 payloads often omit global/manufacturer identifiers, so many unrelated stores cannot
@@ -225,9 +228,10 @@ be reliably matched yet. ASIN is Amazon-specific. Rakuten adds a credential/poli
 source without changing deterministic matching. Summaries use bounded SQL aggregation
 and paginated offer bodies.
 
-Operator diagnostics and read-only duplicate candidates are available; merging is deferred
-until audited identity redirects and watch/outbox/history reconciliation are designed.
+Operator diagnostics and read-only duplicate candidates are available; automatic merging
+and identity reconciliation are intentionally outside this snapshot.
 See [operations and limitations](discovery.md). [M4A](international-commerce.md) adds
-durable markets, affiliate links and timestamped reference FX. M5B adds explicit
-delivery/shipping/tax context without weakening native-currency comparisons. Amazon activation
-retains its separate approval gate.
+durable markets, affiliate links and timestamped reference FX. The final
+[delivery contract](delivery-context.md) adds explicit destination/shipping/tax evidence
+without changing native item-price ranking. Amazon remains approval-gated; activation
+is intentionally not pursued.

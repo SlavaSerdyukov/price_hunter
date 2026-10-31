@@ -1,4 +1,24 @@
-# First iteration verification
+# Verification record
+
+## Portfolio audit — 2026-10-31
+
+Current merged main `c3b1788d4bfefc592516d6aebb5bf82b666f8691` passed
+[hosted Checks](https://github.com/SlavaSerdyukov/price_hunter/actions/runs/37508892290):
+**966 passed, no skips, 91.57% statement coverage**, with all lint/type/migration gates
+green. The single pytest warning remains upstream ARQ's deprecated Redis close call;
+action tooling also emitted upstream Node deprecations.
+
+The manual `Synthetic recovery and load` workflow is available but has **zero
+workflow_dispatch runs** at this audit. Existing heavier recovery/load evidence is
+local and synthetic. See [snapshot audit](portfolio-audit.md) for the dependency,
+integration, secret-hygiene and evidence inventory.
+
+PriceHunter is now a completed portfolio project with feature development frozen.
+The records below retain dated results and contemporary plans; earlier counts,
+access failures, launch prerequisites and proposed phases are historical, not current
+claims or commitments. No historical verification result has been rewritten.
+
+## Recovery/load implementation evidence
 
 M5C baseline: merged `0447353d87f8f6a44d0e3652e508c0efabb0225e`, all existing
 gates passed locally, **920 tests / 91.95% statement coverage**, 393.12s. Hosted

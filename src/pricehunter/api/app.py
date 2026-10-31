@@ -56,7 +56,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
 
     app = RuntimeAPI(
         title="PriceHunter",
-        version="0.1.0",
+        version="1.0.0",
         lifespan=lifespan,
         docs_url="/docs" if settings.environment != "production" else None,
         redoc_url=None,

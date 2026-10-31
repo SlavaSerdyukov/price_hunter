@@ -1,5 +1,10 @@
 # Architecture decisions
 
+This document records the final implemented system design of the completed portfolio
+snapshot. Historical migration references explain preserved decisions, not planned
+feature work. See the [case study](portfolio-case-study.md) for context and
+[documentation index](index.md) for deeper contracts.
+
 1. **Modular monolith.** Bot and API call the same application services. Domain rules
    contain no Telegram, SQLAlchemy or HTTP types. Provider results are validated DTOs.
    PostgreSQL is authoritative; Redis holds ephemeral rate limits/FSM/ARQ scheduling.
@@ -11,8 +16,8 @@
    allowlists. Mock URLs are never fetched. eBay IDs are sent to fixed official API
    endpoints. DNS answers must all be public; connections pin the validated numeric
    IP while preserving the original TLS hostname. Redirects are rejected; response
-   size and duration are bounded. No HTML scraper is enabled. A future scraper must
-   reuse these restrictions and verify retailer permissions before it can be enabled.
+   size and duration are bounded. No HTML scraper is implemented or planned in the
+   portfolio snapshot.
 4. **Conservative identity.** `CatalogResolver` indexes ProductIdentifier evidence and
    checks saved listing evidence with the deterministic matcher. Compatible GTIN or
    brand/manufacturer model can unify stores; ASIN remains Amazon scoped. Conflicts,
@@ -73,7 +78,8 @@
     visibly quota-paused. Shared offers use the fastest eligible plan interval. Paid
     notification rules are checked at configuration, event generation and delivery.
 
-16. **Canonical watches.** ProductWatch owns best-offer state in one currency. Product
+16. **Canonical watches.** ProductWatch owns best-offer state within one durable market
+    and native currency. Product
     row locking serializes accepted observations and newly discovered offers before
     comparing all active/supported stores. State, observation and immutable outbox snapshot
     commit together. A unique watch/sequence key deduplicates logical events; delivery
@@ -82,3 +88,30 @@
     currency; unavailable/unknown offers have a separately labelled cheapest-known value.
     Spread uses available offers only. Shipping/tax/total stay null when unknown. Summary
     values cover all known eligible offers, even when offer previews are paginated.
+
+18. **Retailer versus source.** Merchant is the customer-visible retailer; Store is an
+    acquisition identity. Explicit versioned/audited linking permits cross-network
+    effective-offer selection before summaries/pagination. Each selected offer keeps
+    its own policy, price and outbound provenance; commission does not rank prices.
+    See [merchant identity](merchant-identity.md).
+19. **Feed publication.** Candidate staging becomes current only after a complete
+    generation passes shared structural, malformed-row and catastrophic-shrink checks.
+    Technical validation is immutable evidence independent of rights review; activation
+    checks the current configuration fingerprint. Rejected generations preserve current
+    data. Explicit one-shot shrink exceptions leave immutable publication audit.
+    See [feed quality](feed-quality.md).
+20. **Destination evidence.** Catalog market and delivery destination are separate.
+    Delivery comparison reads compatible static/persisted tuples; only an explicit
+    quote operation can perform bounded acquisition. Current usable evidence wins,
+    then EXACT over COUNTRY scope, then newer quote time; static wins an equal-time tie.
+    Failed dynamic evidence cannot hide current static evidence. Unknown shipping/tax
+    never becomes zero. Item-price watches/history and native currencies remain separate.
+    See [delivery contract](delivery-context.md).
+21. **Recovery and bounded load.** Real custom pg_dump and a streaming manifest share
+    one exported snapshot. Actual pg_restore requires a confirmed distinct empty target;
+    exact schema/data/protection checks run without migration masking. All 33 inventory
+    tables are checked. Synthetic replay/Redis-loss/crash and authenticated HTTP acceptance
+    verify preserved identities, uncertain non-resend, work/rate/pool bounds and integrity.
+    Local timings are evidence, not production capacity/RPO/RTO. The heavier manual
+    workflow is available but has not been dispatched at the portfolio audit.
+    See [recovery](disaster-recovery.md), [load](load-rehearsal.md) and [audit](portfolio-audit.md).
