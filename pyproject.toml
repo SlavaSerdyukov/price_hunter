@@ -1,7 +1,7 @@
 [project]
 name = "pricehunter"
-version = "0.1.0"
-description = "Reusable international price tracking backend with a Telegram client"
+version = "1.0.0"
+description = "International price-tracking and commerce backend with REST, Telegram, async workers and verified recovery"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1",

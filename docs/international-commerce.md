@@ -1,5 +1,9 @@
 # International commerce (M4A)
 
+This technical guide retains migration history. The completed snapshot uses canonical
+Merchant for the retailer and Store for an acquisition identity; see
+[merchant identity](merchant-identity.md). External activation is intentionally not pursued.
+
 M5B now introduces separate [delivery context](delivery-context.md): shopping market
 does not imply destination eligibility. Item price != delivered total; unknown cost
 is not zero; reference FX does not authorize landed-cost ranking. Existing watches
@@ -28,7 +32,8 @@ Send this to authenticated `POST /api/v1/product-watches`; watch responses inclu
 the persisted market. Market cannot be patched: create a separate watch deliberately.
 Exact-offer trackers continue to represent one merchant listing.
 
-Canonical Product is global; Store identifies the merchant. StoreOffer.market_country
+Canonical Product is global; Merchant identifies the retailer and Store its acquisition
+source. StoreOffer.market_country
 is the authoritative catalog context, supplied by ProductOfferData.country. A shared
 merchant/MID can have separate offers in BE and DE, even with the same external ID.
 Store.country remains primary/legacy integration context and is not a comparison filter.
@@ -143,7 +148,7 @@ See [Rakuten setup](rakuten-setup.md), [affiliate links](affiliate-links.md),
 
 [Awin](awin-setup.md) and [TradeDoubler](tradedoubler-setup.md) now share the existing
 catalog pipeline through a [bounded feed engine](commerce-feeds.md). Network identity
-records acquisition and affiliate metadata; Store remains the actual merchant. Programs
+records acquisition and affiliate metadata; Store remains a source linked to a canonical Merchant. Programs
 are unique by network/advertiser/market and bind stable network/advertiser Store identities.
 Their approved domains may differ by market without changing the Store ID.
 
@@ -163,4 +168,4 @@ cascaded away by staging cleanup.
 Both integrations remain disabled by default. See [onboarding](merchant-programs.md);
 fixtures do not establish advertiser approval, live access or attribution. M5B now supplies
 separate destination settings and delivered-cost logic; approved real provider evidence
-remains future pilot work. Unknown costs stay unknown; native ranking and billing remain unchanged.
+is outside the portfolio snapshot. Unknown costs stay unknown; native ranking and billing remain unchanged.

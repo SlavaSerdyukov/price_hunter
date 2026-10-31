@@ -1,5 +1,7 @@
 # Authenticated beta load rehearsal
 
+This documents completed synthetic engineering evidence, not a public beta launch plan.
+
 The typed Python harness uses the normal API over real TCP HTTP on an ephemeral loopback
 port with normal lifespan, bearer authentication, shared Redis budgets and PostgreSQL
 pool configuration. It requires no real account, provider or billing credential.
@@ -60,12 +62,13 @@ mock explicit quote test enforces the global quote cap.
 Ordinary `Checks` runs only bounded smoke and failure acceptance. The separate
 `Synthetic recovery and load` workflow is `workflow_dispatch` only: fresh Postgres17 /
 Redis7 services, full synthetic restore/replay/crash rehearsal, and beta-medium HTTP on a
-separate source database. After the workflow is merged to the default branch, select
-the reviewed ref and run it manually. Its artifact allowlist contains only
+separate source database. It is available on the default branch, but no workflow_dispatch
+run has been performed as of the 2026-10-31 audit. An operator can select a reviewed
+ref and run it manually. Its artifact allowlist contains only
 `recovery-report.json` and `load-report.json`, with seven-day retention; dumps are never
 uploaded. Runner/database/container teardown owns synthetic database cleanup.
 
-Before public beta, repeat against the chosen deployment's realistic data size, replica/
+Any separate production deployment would need rehearsal against realistic data size, replica/
 pool totals, TLS routing and resource limits; review observed load/backlog and safe-error
 rates. Hosting/TLS, production backup encryption/transport/retention/cadence, live Stars
-acceptance and a real approved merchant pilot remain open.
+acceptance and a real approved merchant pilot were intentionally not pursued.

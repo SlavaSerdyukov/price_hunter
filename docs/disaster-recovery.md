@@ -1,6 +1,7 @@
 # PostgreSQL backup and recovery
 
-M5C supplies local operator tools and synthetic rehearsal, not a hosting/retention service.
+The completed portfolio snapshot supplies local operator tools and synthetic rehearsal,
+not a hosting/retention service. Production backup operations were intentionally not pursued.
 Use matching PostgreSQL major versions for the source server, `pg_dump`, target server and
 `pg_restore`. An obsolete/mismatched client fails safely. Install the appropriate client
 and place its `bin` directory first in PATH; do not start a second server to get a client.
